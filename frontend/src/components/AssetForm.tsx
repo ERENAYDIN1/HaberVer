@@ -1,14 +1,14 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 
-import { useCreateAsset } from "../hooks/useAssets";
+import { useCreateAsset, useUpdateAsset } from "../hooks/useAssets";
 import {
   ASSET_STATUSES,
   ASSET_STATUS_LABELS,
   ASSET_TYPES,
   ASSET_TYPE_LABELS,
 } from "../types/asset";
-import type { AssetStatus, AssetType } from "../types/asset";
+import type { AssetFeature, AssetStatus, AssetType } from "../types/asset";
 
 interface AssetFormValues {
   name: string;
@@ -23,6 +23,10 @@ interface AssetFormValues {
 interface AssetFormProps {
   /** Harita tiklamasiyla gelen koordinat (Faz 6'da baglanacak). */
   koordinat?: { longitude: number; latitude: number };
+  /** Verilirse form duzenleme modunda calisir. */
+  asset?: AssetFeature;
+  /** Kaydetme basarili olunca cagrilir (ornegin modali kapatmak icin). */
+  onDone?: () => void;
 }
 
 const bosDeger: AssetFormValues = {
@@ -35,21 +39,40 @@ const bosDeger: AssetFormValues = {
   brand_model: "",
 };
 
+function assetToValues(asset: AssetFeature): AssetFormValues {
+  const { properties, geometry } = asset;
+  return {
+    name: properties.name,
+    type: properties.type,
+    status: properties.status,
+    longitude: geometry.coordinates[0],
+    latitude: geometry.coordinates[1],
+    install_date: properties.install_date ?? "",
+    brand_model: properties.brand_model ?? "",
+  };
+}
+
 const inputClass =
   "w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500";
 const labelClass = "block text-sm font-medium text-slate-700 mb-1";
 const errorClass = "mt-1 text-xs text-red-600";
 
-export default function AssetForm({ koordinat }: AssetFormProps) {
+export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) {
+  const duzenlemeModu = asset !== undefined;
+
   const {
     register,
     handleSubmit,
     reset,
     setValue,
     formState: { errors },
-  } = useForm<AssetFormValues>({ defaultValues: bosDeger });
+  } = useForm<AssetFormValues>({
+    defaultValues: asset ? assetToValues(asset) : bosDeger,
+  });
 
   const createAsset = useCreateAsset();
+  const updateAsset = useUpdateAsset();
+  const mutation = duzenlemeModu ? updateAsset : createAsset;
 
   // Haritadan koordinat gelirse ilgili alanlari doldur.
   useEffect(() => {
@@ -60,28 +83,33 @@ export default function AssetForm({ koordinat }: AssetFormProps) {
   }, [koordinat, setValue]);
 
   const onSubmit = handleSubmit((values) => {
-    createAsset.mutate(
-      {
-        name: values.name.trim(),
-        type: values.type,
-        status: values.status,
-        longitude: Number(values.longitude),
-        latitude: Number(values.latitude),
-        install_date: values.install_date || null,
-        brand_model: values.brand_model.trim() || null,
-      },
-      { onSuccess: () => reset(bosDeger) }
-    );
+    const payload = {
+      name: values.name.trim(),
+      type: values.type,
+      status: values.status,
+      longitude: Number(values.longitude),
+      latitude: Number(values.latitude),
+      install_date: values.install_date || null,
+      brand_model: values.brand_model.trim() || null,
+    };
+
+    if (duzenlemeModu) {
+      updateAsset.mutate(
+        { id: asset.properties.id, data: payload },
+        { onSuccess: () => onDone?.() }
+      );
+    } else {
+      createAsset.mutate(payload, {
+        onSuccess: () => {
+          reset(bosDeger);
+          onDone?.();
+        },
+      });
+    }
   });
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-      noValidate
-    >
-      <h2 className="text-lg font-semibold text-slate-800">Varlık Ekle</h2>
-
+    <form onSubmit={onSubmit} className="space-y-4" noValidate>
       <div>
         <label className={labelClass} htmlFor="name">
           İsim <span className="text-red-500">*</span>
@@ -194,20 +222,35 @@ export default function AssetForm({ koordinat }: AssetFormProps) {
         </div>
       </div>
 
-      <button
-        type="submit"
-        disabled={createAsset.isPending}
-        className="w-full rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-      >
-        {createAsset.isPending ? "Kaydediliyor..." : "Kaydet"}
-      </button>
+      <div className="flex gap-2">
+        {duzenlemeModu && (
+          <button
+            type="button"
+            onClick={onDone}
+            className="flex-1 rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            Vazgeç
+          </button>
+        )}
+        <button
+          type="submit"
+          disabled={mutation.isPending}
+          className="flex-1 rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+        >
+          {mutation.isPending
+            ? "Kaydediliyor..."
+            : duzenlemeModu
+              ? "Güncelle"
+              : "Kaydet"}
+        </button>
+      </div>
 
-      {createAsset.isError && (
+      {mutation.isError && (
         <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">
-          {createAsset.error.message}
+          {mutation.error.message}
         </p>
       )}
-      {createAsset.isSuccess && (
+      {!duzenlemeModu && createAsset.isSuccess && (
         <p className="rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           Varlık eklendi.
         </p>
