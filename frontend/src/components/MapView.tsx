@@ -24,11 +24,17 @@ const OSM_STYLE: StyleSpecification = {
 
 const ANKARA: [number, number] = [32.8597, 39.9334];
 const SOURCE_ID = "assets";
+const CIZIM_SOURCE_ID = "cizim";
 
 const BOS_KOLEKSIYON: AssetFeatureCollection = {
   type: "FeatureCollection",
   features: [],
 };
+
+const BOS_GEOJSON = {
+  type: "FeatureCollection",
+  features: [],
+} as unknown as GeoJSON.FeatureCollection;
 
 interface MapViewProps {
   assets?: AssetFeatureCollection;
@@ -38,6 +44,10 @@ interface MapViewProps {
   onVarlikSec: (id: string) => void;
   /** Bos bir alana tiklaninca (koordinati forma doldurmak icin). */
   onHaritaTikla: (koordinat: { longitude: number; latitude: number }) => void;
+  /** Alan secim modu acikken tiklamalar poligon kosesi olarak toplanir. */
+  cizimModu: boolean;
+  cizimNoktalari: [number, number][];
+  onCizimNokta: (nokta: [number, number]) => void;
 }
 
 export default function MapView({
@@ -45,19 +55,26 @@ export default function MapView({
   seciliId,
   onVarlikSec,
   onHaritaTikla,
+  cizimModu,
+  cizimNoktalari,
+  onCizimNokta,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const hazirRef = useRef(false);
 
-  // Callback'leri ref'te tutariz; boylece harita yalnizca bir kez kurulur.
+  // Callback'leri ve modu ref'te tutariz; boylece harita yalnizca bir kez kurulur.
   const onVarlikSecRef = useRef(onVarlikSec);
   const onHaritaTiklaRef = useRef(onHaritaTikla);
+  const onCizimNoktaRef = useRef(onCizimNokta);
+  const cizimModuRef = useRef(cizimModu);
   useEffect(() => {
     onVarlikSecRef.current = onVarlikSec;
     onHaritaTiklaRef.current = onHaritaTikla;
-  }, [onVarlikSec, onHaritaTikla]);
+    onCizimNoktaRef.current = onCizimNokta;
+    cizimModuRef.current = cizimModu;
+  }, [onVarlikSec, onHaritaTikla, onCizimNokta, cizimModu]);
 
   // --- Haritayi bir kez kur ---
   useEffect(() => {
@@ -110,10 +127,40 @@ export default function MapView({
         },
       });
 
+      // --- Alan secimi (poligon) katmanlari ---
+      map.addSource(CIZIM_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
+
+      map.addLayer({
+        id: "cizim-fill",
+        type: "fill",
+        source: CIZIM_SOURCE_ID,
+        filter: ["==", ["geometry-type"], "Polygon"],
+        paint: { "fill-color": "#0f766e", "fill-opacity": 0.12 },
+      });
+      map.addLayer({
+        id: "cizim-line",
+        type: "line",
+        source: CIZIM_SOURCE_ID,
+        paint: { "line-color": "#0f766e", "line-width": 2 },
+      });
+      map.addLayer({
+        id: "cizim-nokta",
+        type: "circle",
+        source: CIZIM_SOURCE_ID,
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-radius": 5,
+          "circle-color": "#0f766e",
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+
       hazirRef.current = true;
 
-      // Nokta tiklamasi -> secim
+      // Nokta tiklamasi -> secim (cizim modunda devre disi)
       map.on("click", "assets-circle", (e) => {
+        if (cizimModuRef.current) return;
         const feature = e.features?.[0];
         const id = feature?.properties?.id;
         if (typeof id === "string") {
@@ -121,15 +168,26 @@ export default function MapView({
         }
       });
 
-      // Bos alana tiklama -> koordinati forma gonder
       map.on("click", (e) => {
+        const koordinat: [number, number] = [
+          Number(e.lngLat.lng.toFixed(6)),
+          Number(e.lngLat.lat.toFixed(6)),
+        ];
+
+        // Cizim modunda her tiklama bir poligon kosesi ekler.
+        if (cizimModuRef.current) {
+          onCizimNoktaRef.current(koordinat);
+          return;
+        }
+
+        // Bos alana tiklama -> koordinati forma gonder
         const uzerinde = map.queryRenderedFeatures(e.point, {
           layers: ["assets-circle"],
         });
         if (uzerinde.length === 0) {
           onHaritaTiklaRef.current({
-            longitude: Number(e.lngLat.lng.toFixed(6)),
-            latitude: Number(e.lngLat.lat.toFixed(6)),
+            longitude: koordinat[0],
+            latitude: koordinat[1],
           });
         }
       });
@@ -163,6 +221,55 @@ export default function MapView({
     if (hazirRef.current) uygula();
     else map.once("load", uygula);
   }, [assets]);
+
+  // --- Cizim noktalarini haritada goster ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const uygula = () => {
+      const source = map.getSource(CIZIM_SOURCE_ID) as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      if (!source) return;
+
+      const features: GeoJSON.Feature[] = cizimNoktalari.map((nokta) => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: nokta },
+        properties: {},
+      }));
+
+      if (cizimNoktalari.length >= 3) {
+        // Kapali halka: ilk nokta sona tekrar eklenir.
+        features.push({
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [[...cizimNoktalari, cizimNoktalari[0]]],
+          },
+          properties: {},
+        });
+      } else if (cizimNoktalari.length === 2) {
+        features.push({
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: cizimNoktalari },
+          properties: {},
+        });
+      }
+
+      source.setData({ type: "FeatureCollection", features });
+    };
+
+    if (hazirRef.current) uygula();
+    else map.once("load", uygula);
+  }, [cizimNoktalari]);
+
+  // --- Cizim modunda imleci artiya cevir ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.getCanvas().style.cursor = cizimModu ? "crosshair" : "";
+  }, [cizimModu]);
 
   // --- Secim degisince: vurgula, ucur, popup ac ---
   useEffect(() => {
