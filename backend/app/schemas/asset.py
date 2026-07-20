@@ -56,6 +56,32 @@ class PointGeometry(BaseModel):
     coordinates: tuple[float, float]  # [longitude, latitude]
 
 
+class PolygonGeometry(BaseModel):
+    """GeoJSON Polygon. Ilk halka dis sinir, sonrakiler (varsa) delikler."""
+
+    type: Literal["Polygon"] = "Polygon"
+    coordinates: list[list[tuple[float, float]]]
+
+    @model_validator(mode="after")
+    def halkalar_gecerli_olmali(self) -> "PolygonGeometry":
+        if not self.coordinates:
+            raise ValueError("polygon en az bir halka icermelidir")
+        for ring in self.coordinates:
+            if len(ring) < 4:
+                raise ValueError("her halka en az 4 nokta icermelidir")
+            if ring[0] != ring[-1]:
+                raise ValueError("halkanin ilk ve son noktasi ayni olmalidir (kapali halka)")
+        return self
+
+
+class WithinQuery(BaseModel):
+    """Belirli bir alana dusen varliklari sorgulamak icin istek govdesi."""
+
+    polygon: PolygonGeometry
+    type: AssetType | None = None
+    status: AssetStatus | None = None
+
+
 class AssetFeature(BaseModel):
     type: Literal["Feature"] = "Feature"
     geometry: PointGeometry

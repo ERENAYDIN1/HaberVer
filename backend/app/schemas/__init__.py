@@ -5,6 +5,8 @@ from .asset import (
     AssetProperties,
     AssetUpdate,
     PointGeometry,
+    PolygonGeometry,
+    WithinQuery,
 )
 
 __all__ = [
@@ -14,4 +16,6 @@ __all__ = [
     "AssetProperties",
     "AssetUpdate",
     "PointGeometry",
+    "PolygonGeometry",
+    "WithinQuery",
 ]

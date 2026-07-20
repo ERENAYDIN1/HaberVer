@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import Asset
+from ..models.asset import AssetStatus, AssetType
 from ..schemas.asset import AssetCreate, AssetUpdate
 
 
@@ -20,9 +21,37 @@ def _point(longitude: float, latitude: float):
     return func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
 
 
-def list_assets(db: Session):
-    stmt = _select_with_coords().order_by(Asset.created_at.desc())
-    return db.execute(stmt).all()
+def _apply_filters(stmt, asset_type: AssetType | None, status: AssetStatus | None):
+    if asset_type is not None:
+        stmt = stmt.where(Asset.type == asset_type)
+    if status is not None:
+        stmt = stmt.where(Asset.status == status)
+    return stmt
+
+
+def list_assets(
+    db: Session,
+    asset_type: AssetType | None = None,
+    status: AssetStatus | None = None,
+):
+    stmt = _apply_filters(_select_with_coords(), asset_type, status)
+    return db.execute(stmt.order_by(Asset.created_at.desc())).all()
+
+
+def assets_within(
+    db: Session,
+    polygon_geojson: str,
+    asset_type: AssetType | None = None,
+    status: AssetStatus | None = None,
+):
+    """Verilen GeoJSON poligonunun icine dusen varliklari dondurur (ST_Within).
+
+    Geometri sutunundaki GiST indeksi sayesinde sorgu indeksten faydalanir.
+    """
+    polygon = func.ST_SetSRID(func.ST_GeomFromGeoJSON(polygon_geojson), 4326)
+    stmt = _select_with_coords().where(func.ST_Within(Asset.geometry, polygon))
+    stmt = _apply_filters(stmt, asset_type, status)
+    return db.execute(stmt.order_by(Asset.created_at.desc())).all()
 
 
 def get_asset(db: Session, asset_id: uuid.UUID):
