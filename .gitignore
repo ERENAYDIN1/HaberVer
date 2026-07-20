@@ -1,0 +1,34 @@
+# Ortam değişkenleri (gerçek sırlar)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Node / Frontend
+node_modules/
+dist/
+.vite/
+*.local
+*.tsbuildinfo
+
+# Docker volume verileri (host'ta tutulursa)
+pgdata/
+
+# Editör / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Log
+*.log
+
+
+# Planlama / dokümantasyon (lokal tutuluyor)
+CLAUDE.md
+TEKNIK_PLAN.md
