@@ -88,3 +88,20 @@ export function IconChevronRight({ className }: IconProps) {
     </svg>
   );
 }
+
+export function IconX({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} strokeWidth={2} className={className}>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
+export function IconSearch({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} className={className}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+    </svg>
+  );
+}

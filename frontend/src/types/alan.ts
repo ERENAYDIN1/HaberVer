@@ -6,4 +6,6 @@ export interface TamamlananAlan {
   noktalar: [number, number][];
   renk: string;
   sonuc: AssetFeatureCollection;
+  /** Verilirse listede "Alan N" yerine bu gosterilir (orn. il/ilce siniri secimi). */
+  etiket?: string;
 }

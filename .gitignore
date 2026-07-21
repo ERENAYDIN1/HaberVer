@@ -19,6 +19,10 @@ dist/
 # Docker volume verileri (host'ta tutulursa)
 pgdata/
 
+# Sinir verisi ham kaynak dosyalari (buyuk; sadece on-isleme icin kullanilir,
+# uretilen kucuk ciktilar backend/app/data/sinirlar/ altinda committlenir)
+backend/scripts/_kaynak/
+
 # Editör / OS
 .vscode/
 .idea/

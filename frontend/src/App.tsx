@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { assetsWithin } from "./api/assets";
+import { ilceSiniri, ilSiniri } from "./api/sinirlar";
 import AssetForm from "./components/AssetForm";
 import AssetList from "./components/AssetList";
 import CizimPaneli from "./components/CizimPaneli";
@@ -12,14 +13,25 @@ import {
   IconRuler,
   IconTree,
 } from "./components/icons";
+import KonumArama from "./components/KonumArama";
 import MapStyleSwitcher from "./components/MapStyleSwitcher";
-import MapView from "./components/MapView";
+import MapView, { type UcusHedefi } from "./components/MapView";
 import Modal from "./components/Modal";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
 import type { AssetFeature, AssetFeatureCollection, AssetFilters } from "./types/asset";
 import type { TamamlananAlan } from "./types/alan";
-import { mesafeEtiketi, poligonAlaniM2, toplamMesafeMetre } from "./utils/geo";
+import {
+  mesafeEtiketi,
+  poligonAlaniM2,
+  poligonSinirKutusu,
+  toplamMesafeMetre,
+} from "./utils/geo";
+
+/** Il/ilce sinir secimi de bir "tamamlanan alan" olarak temsil edilir; bu sabit
+ *  id sayesinde yeni bir il/ilce secilince oncekinin yerine gecer. */
+const IDARI_ALAN_ID = "idari-sinir";
+const IDARI_ALAN_RENK = "#0891b2";
 
 type Sekme = "liste" | "ekle" | "ozet";
 
@@ -45,6 +57,20 @@ export default function App() {
   // --- Mesafe olcum araci ---
   const [olcumModu, setOlcumModu] = useState(false);
   const [olcumNoktalari, setOlcumNoktalari] = useState<[number, number][]>([]);
+
+  // --- Il/ilce sinirina gore filtreleme + harita arama ---
+  const [ilKodu, setIlKodu] = useState<string | null>(null);
+  const [ilceKodu, setIlceKodu] = useState<string | null>(null);
+  const [idariHatasi, setIdariHatasi] = useState<string | null>(null);
+  const [ucusHedefi, setUcusHedefi] = useState<UcusHedefi | null>(null);
+  const [haritaGorunumu, setHaritaGorunumu] = useState<
+    [[number, number], [number, number]] | null
+  >(null);
+  /** Secili il/ilcenin sinir kutusu; verilince arama bu bolgeyle SINIRLANIR
+   *  (sadece oncelik degil) - "GOP secip Kucukkoy aradiginda Balikesir cikmasin". */
+  const [idariSinirKutusu, setIdariSinirKutusu] = useState<
+    [[number, number], [number, number]] | null
+  >(null);
 
   const alanM2 = useMemo(() => poligonAlaniM2(cizimNoktalari), [cizimNoktalari]);
   const olcumMesafeM = useMemo(
@@ -102,10 +128,21 @@ export default function App() {
 
   const alanKaldir = (id: string) => {
     setTamamlananAlanlar((a) => a.filter((alan) => alan.id !== id));
+    if (id === IDARI_ALAN_ID) {
+      setIlKodu(null);
+      setIlceKodu(null);
+    }
   };
 
   const tumAlanlariTemizle = () => {
     setTamamlananAlanlar([]);
+    setIlKodu(null);
+    setIlceKodu(null);
+  };
+
+  const ilSec = (kod: string | null) => {
+    setIlKodu(kod);
+    setIlceKodu(null);
   };
 
   const alanSecimiTamamla = async () => {
@@ -140,6 +177,87 @@ export default function App() {
       setAlanYukleniyor(false);
     }
   };
+
+  // Filtreler degistiginde, tamamlanmis alanlarin da uzerinde durdugu sorgu
+  // sonuclarini yeniden getir - aksi halde alan secildikten sonra filtreler
+  // donmus (alan tamamlandigi andaki) sonuclara bakmaya devam eder.
+  const filtreIstekSirasiRef = useRef(0);
+  useEffect(() => {
+    if (tamamlananAlanlar.length === 0) return;
+    const siraNo = ++filtreIstekSirasiRef.current;
+
+    Promise.all(
+      tamamlananAlanlar.map(async (alan) => {
+        const sonuc = await assetsWithin({
+          polygon: {
+            type: "Polygon",
+            coordinates: [[...alan.noktalar, alan.noktalar[0]]],
+          },
+          ...filters,
+        });
+        return { ...alan, sonuc };
+      })
+    )
+      .then((guncellenmis) => {
+        // Bu sirada baska bir filtre degisikligi baslamissa, eski sonucu yoksay.
+        if (filtreIstekSirasiRef.current === siraNo) setTamamlananAlanlar(guncellenmis);
+      })
+      .catch((e) => {
+        if (filtreIstekSirasiRef.current === siraNo) setAlanHatasi((e as Error).message);
+      });
+    // tamamlananAlanlar kasitli olarak bagimlilik disi: yeni alan eklendiginde
+    // zaten guncel filtreyle sorgulaniyor, burada sadece filtre degisince tetiklenmeli.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
+
+  // Il/ilce secimi degisince sinir geometrisini getirir, mevcut alan
+  // altyapisina (tamamlananAlanlar) idari-sinir-id'siyle ekler/degistirir ve
+  // haritayi o bolgeye ucurur. Filtreler degisince zaten yukaridaki efekt bu
+  // girdiyi de yeniden sorgular (noktalar uzerinden calisiyor).
+  useEffect(() => {
+    if (!ilKodu) {
+      setTamamlananAlanlar((a) => a.filter((alan) => alan.id !== IDARI_ALAN_ID));
+      setIdariSinirKutusu(null);
+      return;
+    }
+    let iptal = false;
+    setIdariHatasi(null);
+
+    (async () => {
+      try {
+        const sinir = ilceKodu ? await ilceSiniri(ilceKodu) : await ilSiniri(ilKodu);
+        if (iptal) return;
+        const sonuc = await assetsWithin({
+          polygon: {
+            type: "Polygon",
+            coordinates: [[...sinir.noktalar, sinir.noktalar[0]]],
+          },
+          ...filters,
+        });
+        if (iptal) return;
+        setTamamlananAlanlar((a) => [
+          ...a.filter((alan) => alan.id !== IDARI_ALAN_ID),
+          {
+            id: IDARI_ALAN_ID,
+            noktalar: sinir.noktalar,
+            renk: IDARI_ALAN_RENK,
+            sonuc,
+            etiket: sinir.ad,
+          },
+        ]);
+        const kutu = poligonSinirKutusu(sinir.noktalar);
+        setIdariSinirKutusu(kutu);
+        setUcusHedefi({ anahtar: crypto.randomUUID(), tip: "sinir", bounds: kutu });
+      } catch (e) {
+        if (!iptal) setIdariHatasi((e as Error).message);
+      }
+    })();
+
+    return () => {
+      iptal = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ilKodu, ilceKodu]);
 
   const olcumBaslat = () => {
     if (cizimModu) alanSecimiIptal();
@@ -181,6 +299,19 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2">
+          <KonumArama
+            gorunenAlan={haritaGorunumu}
+            zorunluAlan={idariSinirKutusu}
+            onSecildi={(konum) =>
+              setUcusHedefi({
+                anahtar: crypto.randomUUID(),
+                tip: "nokta",
+                merkez: konum,
+                zoom: 16,
+              })
+            }
+          />
+
           <MapStyleSwitcher aktifId={aktifStilId} onSec={setAktifStilId} />
 
           {/* Mesafe olcum kontrolu - detaylar alt ortadaki arac panelinde */}
@@ -275,6 +406,11 @@ export default function App() {
                 seciliId={seciliId}
                 onSec={setSeciliId}
                 onDuzenle={setDuzenlenen}
+                ilKodu={ilKodu}
+                ilceKodu={ilceKodu}
+                onIlSec={ilSec}
+                onIlceSec={setIlceKodu}
+                idariHatasi={idariHatasi}
               />
             )}
 
@@ -313,6 +449,8 @@ export default function App() {
             olcumNoktalari={olcumNoktalari}
             onOlcumNokta={olcumNoktaEkle}
             aktifStilId={aktifStilId}
+            ucusHedefi={ucusHedefi}
+            onGorunumDegisti={setHaritaGorunumu}
           />
 
           {!panelAcik && (

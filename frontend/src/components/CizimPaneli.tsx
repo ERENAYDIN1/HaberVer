@@ -118,7 +118,7 @@ export default function CizimPaneli({
                       className="h-2.5 w-2.5 shrink-0 rounded-full"
                       style={{ background: alan.renk }}
                     />
-                    Alan {i + 1}:{" "}
+                    {alan.etiket ?? `Alan ${i + 1}`}:{" "}
                     <span className="font-semibold">{alan.sonuc.features.length}</span>{" "}
                     varlık · {alanEtiketi(poligonAlaniM2(alan.noktalar))}
                   </span>

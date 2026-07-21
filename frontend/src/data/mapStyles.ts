@@ -23,68 +23,7 @@ function googleOnizlemeUrl(lyrs: string): string {
   return `https://mt.google.com/vt/lyrs=${lyrs}&x=${x}&y=${y}&z=${z}&scale=2`;
 }
 
-/** Kabartma (relief) stili: MapLibre'nin yerel "color-relief" katmani + acik
- *  kaynakli global yukseklik verisi (AWS Terrarium). Google'in "h" katmani
- *  yol/etiketleri seffaf olarak ustune biner, boylece hem renkli kabartma
- *  hem de okunabilir yer adlari bir arada olur. */
-function kabartmaStili(): StyleSpecification {
-  return {
-    version: 8,
-    sources: {
-      yukseklik: {
-        type: "raster-dem",
-        tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
-        tileSize: 256,
-        encoding: "terrarium",
-        maxzoom: 15,
-        attribution: "Terrain: Mapzen / AWS Open Data Terrain Tiles",
-      },
-      "google-etiket": {
-        type: "raster",
-        tiles: [`https://mt.google.com/vt/lyrs=h&x={x}&y={y}&z={z}&scale=2`],
-        tileSize: 256,
-        attribution: "© Google",
-      },
-    },
-    layers: [
-      {
-        id: "kabartma-renk",
-        type: "color-relief",
-        source: "yukseklik",
-        paint: {
-          "color-relief-color": [
-            "interpolate",
-            ["linear"],
-            ["elevation"],
-            0,
-            "rgb(63,124,161)",
-            1,
-            "rgb(96,158,116)",
-            200,
-            "rgb(150,180,112)",
-            600,
-            "rgb(198,180,120)",
-            1200,
-            "rgb(172,132,96)",
-            2000,
-            "rgb(150,112,96)",
-            3000,
-            "rgb(255,255,255)",
-          ],
-        },
-      },
-      { id: "kabartma-etiket", type: "raster", source: "google-etiket" },
-    ],
-  };
-}
-
-export type HaritaStilId =
-  | "yol"
-  | "melez"
-  | "uydu"
-  | "kabartma"
-  | "liberty"
-  | "voyager";
+export type HaritaStilId = "yol" | "melez" | "uydu" | "liberty" | "voyager";
 
 export interface HaritaStilTanimi {
   id: HaritaStilId;
@@ -116,14 +55,6 @@ export const HARITA_STILLERI: HaritaStilTanimi[] = [
     etiket: "Uydu",
     stil: googleStili("s"),
     onizleme: { tip: "raster", url: googleOnizlemeUrl("s") },
-  },
-  {
-    id: "kabartma",
-    etiket: "Kabartma",
-    stil: kabartmaStili(),
-    // Statik bir tile'dan kabartma renklendirmesi uretilemez (GL katmani
-    // istemcide hesaplanir); onizleme icin kucuk canli bir harita kullanilir.
-    onizleme: { tip: "vektor" },
   },
   {
     id: "liberty",

@@ -26,6 +26,13 @@ const BOS_GEOJSON = {
   features: [],
 } as unknown as GeoJSON.FeatureCollection;
 
+/** Haritayi belirli bir bolgeye/noktaya ucurmak icin komut. `anahtar` her
+ *  degistiginde yeniden tetiklenir (ayni hedefe tekrar ucmak istenirse bile
+ *  benzersiz uretilmelidir, orn. crypto.randomUUID()). */
+export type UcusHedefi =
+  | { anahtar: string; tip: "sinir"; bounds: [[number, number], [number, number]] }
+  | { anahtar: string; tip: "nokta"; merkez: [number, number]; zoom?: number };
+
 interface MapViewProps {
   assets?: AssetFeatureCollection;
   /** Panelde/haritada secili varligin id'si. */
@@ -48,6 +55,11 @@ interface MapViewProps {
   onOlcumNokta: (nokta: [number, number]) => void;
   /** Aktif harita stili (kontrol App.tsx'teki ust cubukta). */
   aktifStilId: HaritaStilId;
+  /** Verildiginde harita bu hedefe ucar (il/ilce secimi, arama sonucu vb.). */
+  ucusHedefi?: UcusHedefi | null;
+  /** Harita her hareket ettiginde (pan/zoom) gorunen alanin sinirlarini bildirir;
+   *  konum aramasini o an ekranda gorunen bolgeye onceliklendirmek icin kullanilir. */
+  onGorunumDegisti?: (bounds: [[number, number], [number, number]]) => void;
 }
 
 export default function MapView({
@@ -64,6 +76,8 @@ export default function MapView({
   olcumNoktalari,
   onOlcumNokta,
   aktifStilId,
+  ucusHedefi,
+  onGorunumDegisti,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -86,6 +100,7 @@ export default function MapView({
   const cizimRengiRef = useRef(cizimRengi);
   const tamamlananAlanlarRef = useRef(tamamlananAlanlar);
   const onOlcumNoktaRef = useRef(onOlcumNokta);
+  const onGorunumDegistiRef = useRef(onGorunumDegisti);
   const olcumModuRef = useRef(olcumModu);
   const olcumNoktalariRef = useRef(olcumNoktalari);
   const assetsRef = useRef(assets);
@@ -101,6 +116,7 @@ export default function MapView({
     cizimRengiRef.current = cizimRengi;
     tamamlananAlanlarRef.current = tamamlananAlanlar;
     onOlcumNoktaRef.current = onOlcumNokta;
+    onGorunumDegistiRef.current = onGorunumDegisti;
     olcumModuRef.current = olcumModu;
     olcumNoktalariRef.current = olcumNoktalari;
     assetsRef.current = assets;
@@ -147,6 +163,17 @@ export default function MapView({
       onHaritaTiklaRef.current({ longitude: koordinat[0], latitude: koordinat[1] });
     }
   });
+  /** Harita her hareket ettiginde gorunen alani bildirir (arama onceliklendirmesi icin). */
+  const gorunumDegistiRef = useRef(() => {
+    const map = mapRef.current;
+    if (!map || !onGorunumDegistiRef.current) return;
+    const sinirlar = map.getBounds();
+    onGorunumDegistiRef.current([
+      [sinirlar.getWest(), sinirlar.getSouth()],
+      [sinirlar.getEast(), sinirlar.getNorth()],
+    ]);
+  });
+
   /** Cizim/olcum sirasinda fareyi takip ederek elastik onizleme cizgisini gunceller. */
   const fareHareketRef = useRef((e: maplibregl.MapMouseEvent) => {
     if (!cizimModuRef.current && !olcumModuRef.current) return;
@@ -198,7 +225,8 @@ export default function MapView({
 
     for (const alan of tamamlananAlanlarRef.current) {
       guncelIdler.add(alan.id);
-      const metin = alanEtiketi(poligonAlaniM2(alan.noktalar));
+      const buyukluk = alanEtiketi(poligonAlaniM2(alan.noktalar));
+      const metin = alan.etiket ? `${alan.etiket} · ${buyukluk}` : buyukluk;
       const merkez = poligonMerkezi(alan.noktalar);
 
       let marker = tamamlananEtiketleriRef.current.get(alan.id);
@@ -538,6 +566,8 @@ export default function MapView({
     map.on("click", haritaTiklandiRef.current);
     map.off("mousemove", fareHareketRef.current);
     map.on("mousemove", fareHareketRef.current);
+    map.off("moveend", gorunumDegistiRef.current);
+    map.on("moveend", gorunumDegistiRef.current);
 
     hazirRef.current = true;
     veriUygula(map);
@@ -545,6 +575,7 @@ export default function MapView({
     tamamlananUygula(map);
     olcumUygula(map);
     secimUygula(map);
+    gorunumDegistiRef.current();
   }
 
   // --- Haritayi bir kez kur ---
@@ -637,6 +668,23 @@ export default function MapView({
       if (hazirRef.current) dinamikUygula(map);
     }
   }, [cizimModu, olcumModu]);
+
+  // --- Bir ucus hedefi verilince: sinira/noktaya ucar ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ucusHedefi) return;
+
+    if (ucusHedefi.tip === "sinir") {
+      map.fitBounds(ucusHedefi.bounds, { padding: 40, duration: 900 });
+    } else {
+      map.flyTo({
+        center: ucusHedefi.merkez,
+        zoom: ucusHedefi.zoom ?? Math.max(map.getZoom(), 15),
+        duration: 900,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ucusHedefi?.anahtar]);
 
   // --- Secim degisince: vurgula, ucur, popup ac ---
   useEffect(() => {

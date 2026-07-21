@@ -52,6 +52,27 @@ export function poligonMerkezi(noktalar: [number, number][]): [number, number] {
   return [lon, lat];
 }
 
+/** Nokta dizisinin sinirlayici kutusu ([[minLon,minLat],[maxLon,maxLat]]),
+ *  haritayi bir bolgeye ucururken (fitBounds) kullanilir. */
+export function poligonSinirKutusu(
+  noktalar: [number, number][]
+): [[number, number], [number, number]] {
+  let minLon = Infinity;
+  let minLat = Infinity;
+  let maxLon = -Infinity;
+  let maxLat = -Infinity;
+  for (const [lon, lat] of noktalar) {
+    if (lon < minLon) minLon = lon;
+    if (lon > maxLon) maxLon = lon;
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+  }
+  return [
+    [minLon, minLat],
+    [maxLon, maxLat],
+  ];
+}
+
 export function alanEtiketi(m2: number): string {
   if (m2 >= 1_000_000) return `${(m2 / 1_000_000).toFixed(2)} km²`;
   if (m2 >= 10_000) return `${(m2 / 10_000).toFixed(2)} ha`;

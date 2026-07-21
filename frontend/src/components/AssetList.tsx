@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactElement } from "react";
 
 import { useDeleteAsset } from "../hooks/useAssets";
+import { useIlceler, useIller } from "../hooks/useSinirlar";
 import {
   ASSET_STATUSES,
   ASSET_STATUS_LABELS,
@@ -12,7 +13,7 @@ import type {
   AssetFeatureCollection,
   AssetFilters,
 } from "../types/asset";
-import { IconBench, IconLamp, IconPin, IconTree } from "./icons";
+import { IconBench, IconLamp, IconPin, IconTree, IconX } from "./icons";
 
 const TIP_IKONU: Record<string, (props: { className?: string }) => ReactElement> = {
   agac: IconTree,
@@ -33,6 +34,12 @@ interface AssetListProps {
   seciliId: string | null;
   onSec: (id: string) => void;
   onDuzenle: (asset: AssetFeature) => void;
+  /** Il/ilce sinirina gore filtreleme (haritada da vurgulanir). */
+  ilKodu: string | null;
+  ilceKodu: string | null;
+  onIlSec: (kod: string | null) => void;
+  onIlceSec: (kod: string | null) => void;
+  idariHatasi?: string | null;
 }
 
 export default function AssetList({
@@ -45,9 +52,16 @@ export default function AssetList({
   seciliId,
   onSec,
   onDuzenle,
+  ilKodu,
+  ilceKodu,
+  onIlSec,
+  onIlceSec,
+  idariHatasi,
 }: AssetListProps) {
   const deleteAsset = useDeleteAsset();
   const seciliRef = useRef<HTMLLIElement>(null);
+  const illerSorgu = useIller();
+  const ilcelerSorgu = useIlceler(ilKodu);
 
   // Haritadan secim yapildiginda listedeki karti gorunur alana kaydir.
   useEffect(() => {
@@ -99,6 +113,57 @@ export default function AssetList({
           ))}
         </select>
       </div>
+
+      <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
+        <select
+          className={selectClass}
+          value={ilKodu ?? ""}
+          onChange={(e) => onIlSec(e.target.value || null)}
+        >
+          <option value="">İl seç</option>
+          {illerSorgu.data?.map((il) => (
+            <option key={il.kod} value={il.kod}>
+              {il.ad}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className={selectClass}
+          value={ilceKodu ?? ""}
+          onChange={(e) => onIlceSec(e.target.value || null)}
+          disabled={!ilKodu}
+        >
+          <option value="">
+            {ilKodu ? "Tüm ilçeler" : "Önce il seçin"}
+          </option>
+          {ilcelerSorgu.data?.map((ilce) => (
+            <option key={ilce.kod} value={ilce.kod}>
+              {ilce.ad}
+            </option>
+          ))}
+        </select>
+
+        {ilKodu && (
+          <button
+            onClick={() => {
+              onIlSec(null);
+              onIlceSec(null);
+            }}
+            aria-label="İl/ilçe filtresini temizle"
+            title="Temizle"
+            className="shrink-0 text-slate-400 hover:text-red-600"
+          >
+            <IconX className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {idariHatasi && (
+        <p className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+          {idariHatasi}
+        </p>
+      )}
 
       {data && (
         <div className="border-b border-slate-100 bg-slate-50 px-4 py-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
