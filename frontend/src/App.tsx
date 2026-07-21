@@ -113,7 +113,7 @@ export default function App() {
         />
       </div>
 
-      {/* Alan secimi kontrolleri - harita ustunde sag ust */}
+      {/* Alan secimi kontrolleri - harita stil seciciden once, en ustte */}
       <div className="absolute right-4 top-4 z-10 flex flex-col items-end gap-2">
         {!cizimModu && !alanSonucu && (
           <button

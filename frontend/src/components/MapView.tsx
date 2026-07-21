@@ -1,30 +1,16 @@
-import maplibregl, { type StyleSpecification } from "maplibre-gl";
+import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import {
-  ASSET_STATUS_LABELS,
-  ASSET_TYPE_LABELS,
-} from "../types/asset";
+import { HARITA_STILLERI, type HaritaStilId } from "../data/mapStyles";
+import { ASSET_STATUS_LABELS, ASSET_TYPE_LABELS } from "../types/asset";
 import type { AssetFeature, AssetFeatureCollection } from "../types/asset";
-
-/** API anahtari gerektirmeyen OpenStreetMap raster altligi. */
-const OSM_STYLE: StyleSpecification = {
-  version: 8,
-  sources: {
-    osm: {
-      type: "raster",
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      attribution: "© OpenStreetMap katkıda bulunanlar",
-    },
-  },
-  layers: [{ id: "osm", type: "raster", source: "osm" }],
-};
+import MapStyleSwitcher from "./MapStyleSwitcher";
 
 const ANKARA: [number, number] = [32.8597, 39.9334];
 const SOURCE_ID = "assets";
 const CIZIM_SOURCE_ID = "cizim";
+const VARSAYILAN_STIL: HaritaStilId = "yol";
 
 const BOS_KOLEKSIYON: AssetFeatureCollection = {
   type: "FeatureCollection",
@@ -64,37 +50,123 @@ export default function MapView({
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const hazirRef = useRef(false);
 
-  // Callback'leri ve modu ref'te tutariz; boylece harita yalnizca bir kez kurulur.
+  const [aktifStilId, setAktifStilId] = useState<HaritaStilId>(VARSAYILAN_STIL);
+
+  // Callback'leri ve degisen degerleri ref'te tutariz; boylece harita bir kez
+  // kurulur ve harita stili degistiginde de en guncel veriyi yeniden uygulayabiliriz.
   const onVarlikSecRef = useRef(onVarlikSec);
   const onHaritaTiklaRef = useRef(onHaritaTikla);
   const onCizimNoktaRef = useRef(onCizimNokta);
   const cizimModuRef = useRef(cizimModu);
+  const assetsRef = useRef(assets);
+  const cizimNoktalariRef = useRef(cizimNoktalari);
+  const seciliIdRef = useRef(seciliId);
   useEffect(() => {
     onVarlikSecRef.current = onVarlikSec;
     onHaritaTiklaRef.current = onHaritaTikla;
     onCizimNoktaRef.current = onCizimNokta;
     cizimModuRef.current = cizimModu;
-  }, [onVarlikSec, onHaritaTikla, onCizimNokta, cizimModu]);
+    assetsRef.current = assets;
+    cizimNoktalariRef.current = cizimNoktalari;
+    seciliIdRef.current = seciliId;
+  });
 
-  // --- Haritayi bir kez kur ---
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+  // Layer-scoped click/hover callback'leri sabit referans olarak tutulur ki
+  // stil degisiminde map.off/map.on ile guvenle yeniden baglanabilsin.
+  const assetsTiklandiRef = useRef((e: maplibregl.MapLayerMouseEvent) => {
+    if (cizimModuRef.current) return;
+    const id = e.features?.[0]?.properties?.id;
+    if (typeof id === "string") onVarlikSecRef.current(id);
+  });
+  const fareGirdiRef = useRef(() => {
+    const map = mapRef.current;
+    if (map) map.getCanvas().style.cursor = "pointer";
+  });
+  const fareCiktiRef = useRef(() => {
+    const map = mapRef.current;
+    if (map) map.getCanvas().style.cursor = "";
+  });
+  const haritaTiklandiRef = useRef((e: maplibregl.MapMouseEvent) => {
+    const map = mapRef.current;
+    if (!map) return;
+    const koordinat: [number, number] = [
+      Number(e.lngLat.lng.toFixed(6)),
+      Number(e.lngLat.lat.toFixed(6)),
+    ];
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: OSM_STYLE,
-      center: ANKARA,
-      zoom: 13,
+    if (cizimModuRef.current) {
+      onCizimNoktaRef.current(koordinat);
+      return;
+    }
+
+    const uzerinde = map.queryRenderedFeatures(e.point, {
+      layers: ["assets-circle"],
     });
-    mapRef.current = map;
+    if (uzerinde.length === 0) {
+      onHaritaTiklaRef.current({ longitude: koordinat[0], latitude: koordinat[1] });
+    }
+  });
 
-    map.addControl(new maplibregl.NavigationControl(), "bottom-right");
-    map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+  // --- Veriyi haritadaki kaynaga uygular (guncel ref degerlerinden okur) ---
+  function veriUygula(map: maplibregl.Map) {
+    const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+    source?.setData(
+      (assetsRef.current ?? BOS_KOLEKSIYON) as unknown as GeoJSON.FeatureCollection
+    );
+  }
 
-    map.on("load", () => {
+  function cizimUygula(map: maplibregl.Map) {
+    const source = map.getSource(CIZIM_SOURCE_ID) as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+
+    const noktalar = cizimNoktalariRef.current;
+    const features: GeoJSON.Feature[] = noktalar.map((nokta) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: nokta },
+      properties: {},
+    }));
+
+    if (noktalar.length >= 3) {
+      features.push({
+        type: "Feature",
+        geometry: { type: "Polygon", coordinates: [[...noktalar, noktalar[0]]] },
+        properties: {},
+      });
+    } else if (noktalar.length === 2) {
+      features.push({
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: noktalar },
+        properties: {},
+      });
+    }
+
+    source.setData({ type: "FeatureCollection", features });
+  }
+
+  function secimUygula(map: maplibregl.Map) {
+    const id = seciliIdRef.current;
+    map.setFilter("assets-selected", ["==", ["get", "id"], id ?? ""]);
+
+    popupRef.current?.remove();
+    popupRef.current = null;
+
+    if (!id || !assetsRef.current) return;
+    const secili = assetsRef.current.features.find((f) => f.properties.id === id);
+    if (!secili) return;
+
+    popupRef.current = new maplibregl.Popup({ offset: 14, closeButton: false })
+      .setLngLat(secili.geometry.coordinates)
+      .setHTML(popupIcerigi(secili))
+      .addTo(map);
+  }
+
+  /** Kaynaklar/katmanlar yoksa (ilk yukleme ya da stil degisimi sonrasi) yeniden kurar. */
+  function kaynaklariHazirla(map: maplibregl.Map) {
+    if (!map.getSource(SOURCE_ID)) {
       map.addSource(SOURCE_ID, { type: "geojson", data: BOS_KOLEKSIYON });
 
-      // Ana nokta katmani - renk duruma gore
       map.addLayer({
         id: "assets-circle",
         type: "circle",
@@ -113,7 +185,6 @@ export default function MapView({
         },
       });
 
-      // Secili varligi vurgulayan halka
       map.addLayer({
         id: "assets-selected",
         type: "circle",
@@ -126,8 +197,9 @@ export default function MapView({
           "circle-stroke-color": "#0f766e",
         },
       });
+    }
 
-      // --- Alan secimi (poligon) katmanlari ---
+    if (!map.getSource(CIZIM_SOURCE_ID)) {
       map.addSource(CIZIM_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
 
       map.addLayer({
@@ -155,50 +227,41 @@ export default function MapView({
           "circle-stroke-color": "#ffffff",
         },
       });
+    }
 
-      hazirRef.current = true;
+    // Idempotent baglama: once cikar, sonra ekle - stil degisiminde çift kayit olmasin.
+    map.off("click", "assets-circle", assetsTiklandiRef.current);
+    map.on("click", "assets-circle", assetsTiklandiRef.current);
+    map.off("mouseenter", "assets-circle", fareGirdiRef.current);
+    map.on("mouseenter", "assets-circle", fareGirdiRef.current);
+    map.off("mouseleave", "assets-circle", fareCiktiRef.current);
+    map.on("mouseleave", "assets-circle", fareCiktiRef.current);
+    map.off("click", haritaTiklandiRef.current);
+    map.on("click", haritaTiklandiRef.current);
 
-      // Nokta tiklamasi -> secim (cizim modunda devre disi)
-      map.on("click", "assets-circle", (e) => {
-        if (cizimModuRef.current) return;
-        const feature = e.features?.[0];
-        const id = feature?.properties?.id;
-        if (typeof id === "string") {
-          onVarlikSecRef.current(id);
-        }
-      });
+    hazirRef.current = true;
+    veriUygula(map);
+    cizimUygula(map);
+    secimUygula(map);
+  }
 
-      map.on("click", (e) => {
-        const koordinat: [number, number] = [
-          Number(e.lngLat.lng.toFixed(6)),
-          Number(e.lngLat.lat.toFixed(6)),
-        ];
+  // --- Haritayi bir kez kur ---
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
 
-        // Cizim modunda her tiklama bir poligon kosesi ekler.
-        if (cizimModuRef.current) {
-          onCizimNoktaRef.current(koordinat);
-          return;
-        }
-
-        // Bos alana tiklama -> koordinati forma gonder
-        const uzerinde = map.queryRenderedFeatures(e.point, {
-          layers: ["assets-circle"],
-        });
-        if (uzerinde.length === 0) {
-          onHaritaTiklaRef.current({
-            longitude: koordinat[0],
-            latitude: koordinat[1],
-          });
-        }
-      });
-
-      map.on("mouseenter", "assets-circle", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "assets-circle", () => {
-        map.getCanvas().style.cursor = "";
-      });
+    const ilkStil = HARITA_STILLERI.find((s) => s.id === VARSAYILAN_STIL)!.stil;
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: ilkStil,
+      center: ANKARA,
+      zoom: 15,
     });
+    mapRef.current = map;
+
+    map.addControl(new maplibregl.NavigationControl(), "bottom-right");
+    map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+
+    map.on("load", () => kaynaklariHazirla(map));
 
     return () => {
       popupRef.current?.remove();
@@ -208,60 +271,30 @@ export default function MapView({
     };
   }, []);
 
+  // --- Harita stili degisince: yeni stili yukle, kaynaklari yeniden kur ---
+  function stilDegistir(id: HaritaStilId) {
+    const map = mapRef.current;
+    const tanim = HARITA_STILLERI.find((s) => s.id === id);
+    if (!map || !tanim) return;
+
+    hazirRef.current = false;
+    map.once("style.load", () => kaynaklariHazirla(map));
+    map.setStyle(tanim.stil);
+    setAktifStilId(id);
+  }
+
   // --- Veri degisince kaynagi guncelle ---
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !assets) return;
-
-    const uygula = () => {
-      const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-      source?.setData(assets as unknown as GeoJSON.FeatureCollection);
-    };
-
-    if (hazirRef.current) uygula();
-    else map.once("load", uygula);
+    if (!map) return;
+    if (hazirRef.current) veriUygula(map);
   }, [assets]);
 
   // --- Cizim noktalarini haritada goster ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-
-    const uygula = () => {
-      const source = map.getSource(CIZIM_SOURCE_ID) as
-        | maplibregl.GeoJSONSource
-        | undefined;
-      if (!source) return;
-
-      const features: GeoJSON.Feature[] = cizimNoktalari.map((nokta) => ({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: nokta },
-        properties: {},
-      }));
-
-      if (cizimNoktalari.length >= 3) {
-        // Kapali halka: ilk nokta sona tekrar eklenir.
-        features.push({
-          type: "Feature",
-          geometry: {
-            type: "Polygon",
-            coordinates: [[...cizimNoktalari, cizimNoktalari[0]]],
-          },
-          properties: {},
-        });
-      } else if (cizimNoktalari.length === 2) {
-        features.push({
-          type: "Feature",
-          geometry: { type: "LineString", coordinates: cizimNoktalari },
-          properties: {},
-        });
-      }
-
-      source.setData({ type: "FeatureCollection", features });
-    };
-
-    if (hazirRef.current) uygula();
-    else map.once("load", uygula);
+    if (hazirRef.current) cizimUygula(map);
   }, [cizimNoktalari]);
 
   // --- Cizim modunda imleci artiya cevir ---
@@ -274,39 +307,31 @@ export default function MapView({
   // --- Secim degisince: vurgula, ucur, popup ac ---
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !hazirRef.current) return;
 
-    const uygula = () => {
-      map.setFilter("assets-selected", ["==", ["get", "id"], seciliId ?? ""]);
+    secimUygula(map);
 
-      popupRef.current?.remove();
-      popupRef.current = null;
-
-      if (!seciliId || !assets) return;
-
+    if (seciliId && assets) {
       const secili = assets.features.find((f) => f.properties.id === seciliId);
-      if (!secili) return;
-
-      map.flyTo({
-        center: secili.geometry.coordinates,
-        zoom: Math.max(map.getZoom(), 15),
-        duration: 900,
-      });
-
-      popupRef.current = new maplibregl.Popup({
-        offset: 14,
-        closeButton: false,
-      })
-        .setLngLat(secili.geometry.coordinates)
-        .setHTML(popupIcerigi(secili))
-        .addTo(map);
-    };
-
-    if (hazirRef.current) uygula();
-    else map.once("load", uygula);
+      if (secili) {
+        map.flyTo({
+          center: secili.geometry.coordinates,
+          zoom: Math.max(map.getZoom(), 15),
+          duration: 900,
+        });
+      }
+    }
   }, [seciliId, assets]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      {/* Alan secimi kontrolleri (App.tsx) top-4'te; bosluk birakip altina yerlesir. */}
+      <div className="absolute right-4 top-40 z-10">
+        <MapStyleSwitcher aktifId={aktifStilId} onSec={stilDegistir} />
+      </div>
+    </div>
+  );
 }
 
 function popupIcerigi(asset: AssetFeature): string {

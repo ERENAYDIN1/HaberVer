@@ -32,5 +32,20 @@ services:
       db:
         condition: service_healthy
 
+  frontend:
+    build: ./frontend
+    container_name: greenasset_frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    ports:
+      - "${FRONTEND_PORT}:5173"
+    volumes:
+      - ./frontend:/app
+      # Container'in kendi (Linux) node_modules'i host'unkiyle (Windows) ezilmesin.
+      - /app/node_modules
+    depends_on:
+      - backend
+
 volumes:
   pgdata:
