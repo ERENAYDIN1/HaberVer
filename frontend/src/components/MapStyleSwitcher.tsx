@@ -6,6 +6,7 @@ import {
   ONIZLEME_MERKEZI,
   type HaritaStilId,
 } from "../data/mapStyles";
+import { IconLayers } from "./icons";
 
 interface MapStyleSwitcherProps {
   aktifId: HaritaStilId;
@@ -38,14 +39,19 @@ export default function MapStyleSwitcher({
       <button
         onClick={() => setAcik((a) => !a)}
         title="Harita çeşidi"
-        className="flex items-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-slate-700 shadow-lg ring-1 ring-black/5 transition hover:bg-slate-50"
+        className={`flex items-center gap-1.5 border px-3 py-1.5 text-sm font-medium transition ${
+          acik
+            ? "border-slate-400 bg-slate-100 text-slate-900"
+            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+        }`}
       >
-        <span aria-hidden>🗺️</span>
+        <IconLayers className="h-3.5 w-3.5" />
         {aktifStil?.etiket ?? "Harita"}
+        <span aria-hidden className="text-[10px] text-slate-400">▾</span>
       </button>
 
       {acik && (
-        <div className="absolute right-0 top-full mt-2 grid w-64 grid-cols-2 gap-2 rounded-lg bg-white p-3 shadow-xl ring-1 ring-black/5">
+        <div className="absolute right-0 top-full z-20 mt-1 grid w-64 grid-cols-2 gap-1.5 border border-slate-300 bg-white p-2">
           {HARITA_STILLERI.map((stil) => (
             <button
               key={stil.id}
@@ -53,13 +59,13 @@ export default function MapStyleSwitcher({
                 onSec(stil.id);
                 setAcik(false);
               }}
-              className={`flex flex-col items-center gap-1 rounded-md p-1.5 text-xs transition ${
+              className={`flex flex-col gap-1 border p-1 text-xs transition ${
                 stil.id === aktifId
-                  ? "bg-emerald-50 ring-2 ring-emerald-500"
-                  : "hover:bg-slate-50"
+                  ? "border-emerald-600 bg-emerald-50"
+                  : "border-transparent hover:bg-slate-50"
               }`}
             >
-              <div className="h-14 w-full overflow-hidden rounded border border-slate-200 bg-slate-100">
+              <div className="relative h-14 w-full overflow-hidden border border-slate-200 bg-slate-100">
                 {stil.onizleme.tip === "raster" ? (
                   <img
                     src={stil.onizleme.url}
@@ -67,6 +73,16 @@ export default function MapStyleSwitcher({
                     className="h-full w-full object-cover"
                     loading="lazy"
                   />
+                ) : stil.onizleme.tip === "raster-yigin" ? (
+                  stil.onizleme.urls.map((url, i) => (
+                    <img
+                      key={url}
+                      src={url}
+                      alt={i === 0 ? stil.etiket : ""}
+                      className="absolute inset-0 h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  ))
                 ) : (
                   <MiniOnizleme stil={stil.stil} />
                 )}

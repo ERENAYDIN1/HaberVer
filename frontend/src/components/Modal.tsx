@@ -22,24 +22,24 @@ export default function Modal({ acik, baslik, onKapat, children }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
       onClick={onKapat}
     >
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto border border-slate-400 bg-white"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-800">{baslik}</h3>
+        <div className="flex items-center justify-between border-b border-slate-300 bg-slate-50 px-5 py-3">
+          <h3 className="text-sm font-semibold text-slate-800">{baslik}</h3>
           <button
             onClick={onKapat}
             aria-label="Kapat"
-            className="text-2xl leading-none text-slate-400 transition hover:text-slate-600"
+            className="flex h-6 w-6 items-center justify-center border border-transparent text-lg leading-none text-slate-400 transition hover:border-slate-300 hover:text-slate-600"
           >
             ×
           </button>
         </div>
-        {children}
+        <div className="p-5">{children}</div>
       </div>
     </div>
   );

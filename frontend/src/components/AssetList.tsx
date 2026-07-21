@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactElement } from "react";
 
 import { useDeleteAsset } from "../hooks/useAssets";
 import {
@@ -12,15 +12,16 @@ import type {
   AssetFeatureCollection,
   AssetFilters,
 } from "../types/asset";
+import { IconBench, IconLamp, IconPin, IconTree } from "./icons";
 
-const TIP_IKONU: Record<string, string> = {
-  agac: "🌳",
-  bank: "🪑",
-  direk: "💡",
+const TIP_IKONU: Record<string, (props: { className?: string }) => ReactElement> = {
+  agac: IconTree,
+  bank: IconBench,
+  direk: IconLamp,
 };
 
 const selectClass =
-  "flex-1 rounded border border-slate-300 px-2 py-1.5 text-xs focus:border-emerald-500 focus:outline-none";
+  "flex-1 border border-slate-300 bg-white px-2 py-1.5 text-xs focus:border-emerald-500 focus:outline-none";
 
 interface AssetListProps {
   data?: AssetFeatureCollection;
@@ -100,18 +101,18 @@ export default function AssetList({
       </div>
 
       {data && (
-        <p className="px-4 pt-3 text-xs text-slate-500">
+        <div className="border-b border-slate-100 bg-slate-50 px-4 py-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
           {data.features.length} varlık
-        </p>
+        </div>
       )}
 
       {deleteAsset.isError && (
-        <p className="mx-4 mt-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700">
+        <p className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
           {deleteAsset.error.message}
         </p>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {isLoading && <p className="p-3 text-sm text-slate-500">Yükleniyor...</p>}
         {isError && (
           <p className="p-3 text-sm text-red-600">{error?.message}</p>
@@ -122,12 +123,13 @@ export default function AssetList({
           </p>
         )}
 
-        <ul className="space-y-1.5">
+        <ul className="divide-y divide-slate-100">
           {data?.features.map((asset) => {
             const { id, name, type, status, brand_model } = asset.properties;
             const [lng, lat] = asset.geometry.coordinates;
             const secili = id === seciliId;
             const bakim = status === "bakim_lazim";
+            const TipIkonu = TIP_IKONU[type] ?? IconPin;
 
             return (
               <li key={id} ref={secili ? seciliRef : undefined}>
@@ -141,15 +143,15 @@ export default function AssetList({
                       onSec(id);
                     }
                   }}
-                  className={`w-full cursor-pointer rounded-lg border px-3 py-2.5 text-left transition ${
+                  className={`w-full cursor-pointer border-l-2 px-4 py-2.5 text-left transition ${
                     secili
-                      ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500"
-                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                      ? "border-emerald-600 bg-emerald-50"
+                      : "border-transparent hover:bg-slate-50"
                   }`}
                 >
-                  <div className="flex items-start gap-2">
-                    <span className="text-lg leading-none">
-                      {TIP_IKONU[type] ?? "📍"}
+                  <div className="flex items-start gap-2.5">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center border border-slate-200 bg-slate-50 text-slate-500">
+                      <TipIkonu className="h-3.5 w-3.5" />
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-slate-800">
@@ -161,12 +163,17 @@ export default function AssetList({
                       </p>
                       <div className="mt-1.5 flex items-center gap-2">
                         <span
-                          className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          className={`inline-flex items-center gap-1 border px-1.5 py-0.5 text-[11px] font-medium ${
                             bakim
-                              ? "bg-amber-100 text-amber-800"
-                              : "bg-emerald-100 text-emerald-800"
+                              ? "border-amber-300 bg-amber-50 text-amber-800"
+                              : "border-emerald-300 bg-emerald-50 text-emerald-800"
                           }`}
                         >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              bakim ? "bg-amber-500" : "bg-emerald-500"
+                            }`}
+                          />
                           {ASSET_STATUS_LABELS[status]}
                         </span>
                         <span className="font-mono text-[11px] text-slate-400">
@@ -177,7 +184,7 @@ export default function AssetList({
                   </div>
 
                   {secili && (
-                    <div className="mt-2 flex gap-3 border-t border-emerald-200 pt-2">
+                    <div className="mt-2 flex gap-3 pl-[34px]">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();

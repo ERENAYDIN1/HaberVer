@@ -53,7 +53,7 @@ function assetToValues(asset: AssetFeature): AssetFormValues {
 }
 
 const inputClass =
-  "w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500";
+  "w-full border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500";
 const labelClass = "block text-sm font-medium text-slate-700 mb-1";
 const errorClass = "mt-1 text-xs text-red-600";
 
@@ -227,7 +227,7 @@ export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) 
           <button
             type="button"
             onClick={onDone}
-            className="flex-1 rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            className="flex-1 border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
           >
             Vazgeç
           </button>
@@ -235,7 +235,7 @@ export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) 
         <button
           type="submit"
           disabled={mutation.isPending}
-          className="flex-1 rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+          className="flex-1 bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
           {mutation.isPending
             ? "Kaydediliyor..."
@@ -246,12 +246,12 @@ export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) 
       </div>
 
       {mutation.isError && (
-        <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {mutation.error.message}
         </p>
       )}
       {!duzenlemeModu && createAsset.isSuccess && (
-        <p className="rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <p className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           Varlık eklendi.
         </p>
       )}

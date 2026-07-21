@@ -51,7 +51,7 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-4">
       {alanSecimiAktif && (
-        <p className="mb-3 rounded bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+        <p className="mb-3 border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
           Seçili alandaki varlıklar gösteriliyor.
         </p>
       )}
@@ -76,13 +76,13 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
           </span>
         </div>
         <div
-          className="h-2 w-full overflow-hidden rounded-full"
+          className="h-2 w-full overflow-hidden border border-slate-200"
           style={{ background: RENK.uyariTrack }}
           role="img"
           aria-label={`Bakım gerektiren varlık oranı yüzde ${bakimOrani}`}
         >
           <div
-            className="h-full rounded-full transition-all"
+            className="h-full transition-all"
             style={{ width: `${bakimOrani}%`, background: RENK.uyari }}
           />
         </div>
@@ -142,14 +142,14 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
           <button
             onClick={() => csvIndir(data)}
             disabled={toplam === 0}
-            className="flex-1 rounded border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            className="flex-1 border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
           >
             CSV indir
           </button>
           <button
             onClick={() => jsonIndir(data)}
             disabled={toplam === 0}
-            className="flex-1 rounded border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            className="flex-1 border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
           >
             GeoJSON indir
           </button>
