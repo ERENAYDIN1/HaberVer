@@ -52,6 +52,7 @@ export function listAssets(filters: AssetFilters = {}) {
   const params = new URLSearchParams();
   if (filters.type) params.set("type", filters.type);
   if (filters.status) params.set("status", filters.status);
+  if (filters.source) params.set("source", filters.source);
   const query = params.toString();
   return istek<AssetFeatureCollection>(`/assets${query ? `?${query}` : ""}`);
 }
@@ -83,4 +84,10 @@ export function assetsWithin(query: WithinQuery) {
     method: "POST",
     body: JSON.stringify(query),
   });
+}
+
+/** Varligi 'Tamir Edildi' olarak isaretler (durumu 'iyi'ye ceker). Saha
+ *  calisaninin tam duzenleme yetkisi olmadan kullanabildigi tek islem. */
+export function repairAsset(id: string) {
+  return istek<AssetFeature>(`/assets/${id}/onar`, { method: "POST" });
 }

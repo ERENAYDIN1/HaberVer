@@ -86,7 +86,16 @@ def require_role(*roller: UserRole):
 
 # Sik kullanilan rol kombinasyonlari icin kisayollar.
 def personel(user: User = Depends(get_current_user)) -> User:
-    """Admin veya calisan (varlik yonetimi + ihbar onayi yapabilenler)."""
+    """Admin veya calisan (tam varlik yonetimi + ihbar onayi yapabilenler)."""
     if user.role not in (UserRole.admin, UserRole.calisan):
+        raise HTTPException(status_code=403, detail="Bu islem icin yetkiniz yok")
+    return user
+
+
+def saha_dahil(user: User = Depends(get_current_user)) -> User:
+    """Admin, calisan veya saha calisani (varlik goruntuleme + tamir isaretleme).
+    Saha calisani tam CRUD yapamaz, sadece atanan/gordugu varligi tamir edildi
+    olarak isaretleyebilir (bkz. assets router'indaki /onar ucu)."""
+    if user.role not in (UserRole.admin, UserRole.calisan, UserRole.saha_calisani):
         raise HTTPException(status_code=403, detail="Bu islem icin yetkiniz yok")
     return user

@@ -21,6 +21,14 @@ class AssetStatus(str, enum.Enum):
     bakim_lazim = "bakim_lazim"
 
 
+class AssetSource(str, enum.Enum):
+    """Varligin nereden geldigi: belediyeye dogrudan kayitli mi, yoksa
+    vatandas ihbarinin onaylanmasiyla mi olustu."""
+
+    kayitli = "kayitli"
+    ihbar = "ihbar"
+
+
 class Asset(Base):
     __tablename__ = "assets"
 
@@ -37,6 +45,11 @@ class Asset(Base):
         Enum(AssetStatus, name="asset_status"),
         nullable=False,
         server_default=AssetStatus.iyi.value,
+    )
+    source: Mapped[AssetSource] = mapped_column(
+        Enum(AssetSource, name="asset_source"),
+        nullable=False,
+        server_default=AssetSource.kayitli.value,
     )
     # WGS84 (SRID 4326) noktasal geometri. Mekansal indeks migration'da elle oluşturulur.
     geometry: Mapped[object] = mapped_column(

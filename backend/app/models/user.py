@@ -12,6 +12,7 @@ from ..database import Base
 class UserRole(str, enum.Enum):
     admin = "admin"
     calisan = "calisan"
+    saha_calisani = "saha_calisani"
     vatandas = "vatandas"
 
 

@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import Asset
-from ..models.asset import AssetStatus, AssetType
+from ..models.asset import AssetSource, AssetStatus, AssetType
 from ..schemas.asset import AssetCreate, AssetUpdate
 
 
@@ -21,11 +21,18 @@ def _point(longitude: float, latitude: float):
     return func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
 
 
-def _apply_filters(stmt, asset_type: AssetType | None, status: AssetStatus | None):
+def _apply_filters(
+    stmt,
+    asset_type: AssetType | None,
+    status: AssetStatus | None,
+    source: AssetSource | None = None,
+):
     if asset_type is not None:
         stmt = stmt.where(Asset.type == asset_type)
     if status is not None:
         stmt = stmt.where(Asset.status == status)
+    if source is not None:
+        stmt = stmt.where(Asset.source == source)
     return stmt
 
 
@@ -33,8 +40,9 @@ def list_assets(
     db: Session,
     asset_type: AssetType | None = None,
     status: AssetStatus | None = None,
+    source: AssetSource | None = None,
 ):
-    stmt = _apply_filters(_select_with_coords(), asset_type, status)
+    stmt = _apply_filters(_select_with_coords(), asset_type, status, source)
     return db.execute(stmt.order_by(Asset.created_at.desc())).all()
 
 
@@ -43,6 +51,7 @@ def assets_within(
     polygon_geojson: str,
     asset_type: AssetType | None = None,
     status: AssetStatus | None = None,
+    source: AssetSource | None = None,
 ):
     """Verilen GeoJSON poligonunun icine dusen varliklari dondurur (ST_Within).
 
@@ -50,7 +59,7 @@ def assets_within(
     """
     polygon = func.ST_SetSRID(func.ST_GeomFromGeoJSON(polygon_geojson), 4326)
     stmt = _select_with_coords().where(func.ST_Within(Asset.geometry, polygon))
-    stmt = _apply_filters(stmt, asset_type, status)
+    stmt = _apply_filters(stmt, asset_type, status, source)
     return db.execute(stmt.order_by(Asset.created_at.desc())).all()
 
 
@@ -64,6 +73,7 @@ def create_asset(db: Session, data: AssetCreate):
         name=data.name,
         type=data.type,
         status=data.status,
+        source=AssetSource.kayitli,
         geometry=_point(data.longitude, data.latitude),
         install_date=data.install_date,
         brand_model=data.brand_model,

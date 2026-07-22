@@ -9,7 +9,7 @@ Bu dizindeki il/ilçe sınır verisi şu kaynaktan türetilmiştir:
 
 `backend/scripts/sinirlari_hazirla.py` betiği ile:
 
-- Her il/ilçe için sadece en geniş dış halkalı polygon bileşeni alınmıştır (küçük ada/münferit parçalar atlanır).
+- Her il/ilçe için TÜM polygon bileşenlerinin (parçaların) dış halkası korunmuştur — adalar ve boğazla ayrılmış kara parçaları (İstanbul, Çanakkale) dahil, hiçbir parça atlanmaz. Bir bileşenin varsa iç halkaları (delikler) göz ardı edilir (kaynak veride bulunmuyor).
 - Sınır çizgileri Douglas-Peucker algoritmasıyla (~65m tolerans) sadeleştirilmiştir.
 - Koordinatlar 5 ondalığa yuvarlanmıştır (~1m hassasiyet).
 

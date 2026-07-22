@@ -2,11 +2,22 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef } from "react";
 
+import { fotoUrl } from "../api/reports";
 import { HARITA_STILLERI, type HaritaStilId } from "../data/mapStyles";
 import type { TamamlananAlan } from "../types/alan";
-import { ASSET_STATUS_LABELS, ASSET_TYPE_LABELS } from "../types/asset";
+import {
+  ASSET_SOURCE_LABELS,
+  ASSET_STATUS_LABELS,
+  ASSET_TYPE_LABELS,
+} from "../types/asset";
 import type { AssetFeature, AssetFeatureCollection } from "../types/asset";
-import { alanEtiketi, poligonAlaniM2, poligonMerkezi } from "../utils/geo";
+import {
+  alanEtiketi,
+  cokHalkaliAlanM2,
+  enBuyukHalkaMerkezi,
+  poligonAlaniM2,
+  poligonMerkezi,
+} from "../utils/geo";
 
 const ISTANBUL: [number, number] = [28.9784, 41.0082];
 const SOURCE_ID = "assets";
@@ -225,9 +236,11 @@ export default function MapView({
 
     for (const alan of tamamlananAlanlarRef.current) {
       guncelIdler.add(alan.id);
-      const buyukluk = alanEtiketi(poligonAlaniM2(alan.noktalar));
+      const buyukluk = alanEtiketi(cokHalkaliAlanM2(alan.noktalar));
       const metin = alan.etiket ? `${alan.etiket} · ${buyukluk}` : buyukluk;
-      const merkez = poligonMerkezi(alan.noktalar);
+      // Birden fazla halka varsa (orn. Istanbul'un iki yakasi) etiket en
+      // buyuk parcanin ustune konur, iki parca arasindaki denizin ortasina degil.
+      const merkez = enBuyukHalkaMerkezi(alan.noktalar);
 
       let marker = tamamlananEtiketleriRef.current.get(alan.id);
       if (!marker) {
@@ -299,10 +312,13 @@ export default function MapView({
 
     const features: GeoJSON.Feature[] = tamamlananAlanlarRef.current.map((alan) => ({
       type: "Feature",
-      geometry: {
-        type: "Polygon",
-        coordinates: [[...alan.noktalar, alan.noktalar[0]]],
-      },
+      geometry:
+        alan.noktalar.length === 1
+          ? { type: "Polygon", coordinates: [[...alan.noktalar[0], alan.noktalar[0][0]]] }
+          : {
+              type: "MultiPolygon",
+              coordinates: alan.noktalar.map((halka) => [[...halka, halka[0]]]),
+            },
       properties: { renk: alan.renk },
     }));
 
@@ -709,24 +725,36 @@ export default function MapView({
 }
 
 function popupIcerigi(asset: AssetFeature): string {
-  const { name, type, status, brand_model, install_date } = asset.properties;
+  const { name, type, status, source, brand_model, install_date, photo_url } =
+    asset.properties;
   const bakim = status === "bakim_lazim";
+  const foto = fotoUrl(photo_url);
   const satirlar = [
     brand_model ? `<div>${kacis(brand_model)}</div>` : "",
     install_date ? `<div>Kurulum: ${kacis(install_date)}</div>` : "",
   ].join("");
 
   return `
-    <div style="font-family: system-ui, sans-serif; min-width: 150px">
+    <div style="font-family: system-ui, sans-serif; min-width: 170px">
+      ${
+        foto
+          ? `<img src="${kacis(foto)}" style="width:100%; max-height:120px; object-fit:cover; margin-bottom:6px; border:1px solid #e2e8f0;" />`
+          : ""
+      }
       <div style="font-weight: 600; margin-bottom: 4px">${kacis(name)}</div>
       <div style="color:#475569; font-size:12px">${ASSET_TYPE_LABELS[type]}</div>
-      <div style="margin-top:6px">
+      <div style="margin-top:6px; display:flex; gap:4px; flex-wrap:wrap">
         <span style="
           display:inline-block; padding:2px 8px; border-radius:9999px;
           font-size:11px; font-weight:500;
           background:${bakim ? "#fef3c7" : "#d1fae5"};
           color:${bakim ? "#92400e" : "#065f46"}">
           ${ASSET_STATUS_LABELS[status]}
+        </span>
+        <span style="
+          display:inline-block; padding:2px 8px; border-radius:9999px;
+          font-size:11px; font-weight:500; background:#f1f5f9; color:#475569">
+          ${ASSET_SOURCE_LABELS[source]}
         </span>
       </div>
       <div style="color:#64748b; font-size:11px; margin-top:6px">${satirlar}</div>

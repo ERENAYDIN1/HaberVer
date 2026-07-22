@@ -25,7 +25,13 @@ import PersonelYonetimi from "./components/PersonelYonetimi";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
 import { USER_ROLE_LABELS } from "./types/auth";
-import type { AssetFeature, AssetFeatureCollection, AssetFilters } from "./types/asset";
+import type {
+  AssetFeature,
+  AssetFeatureCollection,
+  AssetFilters,
+  MultiPolygonGeometry,
+  PolygonGeometry,
+} from "./types/asset";
 import type { TamamlananAlan } from "./types/alan";
 import {
   mesafeEtiketi,
@@ -39,12 +45,31 @@ import {
 const IDARI_ALAN_ID = "idari-sinir";
 const IDARI_ALAN_RENK = "#0891b2";
 
+/** Halka listesinden (MultiPolygon parcalari) backend'e gonderilecek GeoJSON
+ *  geometrisini uretir. Tek halkalı alanlarda (kullanicinin cizdigi alanlar)
+ *  duz bir Polygon, birden fazla halkalı alanlarda (orn. Bogaz'la ikiye
+ *  bolunmus il siniri) bir MultiPolygon dondurur. */
+function halkalarGeometrisi(
+  halkalar: [number, number][][]
+): PolygonGeometry | MultiPolygonGeometry {
+  if (halkalar.length === 1) {
+    const halka = halkalar[0];
+    return { type: "Polygon", coordinates: [[...halka, halka[0]]] };
+  }
+  return {
+    type: "MultiPolygon",
+    coordinates: halkalar.map((halka) => [[...halka, halka[0]]]),
+  };
+}
+
 type Sekme = "liste" | "ekle" | "ozet" | "ihbarlar" | "personel";
 
 export default function App() {
   const { user, cikisYap } = useAuth();
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<AssetFilters>({});
+  // Varsayilan olarak "kayitli" varliklar gosterilir; ihbardan gelenler ayri
+  // sekmede tutulur ki iki kaynak birbirine karismasin.
+  const [filters, setFilters] = useState<AssetFilters>({ source: "kayitli" });
   const [sekme, setSekme] = useState<Sekme>("liste");
   const [seciliId, setSeciliId] = useState<string | null>(null);
   const [duzenlenen, setDuzenlenen] = useState<AssetFeature | null>(null);
@@ -100,11 +125,14 @@ export default function App() {
 
   const haritaTiklandi = useCallback(
     (c: { longitude: number; latitude: number }) => {
+      // Saha calisaninin yeni varlik ekleme yetkisi yok; "Ekle" sekmesi de
+      // gizli, bu yuzden bos alana tiklamasi bir seyi degistirmemeli.
+      if (user?.role === "saha_calisani") return;
       setKoordinat(c);
       setSekme("ekle");
       setPanelAcik(true);
     },
-    []
+    [user?.role]
   );
 
   const varlikSecildi = useCallback((id: string) => {
@@ -159,18 +187,14 @@ export default function App() {
     setAlanHatasi(null);
     try {
       const sonuc = await assetsWithin({
-        polygon: {
-          type: "Polygon",
-          // Halka kapatilir: ilk nokta sona eklenir.
-          coordinates: [[...cizimNoktalari, cizimNoktalari[0]]],
-        },
+        polygon: halkalarGeometrisi([cizimNoktalari]),
         ...filters,
       });
       setTamamlananAlanlar((a) => [
         ...a,
         {
           id: crypto.randomUUID(),
-          noktalar: cizimNoktalari,
+          noktalar: [cizimNoktalari],
           renk: cizimRengi,
           sonuc,
         },
@@ -197,10 +221,7 @@ export default function App() {
     Promise.all(
       tamamlananAlanlar.map(async (alan) => {
         const sonuc = await assetsWithin({
-          polygon: {
-            type: "Polygon",
-            coordinates: [[...alan.noktalar, alan.noktalar[0]]],
-          },
+          polygon: halkalarGeometrisi(alan.noktalar),
           ...filters,
         });
         return { ...alan, sonuc };
@@ -236,10 +257,7 @@ export default function App() {
         const sinir = ilceKodu ? await ilceSiniri(ilceKodu) : await ilSiniri(ilKodu);
         if (iptal) return;
         const sonuc = await assetsWithin({
-          polygon: {
-            type: "Polygon",
-            coordinates: [[...sinir.noktalar, sinir.noktalar[0]]],
-          },
+          polygon: halkalarGeometrisi(sinir.noktalar),
           ...filters,
         });
         if (iptal) return;
@@ -253,7 +271,7 @@ export default function App() {
             etiket: sinir.ad,
           },
         ]);
-        const kutu = poligonSinirKutusu(sinir.noktalar);
+        const kutu = poligonSinirKutusu(sinir.noktalar.flat());
         setIdariSinirKutusu(kutu);
         setUcusHedefi({ anahtar: crypto.randomUUID(), tip: "sinir", bounds: kutu });
       } catch (e) {
@@ -409,9 +427,15 @@ export default function App() {
               {(
                 [
                   { id: "liste", etiket: "Varlıklar" },
-                  { id: "ekle", etiket: "Ekle" },
-                  { id: "ozet", etiket: "Özet" },
-                  { id: "ihbarlar", etiket: "İhbarlar" },
+                  // Saha calisani tam CRUD/onay yetkisine sahip degil; sadece
+                  // varliklari gorup "Tamir Edildi" isaretleyebilir.
+                  ...(user?.role !== "saha_calisani"
+                    ? [
+                        { id: "ekle", etiket: "Ekle" },
+                        { id: "ozet", etiket: "Özet" },
+                        { id: "ihbarlar", etiket: "İhbarlar" },
+                      ]
+                    : []),
                   ...(user?.role === "admin"
                     ? [{ id: "personel", etiket: "Personel" }]
                     : []),

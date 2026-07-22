@@ -21,10 +21,19 @@ Cikti, repo icine committlenen kucuk/basitlestirilmis dosyalardir:
   backend/app/data/sinirlar/iller.json             -> [{kod, ad}]
   backend/app/data/sinirlar/ilceler.json           -> [{kod, ad, ilKodu}]
 
-Basitlestirme: her (Multi)Polygon icin sadece en genis diş halkaya sahip
-polygon bileseni alinir (adalar/munferit parcalar goz ardi edilir), koordinatlar
-5 ondalige yuvarlanir (~1m). Bu, projede zaten kullanilan "sehir olceginde
-yeterince dogru yaklastirma" yaklasimiyla tutarlidir (bkz. utils/geo.ts).
+`noktalar` her zaman bir HALKA LISTESI'dir (`[[[lon,lat], ...], ...]`) - yani
+GeoJSON MultiPolygon'daki gibi. Tek parcali (Polygon) sinirlarda tek elemanli
+bir liste olur. Bu, Bogaz/Canakkale Bogazi gibi sularla ikiye bolunmus
+illerde (Istanbul, Canakkale) veya tamamen adalardan olusan ilcelerde
+(Adalar) TUM parcalarin korunmasi icin gereklidir - onceki surum sadece en
+genis parcayi tutuyordu ve orn. Istanbul'un Anadolu yakasinin tamamini
+(alanin ~%35'i) sessizce dusuruyordu.
+
+Basitlestirme: her parcanin sadece dis halkasi alinir (kaynak veride delik
+yok, kontrol edildi), koordinatlar 5 ondalige yuvarlanir (~1m) ve her halka
+Douglas-Peucker ile sadelestirilir (~65m tolerans). Bu, projede zaten
+kullanilan "sehir olceginde yeterince dogru yaklastirma" yaklasimiyla
+tutarlidir (bkz. utils/geo.ts).
 """
 
 import csv
@@ -35,25 +44,15 @@ KAYNAK_DIZIN = Path(__file__).parent / "_kaynak"
 CIKTI_DIZIN = Path(__file__).parent.parent / "app" / "data" / "sinirlar"
 
 
-def halka_alani(halka: list[list[float]]) -> float:
-    alan = 0.0
-    n = len(halka)
-    for i in range(n):
-        x1, y1 = halka[i]
-        x2, y2 = halka[(i + 1) % n]
-        alan += x1 * y2 - x2 * y1
-    return abs(alan) / 2
-
-
-def en_genis_polygon(geometry: dict) -> list[list[float]]:
-    """MultiPolygon ise en genis dis halkali polygonu, Polygon ise kendisini dondurur."""
+def tum_dis_halkalar(geometry: dict) -> list[list[list[float]]]:
+    """Polygon/MultiPolygon farketmeksizin, TUM parcalarin dis halkalarini
+    (delikler haric) dondurur - hicbir parca (ada, ayri kara parcasi) atlanmaz."""
     if geometry["type"] == "Polygon":
         polygons = [geometry["coordinates"]]
     else:
         polygons = geometry["coordinates"]
 
-    en_iyi = max(polygons, key=lambda p: halka_alani(p[0]))
-    return en_iyi
+    return [polygon[0] for polygon in polygons]
 
 
 TOLERANS_DERECE = 0.0006  # ~65m; sehir olceginde gorsel/filtreleme icin yeterli
@@ -128,10 +127,7 @@ def main() -> None:
         satir = il_csv[feature["properties"]["id"]]
         kod = satir["plate_code"]
         ad = satir["name"]
-        polygon = en_genis_polygon(feature["geometry"])
-        if len(polygon) > 1:
-            print(f"UYARI: {ad} ({kod}) delikli bir poligon, delik atlandi")
-        noktalar = noktalari_sadelestir(polygon[0])
+        noktalar = [noktalari_sadelestir(h) for h in tum_dis_halkalar(feature["geometry"])]
         (CIKTI_DIZIN / "il" / f"{kod}.json").write_text(
             json.dumps({"kod": kod, "ad": ad, "noktalar": noktalar}, ensure_ascii=False),
             encoding="utf-8",
@@ -149,10 +145,7 @@ def main() -> None:
         il_kodu = satir["plate_code"]
         ilce_kodu = f"{il_kodu}{satir['district_local_code']}"
         ad = ILCE_AD_DUZELTMELERI.get(ilce_kodu, satir["name"])
-        polygon = en_genis_polygon(feature["geometry"])
-        if len(polygon) > 1:
-            print(f"UYARI: {ad} ({ilce_kodu}) delikli bir poligon, delik atlandi")
-        noktalar = noktalari_sadelestir(polygon[0])
+        noktalar = [noktalari_sadelestir(h) for h in tum_dis_halkalar(feature["geometry"])]
         (CIKTI_DIZIN / "ilce" / f"{ilce_kodu}.json").write_text(
             json.dumps(
                 {"kod": ilce_kodu, "ad": ad, "ilKodu": il_kodu, "noktalar": noktalar},

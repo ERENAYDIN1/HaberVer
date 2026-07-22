@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models.asset import Asset, AssetStatus
+from ..models.asset import Asset, AssetSource, AssetStatus
 from ..models.report import Report, ReportStatus
 
 
@@ -69,6 +69,7 @@ def approve_report(db: Session, report: Report, reviewer_id: uuid.UUID):
         name=report.name,
         type=report.type,
         status=AssetStatus.bakim_lazim,
+        source=AssetSource.ihbar,
         geometry=report.geometry,
         photo_url=report.photo_url,
     )

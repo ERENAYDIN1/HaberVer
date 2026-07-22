@@ -1,9 +1,10 @@
-export const USER_ROLES = ["admin", "calisan", "vatandas"] as const;
+export const USER_ROLES = ["admin", "calisan", "saha_calisani", "vatandas"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
   admin: "Yönetici",
   calisan: "Personel",
+  saha_calisani: "Saha Çalışanı",
   vatandas: "Vatandaş",
 };
 

@@ -16,7 +16,10 @@ export interface IlceOzet {
 export interface SinirGeometri {
   kod: string;
   ad: string;
-  noktalar: [number, number][];
+  /** Halka listesi (MultiPolygon parcalari) - Bogaz'la ikiye bolunmus il
+   *  sinirlari veya tamamen adalardan olusan ilceler icin birden fazla halka
+   *  olabilir. Tek parcali sinirlarda tek elemanli bir liste olur. */
+  noktalar: [number, number][][];
 }
 
 async function istek<T>(yol: string): Promise<T> {

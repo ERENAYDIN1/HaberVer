@@ -38,7 +38,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route
               path="/"
               element={
-                <RequireRole roller={["admin", "calisan"]} girisYolu="/giris">
+                <RequireRole
+                  roller={["admin", "calisan", "saha_calisani"]}
+                  girisYolu="/giris"
+                >
                   <App />
                 </RequireRole>
               }

@@ -52,6 +52,24 @@ export function poligonMerkezi(noktalar: [number, number][]): [number, number] {
   return [lon, lat];
 }
 
+/** Birden fazla halkanin (ayri kara parcalari - orn. Istanbul'un Bogaz'la
+ *  ayrilmis Avrupa/Anadolu yakalari, ya da tamamen adalardan olusan bir ilce)
+ *  toplam alani. Kullanici tek bir alan cizdiginde bu tek elemanli bir
+ *  liste olur, poligonAlaniM2 ile ayni sonucu verir. */
+export function cokHalkaliAlanM2(halkalar: [number, number][][]): number {
+  return halkalar.reduce((toplam, halka) => toplam + poligonAlaniM2(halka), 0);
+}
+
+/** Birden fazla halka arasindan en genis alanli olanin merkezini dondurur -
+ *  etiketi/marker'i en buyuk kara parcasinin ustune koymak icin (orn. iki
+ *  yaka arasindaki denizin ortasina degil). */
+export function enBuyukHalkaMerkezi(halkalar: [number, number][][]): [number, number] {
+  const enBuyuk = halkalar.reduce((buyuk, halka) =>
+    poligonAlaniM2(halka) > poligonAlaniM2(buyuk) ? halka : buyuk
+  );
+  return poligonMerkezi(enBuyuk);
+}
+
 /** Nokta dizisinin sinirlayici kutusu ([[minLon,minLat],[maxLon,maxLat]]),
  *  haritayi bir bolgeye ucururken (fitBounds) kullanilir. */
 export function poligonSinirKutusu(

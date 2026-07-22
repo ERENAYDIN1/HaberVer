@@ -4,6 +4,7 @@ import {
   createAsset,
   deleteAsset,
   listAssets,
+  repairAsset,
   updateAsset,
 } from "../api/assets";
 import type {
@@ -48,6 +49,14 @@ export function useDeleteAsset() {
   const invalidate = useAssetsInvalidator();
   return useMutation({
     mutationFn: (id: string) => deleteAsset(id),
+    onSuccess: invalidate,
+  });
+}
+
+export function useRepairAsset() {
+  const invalidate = useAssetsInvalidator();
+  return useMutation({
+    mutationFn: (id: string) => repairAsset(id),
     onSuccess: invalidate,
   });
 }
