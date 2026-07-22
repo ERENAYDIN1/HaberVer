@@ -2,9 +2,15 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef } from "react";
 
+import { ilSiniri } from "../api/sinirlar";
 import { HARITA_STILLERI, VARSAYILAN_STIL } from "../data/mapStyles";
-
-const ISTANBUL: [number, number] = [28.9784, 41.0082];
+import {
+  ISTANBUL_IL_KODU,
+  ISTANBUL_MERKEZI,
+  ISTANBUL_SINIRLARI,
+  istanbulMaskesiUygula,
+  maskeKaynagiHazirla,
+} from "../utils/istanbulMaskesi";
 
 interface KonumSecMapProps {
   /** Secili konum ([lon, lat]) veya henuz secilmediyse null. */
@@ -32,11 +38,37 @@ export default function KonumSecMap({ secili, onSec, ucus }: KonumSecMapProps) {
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: stil,
-      center: ISTANBUL,
+      center: ISTANBUL_MERKEZI,
       zoom: 11,
+      maxBounds: ISTANBUL_SINIRLARI,
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), "bottom-right");
+
+    // Istanbul il sinirini getirip maske katmanini doldurur - bkz.
+    // utils/istanbulMaskesi.ts. Harita yuklenmesi ile sinir istegi
+    // yarisabilecegi icin (hangisi once biterse) her iki taraf da hazir
+    // olduklarinda ayni "uygula" fonksiyonunu cagirir.
+    let sinirHalkalari: [number, number][][] | null = null;
+    let stilYuklendi = false;
+    const maskeUygula = () => {
+      if (!stilYuklendi) return;
+      istanbulMaskesiUygula(map, sinirHalkalari);
+    };
+
+    map.on("load", () => {
+      maskeKaynagiHazirla(map);
+      stilYuklendi = true;
+      maskeUygula();
+    });
+    ilSiniri(ISTANBUL_IL_KODU)
+      .then((sinir) => {
+        sinirHalkalari = sinir.noktalar;
+        maskeUygula();
+      })
+      .catch(() => {
+        // Sinir getirilemezse maske sessizce bos kalir, harita yine calisir.
+      });
 
     // Cihaz konumu kontrolu (haritadaki buton): tiklanip konum bulundugunda
     // isaretciyi oraya koyar ve harita oraya merkezlenir.

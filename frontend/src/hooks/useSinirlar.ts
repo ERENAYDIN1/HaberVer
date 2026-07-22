@@ -1,14 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { ilceler, iller } from "../api/sinirlar";
-
-export function useIller() {
-  return useQuery({
-    queryKey: ["sinirlar", "iller"],
-    queryFn: iller,
-    staleTime: Infinity,
-  });
-}
+import { ilceler } from "../api/sinirlar";
 
 export function useIlceler(ilKodu: string | null) {
   return useQuery({

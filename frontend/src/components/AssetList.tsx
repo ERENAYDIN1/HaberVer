@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactElement } from "react";
 import { fotoUrl } from "../api/reports";
 import { useAuth } from "../auth/AuthContext";
 import { useDeleteAsset, useRepairAsset } from "../hooks/useAssets";
-import { useIlceler, useIller } from "../hooks/useSinirlar";
+import { useIlceler } from "../hooks/useSinirlar";
 import {
   ASSET_SOURCE_LABELS,
   ASSET_SOURCES,
@@ -29,6 +29,10 @@ const TIP_IKONU: Record<string, (props: { className?: string }) => ReactElement>
 const selectClass =
   "flex-1 border border-slate-300 bg-white px-2 py-1.5 text-xs focus:border-emerald-500 focus:outline-none";
 
+/** Proje kapsami tek il (Istanbul) ile sinirli, bu yuzden il secimi yok -
+ *  ilce listesi dogrudan bu koda gore getirilir. */
+const ISTANBUL_IL_KODU = "34";
+
 interface AssetListProps {
   data?: AssetFeatureCollection;
   isLoading: boolean;
@@ -39,10 +43,8 @@ interface AssetListProps {
   seciliId: string | null;
   onSec: (id: string) => void;
   onDuzenle: (asset: AssetFeature) => void;
-  /** Il/ilce sinirina gore filtreleme (haritada da vurgulanir). */
-  ilKodu: string | null;
+  /** Ilce sinirina gore filtreleme (haritada da vurgulanir). */
   ilceKodu: string | null;
-  onIlSec: (kod: string | null) => void;
   onIlceSec: (kod: string | null) => void;
   idariHatasi?: string | null;
 }
@@ -57,9 +59,7 @@ export default function AssetList({
   seciliId,
   onSec,
   onDuzenle,
-  ilKodu,
   ilceKodu,
-  onIlSec,
   onIlceSec,
   idariHatasi,
 }: AssetListProps) {
@@ -68,8 +68,7 @@ export default function AssetList({
   const deleteAsset = useDeleteAsset();
   const repairAsset = useRepairAsset();
   const seciliRef = useRef<HTMLLIElement>(null);
-  const illerSorgu = useIller();
-  const ilcelerSorgu = useIlceler(ilKodu);
+  const ilcelerSorgu = useIlceler(ISTANBUL_IL_KODU);
   const [detayAsset, setDetayAsset] = useState<AssetFeature | null>(null);
 
   // Kaynak (kayitli/ihbar) hic secilmemisse varsayilan olarak "kayitli" kabul
@@ -149,26 +148,10 @@ export default function AssetList({
       <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
         <select
           className={selectClass}
-          value={ilKodu ?? ""}
-          onChange={(e) => onIlSec(e.target.value || null)}
-        >
-          <option value="">İl seç</option>
-          {illerSorgu.data?.map((il) => (
-            <option key={il.kod} value={il.kod}>
-              {il.ad}
-            </option>
-          ))}
-        </select>
-
-        <select
-          className={selectClass}
           value={ilceKodu ?? ""}
           onChange={(e) => onIlceSec(e.target.value || null)}
-          disabled={!ilKodu}
         >
-          <option value="">
-            {ilKodu ? "Tüm ilçeler" : "Önce il seçin"}
-          </option>
+          <option value="">Tüm ilçeler (İstanbul)</option>
           {ilcelerSorgu.data?.map((ilce) => (
             <option key={ilce.kod} value={ilce.kod}>
               {ilce.ad}
@@ -176,13 +159,10 @@ export default function AssetList({
           ))}
         </select>
 
-        {ilKodu && (
+        {ilceKodu && (
           <button
-            onClick={() => {
-              onIlSec(null);
-              onIlceSec(null);
-            }}
-            aria-label="İl/ilçe filtresini temizle"
+            onClick={() => onIlceSec(null)}
+            aria-label="İlçe filtresini temizle"
             title="Temizle"
             className="shrink-0 text-slate-400 hover:text-red-600"
           >

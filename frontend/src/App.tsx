@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { assetsWithin } from "./api/assets";
-import { ilceSiniri, ilSiniri } from "./api/sinirlar";
+import { ilceSiniri } from "./api/sinirlar";
 import { useAuth } from "./auth/AuthContext";
 import AssetForm from "./components/AssetForm";
 import AssetList from "./components/AssetList";
@@ -91,16 +91,16 @@ export default function App() {
   const [olcumModu, setOlcumModu] = useState(false);
   const [olcumNoktalari, setOlcumNoktalari] = useState<[number, number][]>([]);
 
-  // --- Il/ilce sinirina gore filtreleme + harita arama ---
-  const [ilKodu, setIlKodu] = useState<string | null>(null);
+  // --- Ilce sinirina gore filtreleme + harita arama (proje kapsami Istanbul
+  //     ile sinirli oldugundan il secimi yok, dogrudan ilceye gore filtrelenir) ---
   const [ilceKodu, setIlceKodu] = useState<string | null>(null);
   const [idariHatasi, setIdariHatasi] = useState<string | null>(null);
   const [ucusHedefi, setUcusHedefi] = useState<UcusHedefi | null>(null);
   const [haritaGorunumu, setHaritaGorunumu] = useState<
     [[number, number], [number, number]] | null
   >(null);
-  /** Secili il/ilcenin sinir kutusu; verilince arama bu bolgeyle SINIRLANIR
-   *  (sadece oncelik degil) - "GOP secip Kucukkoy aradiginda Balikesir cikmasin". */
+  /** Secili ilcenin sinir kutusu; verilince arama bu bolgeyle SINIRLANIR
+   *  (sadece oncelik degil) - "GOP secip Kucukkoy aradiginda Besiktas cikmasin". */
   const [idariSinirKutusu, setIdariSinirKutusu] = useState<
     [[number, number], [number, number]] | null
   >(null);
@@ -165,19 +165,12 @@ export default function App() {
   const alanKaldir = (id: string) => {
     setTamamlananAlanlar((a) => a.filter((alan) => alan.id !== id));
     if (id === IDARI_ALAN_ID) {
-      setIlKodu(null);
       setIlceKodu(null);
     }
   };
 
   const tumAlanlariTemizle = () => {
     setTamamlananAlanlar([]);
-    setIlKodu(null);
-    setIlceKodu(null);
-  };
-
-  const ilSec = (kod: string | null) => {
-    setIlKodu(kod);
     setIlceKodu(null);
   };
 
@@ -239,12 +232,12 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  // Il/ilce secimi degisince sinir geometrisini getirir, mevcut alan
+  // Ilce secimi degisince sinir geometrisini getirir, mevcut alan
   // altyapisina (tamamlananAlanlar) idari-sinir-id'siyle ekler/degistirir ve
   // haritayi o bolgeye ucurur. Filtreler degisince zaten yukaridaki efekt bu
   // girdiyi de yeniden sorgular (noktalar uzerinden calisiyor).
   useEffect(() => {
-    if (!ilKodu) {
+    if (!ilceKodu) {
       setTamamlananAlanlar((a) => a.filter((alan) => alan.id !== IDARI_ALAN_ID));
       setIdariSinirKutusu(null);
       return;
@@ -254,7 +247,7 @@ export default function App() {
 
     (async () => {
       try {
-        const sinir = ilceKodu ? await ilceSiniri(ilceKodu) : await ilSiniri(ilKodu);
+        const sinir = await ilceSiniri(ilceKodu);
         if (iptal) return;
         const sonuc = await assetsWithin({
           polygon: halkalarGeometrisi(sinir.noktalar),
@@ -283,7 +276,7 @@ export default function App() {
       iptal = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ilKodu, ilceKodu]);
+  }, [ilceKodu]);
 
   const olcumBaslat = () => {
     if (cizimModu) alanSecimiIptal();
@@ -470,9 +463,7 @@ export default function App() {
                 seciliId={seciliId}
                 onSec={setSeciliId}
                 onDuzenle={setDuzenlenen}
-                ilKodu={ilKodu}
                 ilceKodu={ilceKodu}
-                onIlSec={ilSec}
                 onIlceSec={setIlceKodu}
                 idariHatasi={idariHatasi}
               />

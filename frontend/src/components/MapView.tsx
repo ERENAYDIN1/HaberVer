@@ -3,6 +3,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef } from "react";
 
 import { fotoUrl } from "../api/reports";
+import { ilSiniri } from "../api/sinirlar";
 import { HARITA_STILLERI, type HaritaStilId } from "../data/mapStyles";
 import type { TamamlananAlan } from "../types/alan";
 import {
@@ -18,8 +19,14 @@ import {
   poligonAlaniM2,
   poligonMerkezi,
 } from "../utils/geo";
+import {
+  ISTANBUL_IL_KODU,
+  ISTANBUL_MERKEZI,
+  ISTANBUL_SINIRLARI,
+  istanbulMaskesiUygula,
+  maskeKaynagiHazirla,
+} from "../utils/istanbulMaskesi";
 
-const ISTANBUL: [number, number] = [28.9784, 41.0082];
 const SOURCE_ID = "assets";
 const CIZIM_SOURCE_ID = "cizim";
 const TAMAMLANAN_SOURCE_ID = "tamamlanan-alanlar";
@@ -97,6 +104,9 @@ export default function MapView({
   /** Aktif cizimin alan etiketi (m2/ha) ve tamamlanan alanlarin kalici etiketleri. */
   const cizimEtiketRef = useRef<maplibregl.Marker | null>(null);
   const tamamlananEtiketleriRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  /** Istanbul il sinirinin halkalari - bir kez getirilir, stil degisiminde
+   *  maske katmani yeniden kurulunca buradan tekrar uygulanir. */
+  const istanbulSiniriRef = useRef<[number, number][][] | null>(null);
 
   // Ilk render'daki stil, harita bir kez kurulurken kullanilir.
   const ilkStilIdRef = useRef(aktifStilId);
@@ -260,6 +270,12 @@ export default function MapView({
         tamamlananEtiketleriRef.current.delete(id);
       }
     }
+  }
+
+  /** Istanbul il siniri getirilince (ya da stil degisimi sonrasi katman
+   *  yeniden kurulunca) maske kaynagina uygular - bkz. utils/istanbulMaskesi.ts. */
+  function maskeUygula(map: maplibregl.Map) {
+    istanbulMaskesiUygula(map, istanbulSiniriRef.current);
   }
 
   // --- Veriyi haritadaki kaynaga uygular (guncel ref degerlerinden okur) ---
@@ -426,6 +442,9 @@ export default function MapView({
 
   /** Kaynaklar/katmanlar yoksa (ilk yukleme ya da stil degisimi sonrasi) yeniden kurar. */
   function kaynaklariHazirla(map: maplibregl.Map) {
+    // Maske en altta eklenir ki varlik/cizim katmanlarini ortmesin.
+    maskeKaynagiHazirla(map);
+
     if (!map.getSource(SOURCE_ID)) {
       map.addSource(SOURCE_ID, { type: "geojson", data: BOS_KOLEKSIYON });
 
@@ -586,6 +605,7 @@ export default function MapView({
     map.on("moveend", gorunumDegistiRef.current);
 
     hazirRef.current = true;
+    maskeUygula(map);
     veriUygula(map);
     cizimUygula(map);
     tamamlananUygula(map);
@@ -604,8 +624,9 @@ export default function MapView({
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: ilkStil,
-      center: ISTANBUL,
+      center: ISTANBUL_MERKEZI,
       zoom: 11,
+      maxBounds: ISTANBUL_SINIRLARI,
     });
     mapRef.current = map;
 
@@ -614,7 +635,20 @@ export default function MapView({
 
     map.on("load", () => kaynaklariHazirla(map));
 
+    // Istanbul il sinirini bir kez getirir; maske katmani bu veriyle dolar.
+    let iptal = false;
+    ilSiniri(ISTANBUL_IL_KODU)
+      .then((sinir) => {
+        if (iptal) return;
+        istanbulSiniriRef.current = sinir.noktalar;
+        if (hazirRef.current) maskeUygula(map);
+      })
+      .catch(() => {
+        // Sinir getirilemezse maske sessizce bos kalir, harita yine calisir.
+      });
+
     return () => {
+      iptal = true;
       popupRef.current?.remove();
       cizimEtiketRef.current?.remove();
       for (const marker of tamamlananEtiketleriRef.current.values()) marker.remove();

@@ -1,7 +1,7 @@
 import type { StyleSpecification } from "maplibre-gl";
 
-/** Ankara merkezine yakin, onizlemelerde kullanilan sabit bir tile (z/x/y). */
-const ONIZLEME_TILE = { z: 15, x: 19374, y: 12410 };
+/** Istanbul merkezine yakin, onizlemelerde kullanilan sabit bir tile (z/x/y). */
+const ONIZLEME_TILE = { z: 15, x: 19021, y: 12284 };
 
 function googleStili(lyrs: string): StyleSpecification {
   return {
@@ -70,6 +70,6 @@ export const HARITA_STILLERI: HaritaStilTanimi[] = [
   },
 ];
 
-export const ONIZLEME_MERKEZI: [number, number] = [32.8597, 39.9334];
+export const ONIZLEME_MERKEZI: [number, number] = [28.9784, 41.0082];
 
-export const VARSAYILAN_STIL: HaritaStilId = "yol";
+export const VARSAYILAN_STIL: HaritaStilId = "liberty";
