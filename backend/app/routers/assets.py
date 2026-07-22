@@ -13,8 +13,13 @@ from ..schemas.asset import (
     AssetUpdate,
     WithinQuery,
 )
+from ..security import personel
 
-router = APIRouter(prefix="/api/assets", tags=["assets"])
+# Tum varlik uclari personel (admin/calisan) erisimine acik; vatandaslar
+# varlik yonetimine erisemez, yalnizca ihbar gonderir.
+router = APIRouter(
+    prefix="/api/assets", tags=["assets"], dependencies=[Depends(personel)]
+)
 
 
 @router.post("", response_model=AssetFeature, status_code=status.HTTP_201_CREATED)

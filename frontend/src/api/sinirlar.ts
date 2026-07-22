@@ -1,3 +1,5 @@
+import { authHeader } from "../auth/token";
+
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 
 export interface IlOzet {
@@ -18,7 +20,7 @@ export interface SinirGeometri {
 }
 
 async function istek<T>(yol: string): Promise<T> {
-  const response = await fetch(`${BASE_URL}${yol}`);
+  const response = await fetch(`${BASE_URL}${yol}`, { headers: authHeader() });
   if (!response.ok) throw new Error(`İstek başarısız oldu (HTTP ${response.status})`);
   return response.json() as Promise<T>;
 }

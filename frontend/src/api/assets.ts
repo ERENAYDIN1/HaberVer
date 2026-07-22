@@ -1,3 +1,4 @@
+import { authHeader, tokenSil } from "../auth/token";
 import type {
   AssetCreateInput,
   AssetFeature,
@@ -25,9 +26,16 @@ async function hataMesaji(response: Response): Promise<string> {
 
 async function istek<T>(yol: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}${yol}`, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: { "Content-Type": "application/json", ...authHeader(), ...init?.headers },
   });
+
+  if (response.status === 401) {
+    // Token suresi dolmus/gecersiz - oturumu temizle, giris ekranina yonlendir.
+    tokenSil();
+    window.location.href = "/giris";
+    throw new Error("Oturum sona erdi, lütfen tekrar giriş yapın");
+  }
 
   if (!response.ok) {
     throw new Error(await hataMesaji(response));

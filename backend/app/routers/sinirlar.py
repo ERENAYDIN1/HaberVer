@@ -2,11 +2,19 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from ..security import get_current_user
 
 VERI_DIZINI = Path(__file__).parent.parent / "data" / "sinirlar"
 
-router = APIRouter(prefix="/api/sinirlar", tags=["sinirlar"])
+# Sinir verisi giris yapmis herhangi bir kullaniciya acik (personel harita
+# filtreleri + gerekirse vatandas ekrani icin).
+router = APIRouter(
+    prefix="/api/sinirlar",
+    tags=["sinirlar"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @lru_cache

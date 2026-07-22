@@ -1,0 +1,23 @@
+export const USER_ROLES = ["admin", "calisan", "vatandas"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  admin: "Yönetici",
+  calisan: "Personel",
+  vatandas: "Vatandaş",
+};
+
+export interface User {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: UserRole;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}

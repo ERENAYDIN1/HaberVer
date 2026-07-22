@@ -1,7 +1,9 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { assetsWithin } from "./api/assets";
 import { ilceSiniri, ilSiniri } from "./api/sinirlar";
+import { useAuth } from "./auth/AuthContext";
 import AssetForm from "./components/AssetForm";
 import AssetList from "./components/AssetList";
 import CizimPaneli from "./components/CizimPaneli";
@@ -10,15 +12,19 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconLasso,
+  IconLogout,
   IconRuler,
   IconTree,
 } from "./components/icons";
+import IhbarPaneli from "./components/IhbarPaneli";
 import KonumArama from "./components/KonumArama";
 import MapStyleSwitcher from "./components/MapStyleSwitcher";
 import MapView, { type UcusHedefi } from "./components/MapView";
 import Modal from "./components/Modal";
+import PersonelYonetimi from "./components/PersonelYonetimi";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
+import { USER_ROLE_LABELS } from "./types/auth";
 import type { AssetFeature, AssetFeatureCollection, AssetFilters } from "./types/asset";
 import type { TamamlananAlan } from "./types/alan";
 import {
@@ -33,9 +39,11 @@ import {
 const IDARI_ALAN_ID = "idari-sinir";
 const IDARI_ALAN_RENK = "#0891b2";
 
-type Sekme = "liste" | "ekle" | "ozet";
+type Sekme = "liste" | "ekle" | "ozet" | "ihbarlar" | "personel";
 
 export default function App() {
+  const { user, cikisYap } = useAuth();
+  const queryClient = useQueryClient();
   const [filters, setFilters] = useState<AssetFilters>({});
   const [sekme, setSekme] = useState<Sekme>("liste");
   const [seciliId, setSeciliId] = useState<string | null>(null);
@@ -347,6 +355,28 @@ export default function App() {
                 ? `${tamamlananAlanlar.length} alan seçili`
                 : "Alan seç"}
           </button>
+
+          <div className="mx-1 h-6 w-px bg-slate-200" />
+
+          <div className="flex items-center gap-2">
+            <div className="text-right leading-tight">
+              <p className="text-xs font-medium text-slate-700">
+                {user?.full_name || user?.email}
+              </p>
+              {user && (
+                <p className="text-[11px] text-slate-400">
+                  {USER_ROLE_LABELS[user.role]}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={cikisYap}
+              title="Çıkış yap"
+              className="flex items-center gap-1.5 border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              <IconLogout className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -376,20 +406,30 @@ export default function App() {
         {panelAcik && (
           <aside className="flex w-[360px] shrink-0 flex-col border-r border-slate-300 bg-white">
             <div className="flex items-stretch border-b border-slate-300 bg-slate-50">
-              <SekmeButonu aktif={sekme === "liste"} onClick={() => setSekme("liste")}>
-                Varlıklar
-              </SekmeButonu>
-              <SekmeButonu aktif={sekme === "ekle"} onClick={() => setSekme("ekle")}>
-                Yeni Ekle
-              </SekmeButonu>
-              <SekmeButonu aktif={sekme === "ozet"} onClick={() => setSekme("ozet")}>
-                Özet
-              </SekmeButonu>
+              {(
+                [
+                  { id: "liste", etiket: "Varlıklar" },
+                  { id: "ekle", etiket: "Ekle" },
+                  { id: "ozet", etiket: "Özet" },
+                  { id: "ihbarlar", etiket: "İhbarlar" },
+                  ...(user?.role === "admin"
+                    ? [{ id: "personel", etiket: "Personel" }]
+                    : []),
+                ] as { id: Sekme; etiket: string }[]
+              ).map((s) => (
+                <SekmeButonu
+                  key={s.id}
+                  aktif={sekme === s.id}
+                  onClick={() => setSekme(s.id)}
+                >
+                  {s.etiket}
+                </SekmeButonu>
+              ))}
               <button
                 onClick={() => setPanelAcik(false)}
                 aria-label="Paneli gizle"
                 title="Paneli gizle"
-                className="flex items-center border-l border-slate-300 px-2.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                className="flex items-center border-l border-slate-300 px-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
               >
                 <IconChevronLeft className="h-3.5 w-3.5" />
               </button>
@@ -430,6 +470,16 @@ export default function App() {
                 alanSecimiAktif={tamamlananAlanlar.length > 0}
               />
             )}
+
+            {sekme === "ihbarlar" && (
+              <IhbarPaneli
+                onVarlikOlustu={() =>
+                  queryClient.invalidateQueries({ queryKey: ["assets"] })
+                }
+              />
+            )}
+
+            {sekme === "personel" && user?.role === "admin" && <PersonelYonetimi />}
           </aside>
         )}
 
@@ -494,7 +544,7 @@ function SekmeButonu({
   return (
     <button
       onClick={onClick}
-      className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition ${
+      className={`flex-1 whitespace-nowrap border-b-2 px-2 py-2.5 text-[13px] font-medium transition ${
         aktif
           ? "border-emerald-600 bg-white text-slate-900"
           : "border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700"

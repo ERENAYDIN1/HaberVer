@@ -8,7 +8,7 @@ import { ASSET_STATUS_LABELS, ASSET_TYPE_LABELS } from "../types/asset";
 import type { AssetFeature, AssetFeatureCollection } from "../types/asset";
 import { alanEtiketi, poligonAlaniM2, poligonMerkezi } from "../utils/geo";
 
-const ANKARA: [number, number] = [32.8597, 39.9334];
+const ISTANBUL: [number, number] = [28.9784, 41.0082];
 const SOURCE_ID = "assets";
 const CIZIM_SOURCE_ID = "cizim";
 const TAMAMLANAN_SOURCE_ID = "tamamlanan-alanlar";
@@ -588,8 +588,8 @@ export default function MapView({
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: ilkStil,
-      center: ANKARA,
-      zoom: 15,
+      center: ISTANBUL,
+      zoom: 11,
     });
     mapRef.current = map;
 

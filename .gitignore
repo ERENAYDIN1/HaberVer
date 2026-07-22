@@ -23,6 +23,9 @@ pgdata/
 # uretilen kucuk ciktilar backend/app/data/sinirlar/ altinda committlenir)
 backend/scripts/_kaynak/
 
+# Yuklenen ihbar fotograflari (kullanici uretimi; repoya girmez)
+backend/media/
+
 # Editör / OS
 .vscode/
 .idea/
