@@ -48,3 +48,31 @@ export function mahalleler(ilceKodu: string) {
 export function mahalleSiniri(kod: string) {
   return istek<SinirGeometri>(`/sinirlar/mahalle/${kod}`);
 }
+
+export interface KonumAdi {
+  kod: string;
+  ad: string;
+}
+
+export interface KonumCozumu {
+  ilce: KonumAdi | null;
+  mahalle: KonumAdi | null;
+}
+
+/** Bir koordinatin dustugu Istanbul ilce/mahallesini cozumler. */
+export function konumCozumle(lat: number, lon: number) {
+  return istek<KonumCozumu>(`/sinirlar/konum?lat=${lat}&lon=${lon}`);
+}
+
+/** Birden fazla koordinati tek istekte cozumler; sonuc girisle ayni sirada. */
+export async function konumCozumleToplu(
+  noktalar: [number, number][]
+): Promise<KonumCozumu[]> {
+  const response = await fetch(`${BASE_URL}/sinirlar/konum/toplu`, {
+    method: "POST",
+    headers: { ...authHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({ noktalar }),
+  });
+  if (!response.ok) throw new Error(`İstek başarısız oldu (HTTP ${response.status})`);
+  return response.json() as Promise<KonumCozumu[]>;
+}

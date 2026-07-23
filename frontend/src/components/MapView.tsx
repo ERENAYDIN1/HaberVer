@@ -3,7 +3,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef } from "react";
 
 import { fotoUrl } from "../api/reports";
-import { ilSiniri } from "../api/sinirlar";
+import { ilSiniri, konumCozumle } from "../api/sinirlar";
 import { HARITA_STILLERI, type HaritaStilId } from "../data/mapStyles";
 import type { TamamlananAlan } from "../types/alan";
 import {
@@ -472,10 +472,12 @@ export default function MapView({
     const secili = assetsRef.current.features.find((f) => f.properties.id === id);
     if (!secili) return;
 
-    popupRef.current = new maplibregl.Popup({ offset: 14, closeButton: false })
+    const popup = new maplibregl.Popup({ offset: 14, closeButton: false })
       .setLngLat(secili.geometry.coordinates)
       .setHTML(popupIcerigi(secili))
       .addTo(map);
+    popupRef.current = popup;
+    konumSatiriDoldur(popup, secili);
   }
 
   /** Secili ihbari haritada vurgular ve popup acar (varlik secimiyle ayni
@@ -919,8 +921,23 @@ function popupIcerigi(asset: AssetFeature): string {
         </span>
       </div>
       <div style="color:#64748b; font-size:11px; margin-top:6px">${satirlar}</div>
+      <div class="popup-konum" style="color:#64748b; font-size:11px; margin-top:2px"></div>
     </div>
   `;
+}
+
+/** Popup acildiktan sonra ilce/mahalle bilgisini backend'den cekip yerlestirir. */
+async function konumSatiriDoldur(popup: maplibregl.Popup, asset: AssetFeature) {
+  const [lon, lat] = asset.geometry.coordinates;
+  try {
+    const konum = await konumCozumle(lat, lon);
+    const metin = [konum.mahalle?.ad, konum.ilce?.ad].filter(Boolean).join(", ");
+    if (!metin) return;
+    const el = popup.getElement()?.querySelector(".popup-konum");
+    if (el) el.textContent = `📍 ${metin}`;
+  } catch {
+    // Konum cozumlenemezse satiri bos birak.
+  }
 }
 
 function ihbarPopupIcerigi(report: ReportFeature): string {

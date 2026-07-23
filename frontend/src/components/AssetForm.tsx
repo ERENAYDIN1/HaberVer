@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 
 import { useCreateAsset, useUpdateAsset } from "../hooks/useAssets";
+import { useKonumCozumu } from "../hooks/useSinirlar";
 import {
   ASSET_STATUSES,
   ASSET_STATUS_LABELS,
@@ -65,10 +66,28 @@ export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) 
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<AssetFormValues>({
     defaultValues: asset ? assetToValues(asset) : bosDeger,
   });
+
+  // Secili koordinatin dustugu ilce/mahalleyi canli goster.
+  const lonDeger = Number(watch("longitude"));
+  const latDeger = Number(watch("latitude"));
+  const koordGecerli =
+    Number.isFinite(lonDeger) &&
+    Number.isFinite(latDeger) &&
+    Math.abs(lonDeger) <= 180 &&
+    Math.abs(latDeger) <= 90 &&
+    (lonDeger !== 0 || latDeger !== 0);
+  const { data: konum, isFetching: konumYukleniyor } = useKonumCozumu(
+    koordGecerli ? latDeger : null,
+    koordGecerli ? lonDeger : null
+  );
+  const konumMetni = konum
+    ? [konum.mahalle?.ad, konum.ilce?.ad].filter(Boolean).join(", ")
+    : "";
 
   const createAsset = useCreateAsset();
   const updateAsset = useUpdateAsset();
@@ -196,6 +215,19 @@ export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) 
           )}
         </div>
       </div>
+
+      {koordGecerli && (
+        <div className="flex items-center gap-1.5 border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          <span>📍</span>
+          {konumMetni ? (
+            <span className="text-slate-800">{konumMetni}</span>
+          ) : konumYukleniyor ? (
+            <span className="text-slate-400">Konum çözümleniyor…</span>
+          ) : (
+            <span className="text-slate-400">İstanbul sınırları dışında</span>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div>

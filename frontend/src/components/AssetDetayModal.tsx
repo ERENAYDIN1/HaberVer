@@ -1,4 +1,5 @@
 import { fotoUrl } from "../api/reports";
+import { useKonumCozumu } from "../hooks/useSinirlar";
 import {
   ASSET_SOURCE_LABELS,
   ASSET_STATUS_LABELS,
@@ -16,11 +17,17 @@ interface AssetDetayModalProps {
  *  Saha calisaninin ihbar edilen varligi sahada bulmasini kolaylastirmak icin
  *  fotograf her zaman (varsa) gorunur olur. */
 export default function AssetDetayModal({ asset, onKapat }: AssetDetayModalProps) {
+  const koord = asset ? asset.geometry.coordinates : null;
+  const { data: konum } = useKonumCozumu(koord ? koord[1] : null, koord ? koord[0] : null);
+
   if (!asset) return null;
   const p = asset.properties;
   const [lng, lat] = asset.geometry.coordinates;
   const bakim = p.status === "bakim_lazim";
   const fotoSrc = fotoUrl(p.photo_url);
+  const konumMetni = konum
+    ? [konum.mahalle?.ad, konum.ilce?.ad].filter(Boolean).join(", ")
+    : "";
 
   return (
     <Modal acik={asset !== null} baslik="Varlık Detayı" onKapat={onKapat}>
@@ -73,6 +80,12 @@ export default function AssetDetayModal({ asset, onKapat }: AssetDetayModalProps
             <div className="flex justify-between gap-3">
               <dt className="text-slate-500">Kurulum Tarihi</dt>
               <dd className="text-slate-800">{p.install_date}</dd>
+            </div>
+          )}
+          {konumMetni && (
+            <div className="flex justify-between gap-3">
+              <dt className="text-slate-500">İlçe / Mahalle</dt>
+              <dd className="text-right text-slate-800">{konumMetni}</dd>
             </div>
           )}
           <div className="flex justify-between gap-3">
