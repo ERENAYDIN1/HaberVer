@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   approveReport,
@@ -18,20 +18,39 @@ import IhbarDurumRozeti from "./IhbarDurumRozeti";
 interface IhbarPaneliProps {
   /** Bir ihbar onaylanip varliga donusunce ana varlik listesini tazelemek icin. */
   onVarlikOlustu?: () => void;
+  /** Yuklenen ihbarlar degisince ust bilesene bildirir (haritada gostermek icin). */
+  onIhbarlarChange?: (ihbarlar: ReportFeature[]) => void;
+  /** Haritada vurgulanacak secili ihbarin id'si. */
+  seciliId?: string | null;
+  /** Bir ihbar satirina tiklaninca (haritada konumuna ucmak icin). */
+  onIhbarSec?: (id: string) => void;
 }
 
-export default function IhbarPaneli({ onVarlikOlustu }: IhbarPaneliProps) {
+export default function IhbarPaneli({
+  onVarlikOlustu,
+  onIhbarlarChange,
+  seciliId,
+  onIhbarSec,
+}: IhbarPaneliProps) {
   const [durum, setDurum] = useState<ReportStatus>("beklemede");
   const [ihbarlar, setIhbarlar] = useState<ReportFeature[]>([]);
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [islemdeki, setIslemdeki] = useState<string | null>(null);
 
+  const onIhbarlarChangeRef = useRef(onIhbarlarChange);
+  useEffect(() => {
+    onIhbarlarChangeRef.current = onIhbarlarChange;
+  });
+
   const yukle = (d: ReportStatus) => {
     setYukleniyor(true);
     setHata(null);
     listReports(d)
-      .then((r) => setIhbarlar(r.features))
+      .then((r) => {
+        setIhbarlar(r.features);
+        onIhbarlarChangeRef.current?.(r.features);
+      })
       .catch((e) => setHata((e as Error).message))
       .finally(() => setYukleniyor(false));
   };
@@ -107,11 +126,27 @@ export default function IhbarPaneli({ onVarlikOlustu }: IhbarPaneliProps) {
             const [lng, lat] = ih.geometry.coordinates;
             const fotoSrc = fotoUrl(p.photo_url);
             const bekliyor = p.status === "beklemede";
+            const secili = p.id === seciliId;
             return (
-              <li key={p.id} className="p-4">
+              <li
+                key={p.id}
+                onClick={() => onIhbarSec?.(p.id)}
+                className={`cursor-pointer border-l-2 p-4 transition ${
+                  secili
+                    ? "border-purple-600 bg-purple-50"
+                    : "border-transparent hover:bg-slate-50"
+                }`}
+                title="Haritada konumunu gör"
+              >
                 <div className="flex gap-3">
                   {fotoSrc ? (
-                    <a href={fotoSrc} target="_blank" rel="noreferrer" className="shrink-0">
+                    <a
+                      href={fotoSrc}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <img
                         src={fotoSrc}
                         alt=""
@@ -146,14 +181,20 @@ export default function IhbarPaneli({ onVarlikOlustu }: IhbarPaneliProps) {
                     {bekliyor && (
                       <div className="mt-2 flex gap-2">
                         <button
-                          onClick={() => onayla(p.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onayla(p.id);
+                          }}
                           disabled={islemdeki === p.id}
                           className="border border-emerald-600 bg-emerald-600 px-3 py-1 text-xs font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50"
                         >
                           Onayla
                         </button>
                         <button
-                          onClick={() => reddet(p.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            reddet(p.id);
+                          }}
                           disabled={islemdeki === p.id}
                           className="border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
                         >

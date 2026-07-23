@@ -5,9 +5,21 @@ interface ModalProps {
   baslik: string;
   onKapat: () => void;
   children: ReactNode;
+  /** Genis icerik (dashboard, personel listesi, log) icin daha genis bir kutu. */
+  genis?: boolean;
+  /** Govde (icerik) sarmalayicisinin sinifi; kendi flex/yukseklik/padding'ini
+   *  yoneten tam panel bilesenleri icin varsayilan "p-5" degistirilebilir. */
+  icerikSinifi?: string;
 }
 
-export default function Modal({ acik, baslik, onKapat, children }: ModalProps) {
+export default function Modal({
+  acik,
+  baslik,
+  onKapat,
+  children,
+  genis,
+  icerikSinifi = "p-5",
+}: ModalProps) {
   // ESC ile kapatma
   useEffect(() => {
     if (!acik) return;
@@ -26,7 +38,9 @@ export default function Modal({ acik, baslik, onKapat, children }: ModalProps) {
       onClick={onKapat}
     >
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto border border-slate-400 bg-white"
+        className={`max-h-[90vh] w-full overflow-y-auto border border-slate-400 bg-white ${
+          genis ? "max-w-2xl" : "max-w-lg"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-300 bg-slate-50 px-5 py-3">
@@ -39,7 +53,7 @@ export default function Modal({ acik, baslik, onKapat, children }: ModalProps) {
             ×
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className={icerikSinifi}>{children}</div>
       </div>
     </div>
   );

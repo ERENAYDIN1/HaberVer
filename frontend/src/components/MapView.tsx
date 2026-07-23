@@ -12,6 +12,8 @@ import {
   ASSET_TYPE_LABELS,
 } from "../types/asset";
 import type { AssetFeature, AssetFeatureCollection } from "../types/asset";
+import { REPORT_STATUS_LABELS } from "../types/report";
+import type { ReportFeature, ReportFeatureCollection } from "../types/report";
 import {
   alanEtiketi,
   cokHalkaliAlanM2,
@@ -29,11 +31,15 @@ import {
 } from "../utils/istanbulMaskesi";
 
 const SOURCE_ID = "assets";
+const REPORTS_SOURCE_ID = "reports";
 const CIZIM_SOURCE_ID = "cizim";
 const TAMAMLANAN_SOURCE_ID = "tamamlanan-alanlar";
 const OLCUM_SOURCE_ID = "olcum";
 const DINAMIK_SOURCE_ID = "dinamik-onizleme";
 const OLCUM_RENK = "#2563eb";
+/** Ihbar (report) noktalari, kayitli/ihbar VARLIKLARINDAN (yesil/amber) acikca
+ *  ayrilsin diye mor tonuyla gosterilir - "İhbarlar" sekmesindeki queue. */
+const IHBAR_RENK = "#9333ea";
 
 const BOS_KOLEKSIYON: AssetFeatureCollection = {
   type: "FeatureCollection",
@@ -54,6 +60,13 @@ export type UcusHedefi =
 
 interface MapViewProps {
   assets?: AssetFeatureCollection;
+  /** "İhbarlar" sekmesi aktifken haritada gosterilecek ihbar (report) noktalari;
+   *  varliklardan farkli renkte cizilir. Diger sekmelerde bos/undefined. */
+  reports?: ReportFeatureCollection;
+  /** Panelde secili ihbarin id'si (haritada vurgulanir + popup acilir). */
+  seciliIhbarId?: string | null;
+  /** Haritadaki bir ihbar noktasina tiklaninca. */
+  onIhbarSec?: (id: string) => void;
   /** Panelde/haritada secili varligin id'si. */
   seciliId: string | null;
   /** Haritadaki bir noktaya tiklaninca. */
@@ -83,6 +96,9 @@ interface MapViewProps {
 
 export default function MapView({
   assets,
+  reports,
+  seciliIhbarId,
+  onIhbarSec,
   seciliId,
   onVarlikSec,
   onHaritaTikla,
@@ -126,6 +142,9 @@ export default function MapView({
   const olcumModuRef = useRef(olcumModu);
   const olcumNoktalariRef = useRef(olcumNoktalari);
   const assetsRef = useRef(assets);
+  const reportsRef = useRef(reports);
+  const seciliIhbarIdRef = useRef(seciliIhbarId);
+  const onIhbarSecRef = useRef(onIhbarSec);
   const cizimNoktalariRef = useRef(cizimNoktalari);
   const seciliIdRef = useRef(seciliId);
   /** Cizim/olcum sirasinda son bilinen fare konumu (elastik cizgi icin). */
@@ -142,6 +161,9 @@ export default function MapView({
     olcumModuRef.current = olcumModu;
     olcumNoktalariRef.current = olcumNoktalari;
     assetsRef.current = assets;
+    reportsRef.current = reports;
+    seciliIhbarIdRef.current = seciliIhbarId;
+    onIhbarSecRef.current = onIhbarSec;
     cizimNoktalariRef.current = cizimNoktalari;
     seciliIdRef.current = seciliId;
   });
@@ -152,6 +174,11 @@ export default function MapView({
     if (cizimModuRef.current || olcumModuRef.current) return;
     const id = e.features?.[0]?.properties?.id;
     if (typeof id === "string") onVarlikSecRef.current(id);
+  });
+  const reportsTiklandiRef = useRef((e: maplibregl.MapLayerMouseEvent) => {
+    if (cizimModuRef.current || olcumModuRef.current) return;
+    const id = e.features?.[0]?.properties?.id;
+    if (typeof id === "string") onIhbarSecRef.current?.(id);
   });
   const fareGirdiRef = useRef(() => {
     const map = mapRef.current;
@@ -178,9 +205,9 @@ export default function MapView({
       return;
     }
 
-    const uzerinde = map.queryRenderedFeatures(e.point, {
-      layers: ["assets-circle"],
-    });
+    const katmanlar = ["assets-circle"];
+    if (map.getLayer("reports-circle")) katmanlar.push("reports-circle");
+    const uzerinde = map.queryRenderedFeatures(e.point, { layers: katmanlar });
     if (uzerinde.length === 0) {
       onHaritaTiklaRef.current({ longitude: koordinat[0], latitude: koordinat[1] });
     }
@@ -284,6 +311,16 @@ export default function MapView({
     const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     source?.setData(
       (assetsRef.current ?? BOS_KOLEKSIYON) as unknown as GeoJSON.FeatureCollection
+    );
+  }
+
+  /** Ihbar (report) noktalarini haritadaki kaynaga uygular. */
+  function reportsUygula(map: maplibregl.Map) {
+    const source = map.getSource(REPORTS_SOURCE_ID) as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    source?.setData(
+      (reportsRef.current ?? BOS_GEOJSON) as unknown as GeoJSON.FeatureCollection
     );
   }
 
@@ -441,6 +478,26 @@ export default function MapView({
       .addTo(map);
   }
 
+  /** Secili ihbari haritada vurgular ve popup acar (varlik secimiyle ayni
+   *  popup'i paylasir; ikisi ayni anda secili olmaz - farkli sekmeler). */
+  function secimIhbarUygula(map: maplibregl.Map) {
+    if (!map.getLayer("reports-selected")) return;
+    const id = seciliIhbarIdRef.current;
+    map.setFilter("reports-selected", ["==", ["get", "id"], id ?? ""]);
+
+    if (!id) return;
+    const secili = reportsRef.current?.features.find(
+      (f) => f.properties.id === id
+    );
+    if (!secili) return;
+
+    popupRef.current?.remove();
+    popupRef.current = new maplibregl.Popup({ offset: 14, closeButton: false })
+      .setLngLat(secili.geometry.coordinates)
+      .setHTML(ihbarPopupIcerigi(secili))
+      .addTo(map);
+  }
+
   /** Kaynaklar/katmanlar yoksa (ilk yukleme ya da stil degisimi sonrasi) yeniden kurar. */
   function kaynaklariHazirla(map: maplibregl.Map) {
     // Maske en altta eklenir ki varlik/cizim katmanlarini ortmesin.
@@ -477,6 +534,35 @@ export default function MapView({
           "circle-color": "transparent",
           "circle-stroke-width": 3,
           "circle-stroke-color": "#0f766e",
+        },
+      });
+    }
+
+    if (!map.getSource(REPORTS_SOURCE_ID)) {
+      map.addSource(REPORTS_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
+
+      // Ihbar noktalari - varliklardan (yesil/amber) acikca ayrilsin diye mor.
+      map.addLayer({
+        id: "reports-circle",
+        type: "circle",
+        source: REPORTS_SOURCE_ID,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 5, 16, 10],
+          "circle-color": IHBAR_RENK,
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+      map.addLayer({
+        id: "reports-selected",
+        type: "circle",
+        source: REPORTS_SOURCE_ID,
+        filter: ["==", ["get", "id"], ""],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 11, 16, 18],
+          "circle-color": "transparent",
+          "circle-stroke-width": 3,
+          "circle-stroke-color": "#6b21a8",
         },
       });
     }
@@ -598,6 +684,12 @@ export default function MapView({
     map.on("mouseenter", "assets-circle", fareGirdiRef.current);
     map.off("mouseleave", "assets-circle", fareCiktiRef.current);
     map.on("mouseleave", "assets-circle", fareCiktiRef.current);
+    map.off("click", "reports-circle", reportsTiklandiRef.current);
+    map.on("click", "reports-circle", reportsTiklandiRef.current);
+    map.off("mouseenter", "reports-circle", fareGirdiRef.current);
+    map.on("mouseenter", "reports-circle", fareGirdiRef.current);
+    map.off("mouseleave", "reports-circle", fareCiktiRef.current);
+    map.on("mouseleave", "reports-circle", fareCiktiRef.current);
     map.off("click", haritaTiklandiRef.current);
     map.on("click", haritaTiklandiRef.current);
     map.off("mousemove", fareHareketRef.current);
@@ -608,10 +700,12 @@ export default function MapView({
     hazirRef.current = true;
     maskeUygula(map);
     veriUygula(map);
+    reportsUygula(map);
     cizimUygula(map);
     tamamlananUygula(map);
     olcumUygula(map);
     secimUygula(map);
+    secimIhbarUygula(map);
     gorunumDegistiRef.current();
   }
 
@@ -682,6 +776,34 @@ export default function MapView({
     if (!map) return;
     if (hazirRef.current) veriUygula(map);
   }, [assets]);
+
+  // --- Ihbar noktalari degisince kaynagi guncelle ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (hazirRef.current) reportsUygula(map);
+  }, [reports]);
+
+  // --- Secili ihbar degisince: vurgula, popup ac, konumuna ucur ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !hazirRef.current) return;
+
+    secimIhbarUygula(map);
+
+    if (seciliIhbarId && reports) {
+      const secili = reports.features.find(
+        (f) => f.properties.id === seciliIhbarId
+      );
+      if (secili) {
+        map.flyTo({
+          center: secili.geometry.coordinates,
+          zoom: Math.max(map.getZoom(), 15),
+          duration: 900,
+        });
+      }
+    }
+  }, [seciliIhbarId, reports]);
 
   // --- Cizim noktalarini haritada goster ---
   useEffect(() => {
@@ -797,6 +919,41 @@ function popupIcerigi(asset: AssetFeature): string {
         </span>
       </div>
       <div style="color:#64748b; font-size:11px; margin-top:6px">${satirlar}</div>
+    </div>
+  `;
+}
+
+function ihbarPopupIcerigi(report: ReportFeature): string {
+  const { name, type, status, note, photo_url } = report.properties;
+  const foto = fotoUrl(photo_url);
+  const durumRenk: Record<string, { bg: string; fg: string }> = {
+    beklemede: { bg: "#fef3c7", fg: "#92400e" },
+    onaylandi: { bg: "#d1fae5", fg: "#065f46" },
+    reddedildi: { bg: "#fee2e2", fg: "#991b1b" },
+  };
+  const dr = durumRenk[status] ?? durumRenk.beklemede;
+
+  return `
+    <div style="font-family: system-ui, sans-serif; min-width: 180px">
+      ${
+        foto
+          ? `<img src="${kacis(foto)}" style="width:100%; max-height:120px; object-fit:cover; margin-bottom:6px; border:1px solid #e2e8f0;" />`
+          : ""
+      }
+      <div style="font-weight: 600; margin-bottom: 4px">${kacis(name)}</div>
+      <div style="color:#475569; font-size:12px">${ASSET_TYPE_LABELS[type]} · İhbar</div>
+      <div style="margin-top:6px">
+        <span style="
+          display:inline-block; padding:2px 8px; border-radius:9999px;
+          font-size:11px; font-weight:500; background:${dr.bg}; color:${dr.fg}">
+          ${REPORT_STATUS_LABELS[status]}
+        </span>
+      </div>
+      ${
+        note
+          ? `<div style="color:#64748b; font-size:11px; margin-top:6px">${kacis(note)}</div>`
+          : ""
+      }
     </div>
   `;
 }
