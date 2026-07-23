@@ -178,6 +178,15 @@ export function IconHistory({ className }: IconProps) {
   );
 }
 
+export function IconRefresh({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} className={className}>
+      <path d="M20 11a8 8 0 0 0-14.3-4.5M4 5v3.5h3.5" />
+      <path d="M4 13a8 8 0 0 0 14.3 4.5M20 19v-3.5h-3.5" />
+    </svg>
+  );
+}
+
 export function IconBox({ className }: IconProps) {
   return (
     <svg {...temelOzellikler} className={className}>

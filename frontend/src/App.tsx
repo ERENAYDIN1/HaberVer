@@ -10,17 +10,17 @@ import CizimPaneli from "./components/CizimPaneli";
 import Dashboard from "./components/Dashboard";
 import {
   IconChartBar,
-  IconChevronLeft,
-  IconChevronRight,
   IconHistory,
   IconInbox,
   IconLasso,
   IconLogout,
   IconPin,
   IconPlus,
+  IconRefresh,
   IconRuler,
   IconTree,
   IconUsers,
+  IconX,
 } from "./components/icons";
 import IhbarPaneli from "./components/IhbarPaneli";
 import KonumArama from "./components/KonumArama";
@@ -29,6 +29,7 @@ import MapStilKontrolu from "./components/MapStilKontrolu";
 import MapView, { type UcusHedefi } from "./components/MapView";
 import Modal from "./components/Modal";
 import PersonelYonetimi from "./components/PersonelYonetimi";
+import SekmeCubugu, { type SekmeKutucugu } from "./components/SekmeCubugu";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
 import { USER_ROLE_LABELS } from "./types/auth";
@@ -47,6 +48,7 @@ import {
   poligonSinirKutusu,
   toplamMesafeMetre,
 } from "./utils/geo";
+import { ISTANBUL_MERKEZI } from "./utils/istanbulMaskesi";
 
 /** Il/ilce sinir secimi de bir "tamamlanan alan" olarak temsil edilir; bu sabit
  *  id sayesinde yeni bir il/ilce secilince oncekinin yerine gecer. */
@@ -105,12 +107,61 @@ export default function App() {
   const [koordinat, setKoordinat] = useState<
     { longitude: number; latitude: number } | undefined
   >();
-  const [panelAcik, setPanelAcik] = useState(true);
-  const [panelGenislik, setPanelGenislik] = useState(360);
-  const boyutlandirmaRef = useRef<{ baslangicX: number; baslangicGenislik: number } | null>(
-    null
-  );
+  // Acilista panel kapali gelir: harita tertemiz gorunur, kullanici bir
+  // kutucuga tiklayinca ilgili panel acilir.
+  const [panelAcik, setPanelAcik] = useState(false);
   const [aktifStilId, setAktifStilId] = useState<HaritaStilId>(VARSAYILAN_STIL);
+
+  // Sol çubuktaki kutucuklar rol'e göre; saha çalışanı yalnızca "Varlıklar"ı görür.
+  const kutucuklar = useMemo<SekmeKutucugu<Sekme>[]>(() => {
+    const ids: Sekme[] =
+      user?.role === "saha_calisani" ? ["liste"] : ["liste", "ekle", "ihbarlar"];
+    return ids.map((id) => ({ id, ...SEKME_TANIMLARI[id] }));
+  }, [user?.role]);
+
+  // Panel kapalıyken hiçbir sekme "aktif" sayılmaz (harita sade kalır; ihbar
+  // noktaları gizlenir, boş haritaya tıklama Ekle formuna düşmez).
+  const aktifSekme: Sekme | null = panelAcik ? sekme : null;
+
+  // Kutucuğa tıklama: yeni sekme açar, aynı (aktif) kutucuğa tekrar tıklamak paneli kapatır.
+  const sekmeSec = (id: Sekme) => {
+    if (panelAcik && sekme === id) {
+      setPanelAcik(false);
+      return;
+    }
+    setSekme(id);
+    setPanelAcik(true);
+  };
+
+  // "Temizle": tüm çalışma durumunu (seçimler, filtreler, çizim/ölçüm, ilçe/
+  // mahalle, açık panel) sitenin ilk açıldığı hale döndürür ve haritayı
+  // İstanbul başlangıç görünümüne (merkez + zoom 11) geri uçurur.
+  const sifirla = () => {
+    setFilters({ source: "kayitli" });
+    setSekme("liste");
+    setPanelAcik(false);
+    setUstModal(null);
+    setSeciliId(null);
+    setSeciliIhbarId(null);
+    setDuzenlenen(null);
+    setKoordinat(undefined);
+    setCizimModu(false);
+    setCizimNoktalari([]);
+    setAlanHatasi(null);
+    setOlcumModu(false);
+    setOlcumNoktalari([]);
+    setTamamlananAlanlar([]);
+    setIlceKodu(null);
+    setMahalleKodu(null);
+    setIdariHatasi(null);
+    setIdariSinirKutusu(null);
+    setUcusHedefi({
+      anahtar: crypto.randomUUID(),
+      tip: "nokta",
+      merkez: ISTANBUL_MERKEZI,
+      zoom: 11,
+    });
+  };
 
   // --- Alan (poligon) secimi - birden fazla alan ayni anda acik kalabilir ---
   const [cizimModu, setCizimModu] = useState(false);
@@ -158,21 +209,22 @@ export default function App() {
   }, [tamamlananAlanlar]);
   const gosterilen = birlesikAlanSonucu ?? sorgu.data;
 
-  // "İhbarlar" sekmesi aktifken harita, varliklar yerine ihbar noktalarini
-  // gosterir (mor renkte); diger sekmelerde varliklar gorunur.
-  const ihbarSekmesi = sekme === "ihbarlar";
+  // "İhbarlar" sekmesi aktifken (panel açık) harita, varliklar yerine ihbar
+  // noktalarini gosterir; diger sekmelerde / panel kapalıyken varliklar gorunur.
+  const ihbarSekmesi = aktifSekme === "ihbarlar";
   const ihbarKoleksiyonu = useMemo<ReportFeatureCollection>(
     () => ({ type: "FeatureCollection", features: ihbarlar }),
     [ihbarlar]
   );
 
-  // Ihbarlar sekmesinden cikinca haritadaki ihbar noktalarini ve secimini temizle.
+  // Ihbarlar sekmesinden cikinca (veya panel kapaninca) haritadaki ihbar
+  // noktalarini ve secimini temizle.
   useEffect(() => {
-    if (sekme !== "ihbarlar") {
+    if (aktifSekme !== "ihbarlar") {
       setIhbarlar([]);
       setSeciliIhbarId(null);
     }
-  }, [sekme]);
+  }, [aktifSekme]);
 
   const haritaTiklandi = useCallback(
     (c: { longitude: number; latitude: number }) => {
@@ -184,12 +236,12 @@ export default function App() {
       // Saha calisaninin yeni varlik ekleme yetkisi yok; "Ekle" sekmesi de
       // gizli. Ihbarlar sekmesindeyken de bos alan tiklamasi "Ekle" formuna
       // dusmemeli (o an harita ihbar noktalarini gosteriyor).
-      if (user?.role === "saha_calisani" || sekme === "ihbarlar") return;
+      if (user?.role === "saha_calisani" || aktifSekme === "ihbarlar") return;
       setKoordinat(c);
       setSekme("ekle");
       setPanelAcik(true);
     },
-    [user?.role, sekme]
+    [user?.role, aktifSekme]
   );
 
   // Hem listeden hem haritadan cagrilir; zaten secili olan bir varliga
@@ -369,30 +421,6 @@ export default function App() {
     setOlcumNoktalari([]);
   };
 
-  // --- Sol paneli sag kenarindan surukleyerek genisletme/daraltma ---
-  const PANEL_MIN_GENISLIK = 280;
-  const PANEL_MAKS_GENISLIK = 640;
-
-  const panelBoyutlandirmaSurukle = (e: MouseEvent) => {
-    const baslangic = boyutlandirmaRef.current;
-    if (!baslangic) return;
-    const yeni = baslangic.baslangicGenislik + (e.clientX - baslangic.baslangicX);
-    setPanelGenislik(Math.min(PANEL_MAKS_GENISLIK, Math.max(PANEL_MIN_GENISLIK, yeni)));
-  };
-
-  const panelBoyutlandirmaBitir = () => {
-    boyutlandirmaRef.current = null;
-    window.removeEventListener("mousemove", panelBoyutlandirmaSurukle);
-    window.removeEventListener("mouseup", panelBoyutlandirmaBitir);
-  };
-
-  const panelBoyutlandirmaBaslat = (e: React.MouseEvent) => {
-    e.preventDefault();
-    boyutlandirmaRef.current = { baslangicX: e.clientX, baslangicGenislik: panelGenislik };
-    window.addEventListener("mousemove", panelBoyutlandirmaSurukle);
-    window.addEventListener("mouseup", panelBoyutlandirmaBitir);
-  };
-
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100">
       {/* Ust bar (uygulama header'i) */}
@@ -542,132 +570,120 @@ export default function App() {
         onOlcumTemizle={olcumTemizle}
       />
 
-      {/* Govde: docked sidebar + harita */}
-      <div className="flex min-h-0 flex-1">
+      {/* Govde: tam ekran harita + uzerinde yuzen sol arac cubugu ve panel */}
+      <div className="relative min-h-0 flex-1">
+        <MapView
+          assets={ihbarSekmesi ? undefined : gosterilen}
+          reports={ihbarSekmesi ? ihbarKoleksiyonu : undefined}
+          seciliIhbarId={seciliIhbarId}
+          onIhbarSec={(id) =>
+            setSeciliIhbarId((mevcut) => (mevcut === id ? null : id))
+          }
+          seciliId={seciliId}
+          onVarlikSec={varlikSecildi}
+          onHaritaTikla={haritaTiklandi}
+          cizimModu={cizimModu}
+          cizimNoktalari={cizimNoktalari}
+          onCizimNokta={cizimNoktaEkle}
+          cizimRengi={cizimRengi}
+          tamamlananAlanlar={tamamlananAlanlar}
+          olcumModu={olcumModu}
+          olcumNoktalari={olcumNoktalari}
+          onOlcumNokta={olcumNoktaEkle}
+          aktifStilId={aktifStilId}
+          ucusHedefi={ucusHedefi}
+          onGorunumDegisti={setHaritaGorunumu}
+        />
+
+        <MapStilKontrolu aktifId={aktifStilId} onSec={setAktifStilId} />
+
+        {/* Sol kenardaki yuzen kutucuklar (Varliklar / Ekle / Ihbarlar).
+            Etiket balonlari yalnizca panel kapaliyken gosterilir ki acik
+            panelin uzerine tasmasinlar. */}
+        <SekmeCubugu
+          kutucuklar={kutucuklar}
+          aktif={aktifSekme}
+          onSec={sekmeSec}
+          etiketleriGoster={!panelAcik}
+          altAksiyon={{ etiket: "Temizle", ikon: IconRefresh, onClick: sifirla }}
+        />
+
+        {/* Aktif sekmenin yuzen paneli - kutucuklarin hemen sagindan acilir. */}
         {panelAcik && (
-          <aside
-            className="relative flex shrink-0 flex-col border-r border-slate-300 bg-white"
-            style={{ width: panelGenislik }}
-          >
-            <div className="flex items-stretch border-b border-slate-300 bg-slate-50">
-              {(
-                [
-                  "liste",
-                  // Saha calisani tam CRUD/onay yetkisine sahip degil; sadece
-                  // varliklari gorup "Tamir Edildi" isaretleyebilir.
-                  ...(user?.role !== "saha_calisani"
-                    ? (["ekle", "ihbarlar"] as const)
-                    : []),
-                ] as Sekme[]
-              ).map((id) => (
-                <SekmeButonu
-                  key={id}
-                  aktif={sekme === id}
-                  renk={SEKME_TANIMLARI[id].renk}
-                  ikon={SEKME_TANIMLARI[id].ikon}
-                  onClick={() => setSekme(id)}
-                >
-                  {SEKME_TANIMLARI[id].etiket}
-                </SekmeButonu>
-              ))}
+          <div className="absolute bottom-4 left-[76px] top-4 z-20 flex w-[360px] max-w-[calc(100vw-6rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur-sm">
+            <div
+              className={`flex shrink-0 items-center justify-between border-b px-3.5 py-2.5 ${SEKME_RENK_SINIFLARI[SEKME_TANIMLARI[sekme].renk].aktif}`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/70">
+                  {(() => {
+                    const Ikon = SEKME_TANIMLARI[sekme].ikon;
+                    return (
+                      <Ikon
+                        className={`h-4 w-4 ${SEKME_RENK_SINIFLARI[SEKME_TANIMLARI[sekme].renk].ikonAktif}`}
+                      />
+                    );
+                  })()}
+                </span>
+                <h2 className="text-sm font-semibold">
+                  {SEKME_TANIMLARI[sekme].etiket}
+                </h2>
+              </div>
               <button
                 onClick={() => setPanelAcik(false)}
-                aria-label="Paneli gizle"
-                title="Paneli gizle"
-                className="flex items-center border-l border-slate-300 px-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Paneli kapat"
+                title="Paneli kapat"
+                className="flex h-6 w-6 items-center justify-center rounded-lg opacity-70 transition hover:bg-white/60 hover:opacity-100"
               >
-                <IconChevronLeft className="h-3.5 w-3.5" />
+                <IconX className="h-4 w-4" />
               </button>
             </div>
 
-            {sekme === "liste" && (
-              <AssetList
-                data={gosterilen}
-                isLoading={sorgu.isLoading}
-                isError={sorgu.isError}
-                error={sorgu.error as Error | null}
-                filters={filters}
-                onFiltersChange={setFilters}
-                seciliId={seciliId}
-                onSec={varlikSecildi}
-                onDuzenle={setDuzenlenen}
-                ilceKodu={ilceKodu}
-                onIlceSec={ilceSec}
-                mahalleKodu={mahalleKodu}
-                onMahalleSec={setMahalleKodu}
-                idariHatasi={idariHatasi}
-              />
-            )}
+            <div className="flex min-h-0 flex-1 flex-col">
+              {sekme === "liste" && (
+                <AssetList
+                  data={gosterilen}
+                  isLoading={sorgu.isLoading}
+                  isError={sorgu.isError}
+                  error={sorgu.error as Error | null}
+                  filters={filters}
+                  onFiltersChange={setFilters}
+                  seciliId={seciliId}
+                  onSec={varlikSecildi}
+                  onDuzenle={setDuzenlenen}
+                  ilceKodu={ilceKodu}
+                  onIlceSec={ilceSec}
+                  mahalleKodu={mahalleKodu}
+                  onMahalleSec={setMahalleKodu}
+                  idariHatasi={idariHatasi}
+                />
+              )}
 
-            {sekme === "ekle" && (
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                <p className="mb-3 border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  Haritada boş bir noktaya tıklayarak koordinatı otomatik
-                  doldurabilirsin.
-                </p>
-                <AssetForm koordinat={koordinat} />
-              </div>
-            )}
+              {sekme === "ekle" && (
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <p className="mb-3 border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    Haritada boş bir noktaya tıklayarak koordinatı otomatik
+                    doldurabilirsin.
+                  </p>
+                  <AssetForm koordinat={koordinat} />
+                </div>
+              )}
 
-            {sekme === "ihbarlar" && (
-              <IhbarPaneli
-                onVarlikOlustu={() =>
-                  queryClient.invalidateQueries({ queryKey: ["assets"] })
-                }
-                onIhbarlarChange={setIhbarlar}
-                seciliId={seciliIhbarId}
-                onIhbarSec={(id) =>
-                  setSeciliIhbarId((mevcut) => (mevcut === id ? null : id))
-                }
-              />
-            )}
-
-            {/* Sag kenardan surukleyerek paneli genislet/daralt */}
-            <div
-              onMouseDown={panelBoyutlandirmaBaslat}
-              title="Sürükleyerek genişlet/daralt"
-              className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize select-none hover:bg-emerald-400/40 active:bg-emerald-500/50"
-            />
-          </aside>
+              {sekme === "ihbarlar" && (
+                <IhbarPaneli
+                  onVarlikOlustu={() =>
+                    queryClient.invalidateQueries({ queryKey: ["assets"] })
+                  }
+                  onIhbarlarChange={setIhbarlar}
+                  seciliId={seciliIhbarId}
+                  onIhbarSec={(id) =>
+                    setSeciliIhbarId((mevcut) => (mevcut === id ? null : id))
+                  }
+                />
+              )}
+            </div>
+          </div>
         )}
-
-        {/* Harita alani */}
-        <div className="relative min-w-0 flex-1">
-          <MapView
-            assets={ihbarSekmesi ? undefined : gosterilen}
-            reports={ihbarSekmesi ? ihbarKoleksiyonu : undefined}
-            seciliIhbarId={seciliIhbarId}
-            onIhbarSec={(id) =>
-              setSeciliIhbarId((mevcut) => (mevcut === id ? null : id))
-            }
-            seciliId={seciliId}
-            onVarlikSec={varlikSecildi}
-            onHaritaTikla={haritaTiklandi}
-            cizimModu={cizimModu}
-            cizimNoktalari={cizimNoktalari}
-            onCizimNokta={cizimNoktaEkle}
-            cizimRengi={cizimRengi}
-            tamamlananAlanlar={tamamlananAlanlar}
-            olcumModu={olcumModu}
-            olcumNoktalari={olcumNoktalari}
-            onOlcumNokta={olcumNoktaEkle}
-            aktifStilId={aktifStilId}
-            ucusHedefi={ucusHedefi}
-            onGorunumDegisti={setHaritaGorunumu}
-          />
-
-          <MapStilKontrolu aktifId={aktifStilId} onSec={setAktifStilId} />
-
-          {!panelAcik && (
-            <button
-              onClick={() => setPanelAcik(true)}
-              className="absolute left-3 top-3 z-10 flex items-center gap-1.5 border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              <IconChevronRight className="h-3.5 w-3.5" />
-              Paneli göster
-            </button>
-          )}
-        </div>
       </div>
 
       <Modal
@@ -777,32 +793,3 @@ const SEKME_RENK_SINIFLARI: Record<
     ikonPasif: "text-slate-400",
   },
 };
-
-function SekmeButonu({
-  aktif,
-  renk,
-  ikon: Ikon,
-  onClick,
-  children,
-}: {
-  aktif: boolean;
-  renk: string;
-  ikon: (p: { className?: string }) => React.ReactElement;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  const renkSinif = SEKME_RENK_SINIFLARI[renk];
-  return (
-    <button
-      onClick={onClick}
-      className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap border-b-2 px-2 py-2.5 text-[13px] font-medium transition ${
-        aktif
-          ? renkSinif.aktif
-          : "border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-      }`}
-    >
-      <Ikon className={`h-3.5 w-3.5 ${aktif ? renkSinif.ikonAktif : renkSinif.ikonPasif}`} />
-      {children}
-    </button>
-  );
-}
