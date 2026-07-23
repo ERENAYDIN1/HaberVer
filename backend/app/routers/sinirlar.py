@@ -51,3 +51,21 @@ def ilce_siniri(kod: str):
     if not yol.exists():
         raise HTTPException(status_code=404, detail="Ilce bulunamadi")
     return _dosya_oku(yol)
+
+
+@router.get("/mahalleler")
+def mahalleler(ilce: str | None = None):
+    """Mahallelerin kod/ad listesi; ilce verilirse o ilceye ait mahalleler.
+    Not: mahalle verisi su an yalnizca Istanbul (34xxx ilceleri) icindir."""
+    tumu = _dosya_oku(VERI_DIZINI / "mahalleler.json")
+    if ilce is None:
+        return tumu
+    return [m for m in tumu if m["ilceKodu"] == ilce]
+
+
+@router.get("/mahalle/{kod}")
+def mahalle_siniri(kod: str):
+    yol = VERI_DIZINI / "mahalle" / f"{kod}.json"
+    if not yol.exists():
+        raise HTTPException(status_code=404, detail="Mahalle bulunamadi")
+    return _dosya_oku(yol)

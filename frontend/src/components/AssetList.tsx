@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactElement } from "react";
 import { fotoUrl } from "../api/reports";
 import { useAuth } from "../auth/AuthContext";
 import { useDeleteAsset, useRepairAsset } from "../hooks/useAssets";
-import { useIlceler } from "../hooks/useSinirlar";
+import { useIlceler, useMahalleler } from "../hooks/useSinirlar";
 import {
   ASSET_SOURCE_LABELS,
   ASSET_SOURCES,
@@ -81,6 +81,9 @@ interface AssetListProps {
   /** Ilce sinirina gore filtreleme (haritada da vurgulanir). */
   ilceKodu: string | null;
   onIlceSec: (kod: string | null) => void;
+  /** Ilce secildiginde kademeli olarak mahalleye kadar filtreleme. */
+  mahalleKodu: string | null;
+  onMahalleSec: (kod: string | null) => void;
   idariHatasi?: string | null;
 }
 
@@ -96,6 +99,8 @@ export default function AssetList({
   onDuzenle,
   ilceKodu,
   onIlceSec,
+  mahalleKodu,
+  onMahalleSec,
   idariHatasi,
 }: AssetListProps) {
   const { user } = useAuth();
@@ -104,6 +109,8 @@ export default function AssetList({
   const repairAsset = useRepairAsset();
   const seciliRef = useRef<HTMLLIElement>(null);
   const ilcelerSorgu = useIlceler(ISTANBUL_IL_KODU);
+  // Mahalleler yalnizca bir ilce secildiginde getirilir (kademeli filtre).
+  const mahallelerSorgu = useMahalleler(ilceKodu);
   const [detayAsset, setDetayAsset] = useState<AssetFeature | null>(null);
 
   // Kaynak (kayitli/ihbar) hic secilmemisse varsayilan olarak "kayitli" kabul
@@ -187,29 +194,63 @@ export default function AssetList({
         </select>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
-        <select
-          className={selectClass}
-          value={ilceKodu ?? ""}
-          onChange={(e) => onIlceSec(e.target.value || null)}
-        >
-          <option value="">Tüm ilçeler (İstanbul)</option>
-          {ilcelerSorgu.data?.map((ilce) => (
-            <option key={ilce.kod} value={ilce.kod}>
-              {ilce.ad}
-            </option>
-          ))}
-        </select>
-
-        {ilceKodu && (
-          <button
-            onClick={() => onIlceSec(null)}
-            aria-label="İlçe filtresini temizle"
-            title="Temizle"
-            className="shrink-0 text-slate-400 hover:text-red-600"
+      <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <select
+            className={selectClass}
+            value={ilceKodu ?? ""}
+            onChange={(e) => onIlceSec(e.target.value || null)}
           >
-            <IconX className="h-3.5 w-3.5" />
-          </button>
+            <option value="">Tüm ilçeler (İstanbul)</option>
+            {ilcelerSorgu.data?.map((ilce) => (
+              <option key={ilce.kod} value={ilce.kod}>
+                {ilce.ad}
+              </option>
+            ))}
+          </select>
+
+          {ilceKodu && (
+            <button
+              onClick={() => onIlceSec(null)}
+              aria-label="İlçe filtresini temizle"
+              title="Temizle"
+              className="shrink-0 text-slate-400 hover:text-red-600"
+            >
+              <IconX className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Mahalle secimi yalnizca bir ilce secildiginde gorunur (kademeli). */}
+        {ilceKodu && (
+          <div className="flex items-center gap-2">
+            <select
+              className={selectClass}
+              value={mahalleKodu ?? ""}
+              onChange={(e) => onMahalleSec(e.target.value || null)}
+              disabled={mahallelerSorgu.isLoading}
+            >
+              <option value="">
+                {mahallelerSorgu.isLoading ? "Mahalleler yükleniyor…" : "Tüm mahalleler"}
+              </option>
+              {mahallelerSorgu.data?.map((mahalle) => (
+                <option key={mahalle.kod} value={mahalle.kod}>
+                  {mahalle.ad}
+                </option>
+              ))}
+            </select>
+
+            {mahalleKodu && (
+              <button
+                onClick={() => onMahalleSec(null)}
+                aria-label="Mahalle filtresini temizle"
+                title="Temizle"
+                className="shrink-0 text-slate-400 hover:text-red-600"
+              >
+                <IconX className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         )}
       </div>
 

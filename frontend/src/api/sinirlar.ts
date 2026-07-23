@@ -8,6 +8,12 @@ export interface IlceOzet {
   ilKodu: string;
 }
 
+export interface MahalleOzet {
+  kod: string;
+  ad: string;
+  ilceKodu: string;
+}
+
 export interface SinirGeometri {
   kod: string;
   ad: string;
@@ -33,4 +39,12 @@ export function ilSiniri(kod: string) {
 
 export function ilceSiniri(kod: string) {
   return istek<SinirGeometri>(`/sinirlar/ilce/${kod}`);
+}
+
+export function mahalleler(ilceKodu: string) {
+  return istek<MahalleOzet[]>(`/sinirlar/mahalleler?ilce=${ilceKodu}`);
+}
+
+export function mahalleSiniri(kod: string) {
+  return istek<SinirGeometri>(`/sinirlar/mahalle/${kod}`);
 }

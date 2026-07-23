@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { assetsWithin } from "./api/assets";
-import { ilceSiniri } from "./api/sinirlar";
+import { ilceSiniri, mahalleSiniri } from "./api/sinirlar";
 import { useAuth } from "./auth/AuthContext";
 import AssetForm from "./components/AssetForm";
 import AssetList from "./components/AssetList";
@@ -124,9 +124,11 @@ export default function App() {
   const [olcumModu, setOlcumModu] = useState(false);
   const [olcumNoktalari, setOlcumNoktalari] = useState<[number, number][]>([]);
 
-  // --- Ilce sinirina gore filtreleme + harita arama (proje kapsami Istanbul
-  //     ile sinirli oldugundan il secimi yok, dogrudan ilceye gore filtrelenir) ---
+  // --- Ilce/mahalle sinirina gore filtreleme + harita arama (proje kapsami
+  //     Istanbul ile sinirli oldugundan il secimi yok; once ilceye, ilce
+  //     secilince kademeli olarak mahalleye kadar filtrelenebilir) ---
   const [ilceKodu, setIlceKodu] = useState<string | null>(null);
+  const [mahalleKodu, setMahalleKodu] = useState<string | null>(null);
   const [idariHatasi, setIdariHatasi] = useState<string | null>(null);
   const [ucusHedefi, setUcusHedefi] = useState<UcusHedefi | null>(null);
   const [haritaGorunumu, setHaritaGorunumu] = useState<
@@ -223,12 +225,20 @@ export default function App() {
     setTamamlananAlanlar((a) => a.filter((alan) => alan.id !== id));
     if (id === IDARI_ALAN_ID) {
       setIlceKodu(null);
+      setMahalleKodu(null);
     }
   };
 
   const tumAlanlariTemizle = () => {
     setTamamlananAlanlar([]);
     setIlceKodu(null);
+    setMahalleKodu(null);
+  };
+
+  // Ilce degisince mahalle secimini sifirla (eski mahalle baska ilceden kalmasin).
+  const ilceSec = (kod: string | null) => {
+    setIlceKodu(kod);
+    setMahalleKodu(null);
   };
 
   const alanSecimiTamamla = async () => {
@@ -289,12 +299,13 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  // Ilce secimi degisince sinir geometrisini getirir, mevcut alan
-  // altyapisina (tamamlananAlanlar) idari-sinir-id'siyle ekler/degistirir ve
-  // haritayi o bolgeye ucurur. Filtreler degisince zaten yukaridaki efekt bu
-  // girdiyi de yeniden sorgular (noktalar uzerinden calisiyor).
+  // Ilce/mahalle secimi degisince aktif idari sinir geometrisini getirir,
+  // mevcut alan altyapisina (tamamlananAlanlar) idari-sinir-id'siyle ekler/
+  // degistirir ve haritayi o bolgeye ucurur. Aktif sinir: bir mahalle secildiyse
+  // mahalle (daha ince), yoksa ilce, yoksa hicbiri. Filtreler degisince zaten
+  // yukaridaki efekt bu girdiyi de yeniden sorgular (noktalar uzerinden).
   useEffect(() => {
-    if (!ilceKodu) {
+    if (!ilceKodu && !mahalleKodu) {
       setTamamlananAlanlar((a) => a.filter((alan) => alan.id !== IDARI_ALAN_ID));
       setIdariSinirKutusu(null);
       return;
@@ -304,7 +315,9 @@ export default function App() {
 
     (async () => {
       try {
-        const sinir = await ilceSiniri(ilceKodu);
+        const sinir = mahalleKodu
+          ? await mahalleSiniri(mahalleKodu)
+          : await ilceSiniri(ilceKodu!);
         if (iptal) return;
         const sonuc = await assetsWithin({
           polygon: halkalarGeometrisi(sinir.noktalar),
@@ -333,7 +346,7 @@ export default function App() {
       iptal = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ilceKodu]);
+  }, [ilceKodu, mahalleKodu]);
 
   const olcumBaslat = () => {
     if (cizimModu) alanSecimiIptal();
@@ -579,7 +592,9 @@ export default function App() {
                 onSec={varlikSecildi}
                 onDuzenle={setDuzenlenen}
                 ilceKodu={ilceKodu}
-                onIlceSec={setIlceKodu}
+                onIlceSec={ilceSec}
+                mahalleKodu={mahalleKodu}
+                onMahalleSec={setMahalleKodu}
                 idariHatasi={idariHatasi}
               />
             )}
