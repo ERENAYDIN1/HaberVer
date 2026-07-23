@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..crud import asset as crud
 from ..database import get_db
 from ..models.asset import AssetSource, AssetStatus, AssetType
+from ..models.user import User
 from ..schemas.asset import (
     AssetCreate,
     AssetFeature,
@@ -22,10 +23,11 @@ router = APIRouter(prefix="/api/assets", tags=["assets"])
     "",
     response_model=AssetFeature,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(personel)],
 )
-def create_asset(data: AssetCreate, db: Session = Depends(get_db)):
-    row = crud.create_asset(db, data)
+def create_asset(
+    data: AssetCreate, user: User = Depends(personel), db: Session = Depends(get_db)
+):
+    row = crud.create_asset(db, data, actor=user)
     return AssetFeature.from_row(row)
 
 
@@ -67,35 +69,34 @@ def get_asset(asset_id: uuid.UUID, db: Session = Depends(get_db)):
     return AssetFeature.from_row(row)
 
 
-@router.put(
-    "/{asset_id}", response_model=AssetFeature, dependencies=[Depends(personel)]
-)
+@router.put("/{asset_id}", response_model=AssetFeature)
 def update_asset(
-    asset_id: uuid.UUID, data: AssetUpdate, db: Session = Depends(get_db)
+    asset_id: uuid.UUID,
+    data: AssetUpdate,
+    user: User = Depends(personel),
+    db: Session = Depends(get_db),
 ):
-    row = crud.update_asset(db, asset_id, data)
+    row = crud.update_asset(db, asset_id, data, actor=user)
     if row is None:
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")
     return AssetFeature.from_row(row)
 
 
-@router.post(
-    "/{asset_id}/onar",
-    response_model=AssetFeature,
-    dependencies=[Depends(saha_dahil)],
-)
-def repair_asset(asset_id: uuid.UUID, db: Session = Depends(get_db)):
+@router.post("/{asset_id}/onar", response_model=AssetFeature)
+def repair_asset(
+    asset_id: uuid.UUID, user: User = Depends(saha_dahil), db: Session = Depends(get_db)
+):
     """Varligi 'Tamir Edildi' olarak isaretler (durumu 'iyi'ye ceker); saha
     calisaninin tam varlik duzenleme yetkisi olmadan kullanabilecegi tek islem."""
-    row = crud.update_asset(db, asset_id, AssetUpdate(status=AssetStatus.iyi))
+    row = crud.update_asset(db, asset_id, AssetUpdate(status=AssetStatus.iyi), actor=user)
     if row is None:
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")
     return AssetFeature.from_row(row)
 
 
-@router.delete(
-    "/{asset_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(personel)]
-)
-def delete_asset(asset_id: uuid.UUID, db: Session = Depends(get_db)):
-    if not crud.delete_asset(db, asset_id):
+@router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_asset(
+    asset_id: uuid.UUID, user: User = Depends(personel), db: Session = Depends(get_db)
+):
+    if not crud.delete_asset(db, asset_id, actor=user):
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")

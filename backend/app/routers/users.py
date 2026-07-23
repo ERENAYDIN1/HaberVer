@@ -21,7 +21,7 @@ def list_users(
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(
     data: UserCreate,
-    _: User = Depends(require_role(UserRole.admin)),
+    admin_user: User = Depends(require_role(UserRole.admin)),
     db: Session = Depends(get_db),
 ):
     """Admin, personel (calisan) veya baska bir admin hesabi olusturur."""
@@ -33,5 +33,6 @@ def create_user(
         password=data.password,
         role=data.role,
         full_name=data.full_name,
+        actor=admin_user,
     )
     return UserOut.model_validate(user)

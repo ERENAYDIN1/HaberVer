@@ -150,3 +150,39 @@ export function IconInbox({ className }: IconProps) {
     </svg>
   );
 }
+
+export function IconPlus({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} strokeWidth={2} className={className}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+export function IconChartBar({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} className={className}>
+      <path d="M4 20V11M10 20V6M16 20v-9" />
+      <path d="M3 20h18" />
+    </svg>
+  );
+}
+
+export function IconHistory({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} className={className}>
+      <path d="M3 12a9 9 0 1 0 2.6-6.3" />
+      <path d="M3 4v4.5h4.5" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
+
+export function IconBox({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} className={className}>
+      <path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5v-9z" />
+      <path d="M3.5 7.5 12 12l8.5-4.5M12 12v9" />
+    </svg>
+  );
+}

@@ -19,6 +19,7 @@ import {
   poligonAlaniM2,
   poligonMerkezi,
 } from "../utils/geo";
+import { haritayaKapaliAttributionEkle } from "../utils/haritaAttribution";
 import {
   ISTANBUL_IL_KODU,
   ISTANBUL_MERKEZI,
@@ -627,11 +628,13 @@ export default function MapView({
       center: ISTANBUL_MERKEZI,
       zoom: 11,
       maxBounds: ISTANBUL_SINIRLARI,
+      attributionControl: false,
     });
     mapRef.current = map;
 
     map.addControl(new maplibregl.NavigationControl(), "bottom-right");
     map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+    haritayaKapaliAttributionEkle(map);
 
     map.on("load", () => kaynaklariHazirla(map));
 
@@ -787,7 +790,9 @@ function popupIcerigi(asset: AssetFeature): string {
         </span>
         <span style="
           display:inline-block; padding:2px 8px; border-radius:9999px;
-          font-size:11px; font-weight:500; background:#f1f5f9; color:#475569">
+          font-size:11px; font-weight:500;
+          background:${source === "ihbar" ? "#fef3c7" : "#d1fae5"};
+          color:${source === "ihbar" ? "#92400e" : "#065f46"}">
           ${ASSET_SOURCE_LABELS[source]}
         </span>
       </div>

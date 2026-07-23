@@ -9,15 +9,22 @@ import AssetList from "./components/AssetList";
 import CizimPaneli from "./components/CizimPaneli";
 import Dashboard from "./components/Dashboard";
 import {
+  IconChartBar,
   IconChevronLeft,
   IconChevronRight,
+  IconHistory,
+  IconInbox,
   IconLasso,
   IconLogout,
+  IconPin,
+  IconPlus,
   IconRuler,
   IconTree,
+  IconUsers,
 } from "./components/icons";
 import IhbarPaneli from "./components/IhbarPaneli";
 import KonumArama from "./components/KonumArama";
+import LogPaneli from "./components/LogPaneli";
 import MapStilKontrolu from "./components/MapStilKontrolu";
 import MapView, { type UcusHedefi } from "./components/MapView";
 import Modal from "./components/Modal";
@@ -62,7 +69,21 @@ function halkalarGeometrisi(
   };
 }
 
-type Sekme = "liste" | "ekle" | "ozet" | "ihbarlar" | "personel";
+type Sekme = "liste" | "ekle" | "ozet" | "ihbarlar" | "personel" | "log";
+
+/** Her sekmenin kendi ikonu ve rengi var, boyle sekmeler tek bakista
+ *  birbirinden ayirt edilebiliyor (hepsi ayni emerald tonuydu). */
+const SEKME_TANIMLARI: Record<
+  Sekme,
+  { etiket: string; ikon: (p: { className?: string }) => React.ReactElement; renk: string }
+> = {
+  liste: { etiket: "Varlıklar", ikon: IconPin, renk: "emerald" },
+  ekle: { etiket: "Ekle", ikon: IconPlus, renk: "blue" },
+  ozet: { etiket: "Özet", ikon: IconChartBar, renk: "violet" },
+  ihbarlar: { etiket: "İhbarlar", ikon: IconInbox, renk: "amber" },
+  personel: { etiket: "Personel", ikon: IconUsers, renk: "indigo" },
+  log: { etiket: "Geçmiş", ikon: IconHistory, renk: "slate" },
+};
 
 export default function App() {
   const { user, cikisYap } = useAuth();
@@ -77,6 +98,10 @@ export default function App() {
     { longitude: number; latitude: number } | undefined
   >();
   const [panelAcik, setPanelAcik] = useState(true);
+  const [panelGenislik, setPanelGenislik] = useState(360);
+  const boyutlandirmaRef = useRef<{ baslangicX: number; baslangicGenislik: number } | null>(
+    null
+  );
   const [aktifStilId, setAktifStilId] = useState<HaritaStilId>(VARSAYILAN_STIL);
 
   // --- Alan (poligon) secimi - birden fazla alan ayni anda acik kalabilir ---
@@ -306,6 +331,30 @@ export default function App() {
     setOlcumNoktalari([]);
   };
 
+  // --- Sol paneli sag kenarindan surukleyerek genisletme/daraltma ---
+  const PANEL_MIN_GENISLIK = 280;
+  const PANEL_MAKS_GENISLIK = 640;
+
+  const panelBoyutlandirmaSurukle = (e: MouseEvent) => {
+    const baslangic = boyutlandirmaRef.current;
+    if (!baslangic) return;
+    const yeni = baslangic.baslangicGenislik + (e.clientX - baslangic.baslangicX);
+    setPanelGenislik(Math.min(PANEL_MAKS_GENISLIK, Math.max(PANEL_MIN_GENISLIK, yeni)));
+  };
+
+  const panelBoyutlandirmaBitir = () => {
+    boyutlandirmaRef.current = null;
+    window.removeEventListener("mousemove", panelBoyutlandirmaSurukle);
+    window.removeEventListener("mouseup", panelBoyutlandirmaBitir);
+  };
+
+  const panelBoyutlandirmaBaslat = (e: React.MouseEvent) => {
+    e.preventDefault();
+    boyutlandirmaRef.current = { baslangicX: e.clientX, baslangicGenislik: panelGenislik };
+    window.addEventListener("mousemove", panelBoyutlandirmaSurukle);
+    window.addEventListener("mouseup", panelBoyutlandirmaBitir);
+  };
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100">
       {/* Ust bar (uygulama header'i) */}
@@ -344,7 +393,7 @@ export default function App() {
             className={`flex items-center gap-1.5 border px-3 py-1.5 text-sm font-medium transition ${
               olcumModu || olcumNoktalari.length >= 2
                 ? "border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
-                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                : "border-blue-200 bg-blue-50 text-blue-800 hover:border-blue-300 hover:bg-blue-100"
             }`}
           >
             <IconRuler
@@ -365,7 +414,7 @@ export default function App() {
             className={`flex items-center gap-1.5 border px-3 py-1.5 text-sm font-medium transition ${
               cizimModu || tamamlananAlanlar.length > 0
                 ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
-                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-300 hover:bg-emerald-100"
             }`}
           >
             <IconLasso
@@ -428,31 +477,30 @@ export default function App() {
       {/* Govde: docked sidebar + harita */}
       <div className="flex min-h-0 flex-1">
         {panelAcik && (
-          <aside className="flex w-[360px] shrink-0 flex-col border-r border-slate-300 bg-white">
+          <aside
+            className="relative flex shrink-0 flex-col border-r border-slate-300 bg-white"
+            style={{ width: panelGenislik }}
+          >
             <div className="flex items-stretch border-b border-slate-300 bg-slate-50">
               {(
                 [
-                  { id: "liste", etiket: "Varlıklar" },
+                  "liste",
                   // Saha calisani tam CRUD/onay yetkisine sahip degil; sadece
                   // varliklari gorup "Tamir Edildi" isaretleyebilir.
                   ...(user?.role !== "saha_calisani"
-                    ? [
-                        { id: "ekle", etiket: "Ekle" },
-                        { id: "ozet", etiket: "Özet" },
-                        { id: "ihbarlar", etiket: "İhbarlar" },
-                      ]
+                    ? (["ekle", "ozet", "ihbarlar", "log"] as const)
                     : []),
-                  ...(user?.role === "admin"
-                    ? [{ id: "personel", etiket: "Personel" }]
-                    : []),
-                ] as { id: Sekme; etiket: string }[]
-              ).map((s) => (
+                  ...(user?.role === "admin" ? (["personel"] as const) : []),
+                ] as Sekme[]
+              ).map((id) => (
                 <SekmeButonu
-                  key={s.id}
-                  aktif={sekme === s.id}
-                  onClick={() => setSekme(s.id)}
+                  key={id}
+                  aktif={sekme === id}
+                  renk={SEKME_TANIMLARI[id].renk}
+                  ikon={SEKME_TANIMLARI[id].ikon}
+                  onClick={() => setSekme(id)}
                 >
-                  {s.etiket}
+                  {SEKME_TANIMLARI[id].etiket}
                 </SekmeButonu>
               ))}
               <button
@@ -508,6 +556,15 @@ export default function App() {
             )}
 
             {sekme === "personel" && user?.role === "admin" && <PersonelYonetimi />}
+
+            {sekme === "log" && <LogPaneli />}
+
+            {/* Sag kenardan surukleyerek paneli genislet/daralt */}
+            <div
+              onMouseDown={panelBoyutlandirmaBaslat}
+              title="Sürükleyerek genişlet/daralt"
+              className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize select-none hover:bg-emerald-400/40 active:bg-emerald-500/50"
+            />
           </aside>
         )}
 
@@ -562,24 +619,69 @@ export default function App() {
   );
 }
 
+/** Sekme renklerine gore tam Tailwind sinif adlari - Tailwind'in JIT
+ *  taramasi dinamik `border-${renk}-600` gibi sablon dizgilerini
+ *  yakalayamadigindan siniflar burada tam metin olarak tutulur. */
+const SEKME_RENK_SINIFLARI: Record<
+  string,
+  { aktif: string; ikonAktif: string; ikonPasif: string }
+> = {
+  emerald: {
+    aktif: "border-emerald-600 bg-emerald-50/60 text-emerald-900",
+    ikonAktif: "text-emerald-600",
+    ikonPasif: "text-emerald-400",
+  },
+  blue: {
+    aktif: "border-blue-600 bg-blue-50/60 text-blue-900",
+    ikonAktif: "text-blue-600",
+    ikonPasif: "text-blue-400",
+  },
+  violet: {
+    aktif: "border-violet-600 bg-violet-50/60 text-violet-900",
+    ikonAktif: "text-violet-600",
+    ikonPasif: "text-violet-400",
+  },
+  amber: {
+    aktif: "border-amber-600 bg-amber-50/60 text-amber-900",
+    ikonAktif: "text-amber-600",
+    ikonPasif: "text-amber-400",
+  },
+  indigo: {
+    aktif: "border-indigo-600 bg-indigo-50/60 text-indigo-900",
+    ikonAktif: "text-indigo-600",
+    ikonPasif: "text-indigo-400",
+  },
+  slate: {
+    aktif: "border-slate-600 bg-slate-100/60 text-slate-900",
+    ikonAktif: "text-slate-600",
+    ikonPasif: "text-slate-400",
+  },
+};
+
 function SekmeButonu({
   aktif,
+  renk,
+  ikon: Ikon,
   onClick,
   children,
 }: {
   aktif: boolean;
+  renk: string;
+  ikon: (p: { className?: string }) => React.ReactElement;
   onClick: () => void;
   children: React.ReactNode;
 }) {
+  const renkSinif = SEKME_RENK_SINIFLARI[renk];
   return (
     <button
       onClick={onClick}
-      className={`flex-1 whitespace-nowrap border-b-2 px-2 py-2.5 text-[13px] font-medium transition ${
+      className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap border-b-2 px-2 py-2.5 text-[13px] font-medium transition ${
         aktif
-          ? "border-emerald-600 bg-white text-slate-900"
+          ? renkSinif.aktif
           : "border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700"
       }`}
     >
+      <Ikon className={`h-3.5 w-3.5 ${aktif ? renkSinif.ikonAktif : renkSinif.ikonPasif}`} />
       {children}
     </button>
   );

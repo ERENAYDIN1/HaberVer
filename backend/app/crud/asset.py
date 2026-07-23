@@ -3,9 +3,11 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import Asset
+from ..models import Asset, User
 from ..models.asset import AssetSource, AssetStatus, AssetType
+from ..models.log import LogAction
 from ..schemas.asset import AssetCreate, AssetUpdate
+from .log import add_log
 
 
 def _select_with_coords():
@@ -68,7 +70,7 @@ def get_asset(db: Session, asset_id: uuid.UUID):
     return db.execute(stmt).first()
 
 
-def create_asset(db: Session, data: AssetCreate):
+def create_asset(db: Session, data: AssetCreate, actor: User | None = None):
     asset = Asset(
         name=data.name,
         type=data.type,
@@ -80,11 +82,23 @@ def create_asset(db: Session, data: AssetCreate):
         photo_url=data.photo_url,
     )
     db.add(asset)
+    db.flush()  # id'yi almak icin (server_default gen_random_uuid())
+
+    add_log(
+        db,
+        action=LogAction.asset_created,
+        actor=actor,
+        entity_type="asset",
+        entity_id=asset.id,
+        entity_name=asset.name,
+    )
     db.commit()
     return get_asset(db, asset.id)
 
 
-def update_asset(db: Session, asset_id: uuid.UUID, data: AssetUpdate):
+def update_asset(
+    db: Session, asset_id: uuid.UUID, data: AssetUpdate, actor: User | None = None
+):
     asset = db.get(Asset, asset_id)
     if asset is None:
         return None
@@ -92,22 +106,54 @@ def update_asset(db: Session, asset_id: uuid.UUID, data: AssetUpdate):
     payload = data.model_dump(exclude_unset=True)
     longitude = payload.pop("longitude", None)
     latitude = payload.pop("latitude", None)
+    eski_durum = asset.status
 
     for field, value in payload.items():
         setattr(asset, field, value)
 
     # Sema dogrulamasi ikisinin birlikte gelmesini garanti eder.
-    if longitude is not None and latitude is not None:
+    koordinat_degisti = longitude is not None and latitude is not None
+    if koordinat_degisti:
         asset.geometry = _point(longitude, latitude)
+
+    if payload or koordinat_degisti:
+        if "status" in payload and payload["status"] != eski_durum:
+            add_log(
+                db,
+                action=LogAction.asset_status_changed,
+                actor=actor,
+                entity_type="asset",
+                entity_id=asset.id,
+                entity_name=asset.name,
+                detail=f"{eski_durum.value} → {asset.status.value}",
+            )
+        else:
+            add_log(
+                db,
+                action=LogAction.asset_updated,
+                actor=actor,
+                entity_type="asset",
+                entity_id=asset.id,
+                entity_name=asset.name,
+            )
 
     db.commit()
     return get_asset(db, asset_id)
 
 
-def delete_asset(db: Session, asset_id: uuid.UUID) -> bool:
+def delete_asset(db: Session, asset_id: uuid.UUID, actor: User | None = None) -> bool:
     asset = db.get(Asset, asset_id)
     if asset is None:
         return False
+
+    add_log(
+        db,
+        action=LogAction.asset_deleted,
+        actor=actor,
+        entity_type="asset",
+        entity_id=asset.id,
+        entity_name=asset.name,
+    )
     db.delete(asset)
     db.commit()
     return True

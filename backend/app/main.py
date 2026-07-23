@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .routers import assets, auth, reports, sinirlar, users
+from .routers import assets, auth, logs, reports, sinirlar, users
 
 app = FastAPI(title="GreenAsset API", version="0.1.0")
 
@@ -22,6 +22,7 @@ app.include_router(users.router)
 app.include_router(assets.router)
 app.include_router(reports.router)
 app.include_router(sinirlar.router)
+app.include_router(logs.router)
 
 # Yuklenen ihbar fotograflari icin statik servis. Dizin yoksa olusturulur.
 _media_dir = Path(settings.media_dir)

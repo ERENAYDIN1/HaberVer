@@ -3,8 +3,10 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..models.log import LogAction
 from ..models.user import User, UserRole
 from ..security import hash_password
+from .log import add_log
 
 
 def get_by_email(db: Session, email: str) -> User | None:
@@ -25,7 +27,10 @@ def create_user(
     password: str,
     role: UserRole,
     full_name: str | None = None,
+    actor: User | None = None,
 ) -> User:
+    """actor verildiginde (admin panelinden personel/admin hesabi acilirken) bir
+    log kaydi olusur; vatandas oz-kaydinda actor None kalir, loglanmaz."""
     user = User(
         email=email.lower(),
         hashed_password=hash_password(password),
@@ -33,6 +38,19 @@ def create_user(
         role=role,
     )
     db.add(user)
+    db.flush()  # id'yi almak icin
+
+    if actor is not None:
+        add_log(
+            db,
+            action=LogAction.user_created,
+            actor=actor,
+            entity_type="user",
+            entity_id=user.id,
+            entity_name=user.email,
+            detail=role.value,
+        )
+
     db.commit()
     db.refresh(user)
     return user

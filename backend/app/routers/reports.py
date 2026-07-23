@@ -104,7 +104,7 @@ def approve(
     report = row[0]
     if report.status != ReportStatus.beklemede:
         raise HTTPException(status_code=409, detail="Ihbar zaten sonuclandirilmis")
-    return ReportFeature.from_row(crud.approve_report(db, report, user.id))
+    return ReportFeature.from_row(crud.approve_report(db, report, user))
 
 
 @router.post("/{report_id}/reddet", response_model=ReportFeature)
@@ -121,5 +121,5 @@ def reject(
     if report.status != ReportStatus.beklemede:
         raise HTTPException(status_code=409, detail="Ihbar zaten sonuclandirilmis")
     return ReportFeature.from_row(
-        crud.reject_report(db, report, user.id, data.review_note)
+        crud.reject_report(db, report, user, data.review_note)
     )

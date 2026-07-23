@@ -5,7 +5,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models.asset import Asset, AssetSource, AssetStatus
+from ..models.log import LogAction
 from ..models.report import Report, ReportStatus
+from ..models.user import User
+from .log import add_log
 
 
 def _select_with_coords():
@@ -62,7 +65,7 @@ def create_report(
     return get(db, report.id)
 
 
-def approve_report(db: Session, report: Report, reviewer_id: uuid.UUID):
+def approve_report(db: Session, report: Report, reviewer: User):
     """Ihbari onaylar: 'Bakim Lazim' durumunda yeni bir Asset olusturur ve
     ihbari 'onaylandi' olarak isaretleyip olusan varliga baglar."""
     asset = Asset(
@@ -77,9 +80,27 @@ def approve_report(db: Session, report: Report, reviewer_id: uuid.UUID):
     db.flush()  # asset.id'yi almak icin
 
     report.status = ReportStatus.onaylandi
-    report.reviewed_by = reviewer_id
+    report.reviewed_by = reviewer.id
     report.reviewed_at = datetime.now(timezone.utc)
     report.created_asset_id = asset.id
+
+    add_log(
+        db,
+        action=LogAction.report_approved,
+        actor=reviewer,
+        entity_type="report",
+        entity_id=report.id,
+        entity_name=report.name,
+    )
+    add_log(
+        db,
+        action=LogAction.asset_created,
+        actor=reviewer,
+        entity_type="asset",
+        entity_id=asset.id,
+        entity_name=asset.name,
+        detail="İhbardan oluşturuldu",
+    )
     db.commit()
     return get(db, report.id)
 
@@ -87,12 +108,22 @@ def approve_report(db: Session, report: Report, reviewer_id: uuid.UUID):
 def reject_report(
     db: Session,
     report: Report,
-    reviewer_id: uuid.UUID,
+    reviewer: User,
     review_note: str | None = None,
 ):
     report.status = ReportStatus.reddedildi
-    report.reviewed_by = reviewer_id
+    report.reviewed_by = reviewer.id
     report.reviewed_at = datetime.now(timezone.utc)
     report.review_note = review_note
+
+    add_log(
+        db,
+        action=LogAction.report_rejected,
+        actor=reviewer,
+        entity_type="report",
+        entity_id=report.id,
+        entity_name=report.name,
+        detail=review_note,
+    )
     db.commit()
     return get(db, report.id)

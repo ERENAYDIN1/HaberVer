@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import type { TamamlananAlan } from "../types/alan";
 import { alanEtiketi, cokHalkaliAlanM2, mesafeEtiketi } from "../utils/geo";
+import { IconLasso, IconRuler } from "./icons";
 
 const RENK_PALETI = [
   "#059669",
@@ -70,7 +71,13 @@ export default function CizimPaneli({
       <div className="pointer-events-auto flex w-full max-w-sm flex-col gap-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur-sm">
         {cizimModu && (
           <div>
-            <p className="mb-2 text-xs text-slate-600">
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                <IconLasso className="h-3 w-3" />
+              </span>
+              Alan Seçimi
+            </div>
+            <p className="mb-2 rounded-lg bg-emerald-50/70 px-2.5 py-1.5 text-xs text-slate-600">
               Haritada köşe noktalarına tıklayarak bir alan çiz.
               <span className="mt-1 block text-sm font-medium text-slate-800">
                 {cizimNoktalari.length} nokta
@@ -107,6 +114,12 @@ export default function CizimPaneli({
 
         {alanBitti && (
           <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                <IconLasso className="h-3 w-3" />
+              </span>
+              Seçili Alanlar
+            </div>
             <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto pr-0.5">
               {tamamlananAlanlar.map((alan, i) => (
                 <div
@@ -149,7 +162,13 @@ export default function CizimPaneli({
 
         {olcumModu && (
           <div>
-            <p className="mb-1 text-xs text-slate-600">
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                <IconRuler className="h-3 w-3" />
+              </span>
+              Mesafe Ölçümü
+            </div>
+            <p className="mb-1 rounded-lg bg-blue-50/70 px-2.5 py-1.5 text-xs text-slate-600">
               Haritada tıklayarak bir çizgi boyunca mesafe ölç.
               <span className="mt-1 block text-sm font-medium text-slate-800">
                 {olcumNoktalari.length} nokta
@@ -175,8 +194,11 @@ export default function CizimPaneli({
         )}
 
         {olcumBitti && (
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-slate-700">
+          <div className="flex items-center justify-between gap-3 rounded-lg bg-blue-50/70 px-2.5 py-1.5">
+            <span className="flex items-center gap-1.5 text-sm text-slate-700">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                <IconRuler className="h-3 w-3" />
+              </span>
               Toplam mesafe:{" "}
               <span className="font-semibold">{mesafeEtiketi(olcumMesafeM)}</span>
             </span>

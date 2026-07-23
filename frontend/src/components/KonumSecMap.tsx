@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { ilSiniri } from "../api/sinirlar";
 import { HARITA_STILLERI, VARSAYILAN_STIL } from "../data/mapStyles";
+import { haritayaKapaliAttributionEkle } from "../utils/haritaAttribution";
 import {
   ISTANBUL_IL_KODU,
   ISTANBUL_MERKEZI,
@@ -41,9 +42,11 @@ export default function KonumSecMap({ secili, onSec, ucus }: KonumSecMapProps) {
       center: ISTANBUL_MERKEZI,
       zoom: 11,
       maxBounds: ISTANBUL_SINIRLARI,
+      attributionControl: false,
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), "bottom-right");
+    haritayaKapaliAttributionEkle(map);
 
     // Istanbul il sinirini getirip maske katmanini doldurur - bkz.
     // utils/istanbulMaskesi.ts. Harita yuklenmesi ile sinir istegi

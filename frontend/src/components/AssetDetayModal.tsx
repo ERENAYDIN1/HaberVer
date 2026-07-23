@@ -51,7 +51,13 @@ export default function AssetDetayModal({ asset, onKapat }: AssetDetayModalProps
             />
             {ASSET_STATUS_LABELS[p.status]}
           </span>
-          <span className="inline-flex items-center border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
+          <span
+            className={`inline-flex items-center border px-1.5 py-0.5 text-[11px] font-medium ${
+              p.source === "ihbar"
+                ? "border-amber-300 bg-amber-50 text-amber-800"
+                : "border-emerald-300 bg-emerald-50 text-emerald-800"
+            }`}
+          >
             {ASSET_SOURCE_LABELS[p.source]}
           </span>
         </div>

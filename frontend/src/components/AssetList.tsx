@@ -18,12 +18,47 @@ import type {
   AssetFilters,
 } from "../types/asset";
 import AssetDetayModal from "./AssetDetayModal";
-import { IconBench, IconInbox, IconLamp, IconPin, IconTree, IconX } from "./icons";
+import {
+  IconBench,
+  IconBox,
+  IconInbox,
+  IconLamp,
+  IconPin,
+  IconTree,
+  IconX,
+} from "./icons";
 
 const TIP_IKONU: Record<string, (props: { className?: string }) => ReactElement> = {
   agac: IconTree,
   bank: IconBench,
   direk: IconLamp,
+};
+
+/** Tip basina rozet rengi - liste ve haritada varlik turleri tek bakista
+ *  ayirt edilebilsin diye (onceden hepsi ayni gri tondaydi). */
+const TIP_RENGI: Record<string, string> = {
+  agac: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  bank: "border-amber-200 bg-amber-50 text-amber-700",
+  direk: "border-sky-200 bg-sky-50 text-sky-700",
+};
+
+/** Kaynak (kayitli/ihbar) sekmesine gore ikon + renk siniflari. */
+const KAYNAK_IKONU: Record<string, (props: { className?: string }) => ReactElement> = {
+  kayitli: IconBox,
+  ihbar: IconInbox,
+};
+
+const KAYNAK_RENGI: Record<string, { aktif: string; ikonAktif: string; ikonPasif: string }> = {
+  kayitli: {
+    aktif: "border-emerald-600 bg-emerald-50 text-emerald-900",
+    ikonAktif: "text-emerald-600",
+    ikonPasif: "text-emerald-400",
+  },
+  ihbar: {
+    aktif: "border-amber-600 bg-amber-50 text-amber-900",
+    ikonAktif: "text-amber-600",
+    ikonPasif: "text-amber-400",
+  },
 };
 
 const selectClass =
@@ -91,20 +126,27 @@ export default function AssetList({
       {/* Kayitli varliklar / ihbardan gelenler - birbirine karismasin diye
           ayri sekmeler, ayni anda sadece biri gorunur. */}
       <div className="flex border-b border-slate-300 bg-slate-50">
-        {ASSET_SOURCES.map((s) => (
-          <button
-            key={s}
-            onClick={() => onFiltersChange({ ...filters, source: s })}
-            className={`flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition ${
-              aktifKaynak === s
-                ? "border-emerald-600 bg-white text-slate-900"
-                : "border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-            }`}
-          >
-            {s === "ihbar" && <IconInbox className="h-3.5 w-3.5" />}
-            {ASSET_SOURCE_LABELS[s]}
-          </button>
-        ))}
+        {ASSET_SOURCES.map((s) => {
+          const KaynakIkonu = KAYNAK_IKONU[s];
+          const renk = KAYNAK_RENGI[s];
+          const aktif = aktifKaynak === s;
+          return (
+            <button
+              key={s}
+              onClick={() => onFiltersChange({ ...filters, source: s })}
+              className={`flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition ${
+                aktif
+                  ? renk.aktif
+                  : "border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+              }`}
+            >
+              <KaynakIkonu
+                className={`h-3.5 w-3.5 ${aktif ? renk.ikonAktif : renk.ikonPasif}`}
+              />
+              {ASSET_SOURCE_LABELS[s]}
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex gap-2 border-b border-slate-200 px-4 py-3">
@@ -249,7 +291,11 @@ export default function AssetList({
                         className="h-6 w-6 shrink-0 border border-slate-200 object-cover"
                       />
                     ) : (
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center border border-slate-200 bg-slate-50 text-slate-500">
+                      <span
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center border ${
+                          TIP_RENGI[type] ?? "border-slate-200 bg-slate-50 text-slate-500"
+                        }`}
+                      >
                         <TipIkonu className="h-3.5 w-3.5" />
                       </span>
                     )}
