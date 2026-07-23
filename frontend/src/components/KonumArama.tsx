@@ -114,7 +114,7 @@ export default function KonumArama({
   return (
     <div ref={kutuRef} className="relative w-64">
       <div className="flex items-center border border-slate-300 bg-white px-2.5 focus-within:border-emerald-500">
-        <IconSearch className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <IconSearch className="h-3.5 w-3.5 shrink-0 text-sky-500" />
         <input
           value={sorgu}
           onChange={(e) => setSorgu(e.target.value)}

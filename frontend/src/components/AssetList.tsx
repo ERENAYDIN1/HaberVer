@@ -178,8 +178,17 @@ export default function AssetList({
       )}
 
       {data && (
-        <div className="border-b border-slate-100 bg-slate-50 px-4 py-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
-          {data.features.length} varlık
+        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+          <span>{data.features.length} varlık</span>
+          {seciliId && (
+            <button
+              onClick={() => onSec(seciliId)}
+              className="flex items-center gap-1 normal-case text-slate-500 hover:text-red-600"
+            >
+              <IconX className="h-3 w-3" />
+              Seçimi temizle
+            </button>
+          )}
         </div>
       )}
 

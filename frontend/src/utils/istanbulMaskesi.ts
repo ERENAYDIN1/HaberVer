@@ -59,7 +59,7 @@ export function maskeKaynagiHazirla(map: maplibregl.Map) {
     id: MASKE_CIZGI_LAYER_ID,
     type: "line",
     source: MASKE_SOURCE_ID,
-    paint: { "line-color": "#059669", "line-width": 2, "line-opacity": 0.9 },
+    paint: { "line-color": "#059669", "line-width": 0.25, "line-opacity": 0.9 },
   });
 }
 

@@ -18,7 +18,7 @@ import {
 } from "./components/icons";
 import IhbarPaneli from "./components/IhbarPaneli";
 import KonumArama from "./components/KonumArama";
-import MapStyleSwitcher from "./components/MapStyleSwitcher";
+import MapStilKontrolu from "./components/MapStilKontrolu";
 import MapView, { type UcusHedefi } from "./components/MapView";
 import Modal from "./components/Modal";
 import PersonelYonetimi from "./components/PersonelYonetimi";
@@ -125,8 +125,13 @@ export default function App() {
 
   const haritaTiklandi = useCallback(
     (c: { longitude: number; latitude: number }) => {
+      // Bos alana tiklamak (bir varlik ustune degil) her zaman secimi
+      // temizler - kullanici secili varligi birakip haritayi sade halde
+      // gormek isteyebilir.
+      setSeciliId(null);
       // Saha calisaninin yeni varlik ekleme yetkisi yok; "Ekle" sekmesi de
-      // gizli, bu yuzden bos alana tiklamasi bir seyi degistirmemeli.
+      // gizli, bu yuzden bos alana tiklamasi bunun disinda bir seyi
+      // degistirmemeli.
       if (user?.role === "saha_calisani") return;
       setKoordinat(c);
       setSekme("ekle");
@@ -135,8 +140,10 @@ export default function App() {
     [user?.role]
   );
 
+  // Hem listeden hem haritadan cagrilir; zaten secili olan bir varliga
+  // tekrar tiklamak secimi iptal eder (toggle).
   const varlikSecildi = useCallback((id: string) => {
-    setSeciliId(id);
+    setSeciliId((mevcut) => (mevcut === id ? null : id));
     setSekme("liste");
     setPanelAcik(true);
   }, []);
@@ -331,8 +338,6 @@ export default function App() {
             }
           />
 
-          <MapStyleSwitcher aktifId={aktifStilId} onSec={setAktifStilId} />
-
           {/* Mesafe olcum kontrolu - detaylar alt ortadaki arac panelinde */}
           <button
             onClick={olcumModu ? olcumIptal : olcumBaslat}
@@ -342,7 +347,11 @@ export default function App() {
                 : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
             }`}
           >
-            <IconRuler className="h-3.5 w-3.5" />
+            <IconRuler
+              className={`h-3.5 w-3.5 ${
+                olcumModu || olcumNoktalari.length >= 2 ? "" : "text-blue-500"
+              }`}
+            />
             {olcumModu
               ? "Ölçülüyor…"
               : olcumNoktalari.length >= 2
@@ -359,7 +368,11 @@ export default function App() {
                 : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
             }`}
           >
-            <IconLasso className="h-3.5 w-3.5" />
+            <IconLasso
+              className={`h-3.5 w-3.5 ${
+                cizimModu || tamamlananAlanlar.length > 0 ? "" : "text-emerald-500"
+              }`}
+            />
             {cizimModu
               ? "Çiziliyor…"
               : tamamlananAlanlar.length > 0
@@ -461,7 +474,7 @@ export default function App() {
                 filters={filters}
                 onFiltersChange={setFilters}
                 seciliId={seciliId}
-                onSec={setSeciliId}
+                onSec={varlikSecildi}
                 onDuzenle={setDuzenlenen}
                 ilceKodu={ilceKodu}
                 onIlceSec={setIlceKodu}
@@ -517,6 +530,8 @@ export default function App() {
             ucusHedefi={ucusHedefi}
             onGorunumDegisti={setHaritaGorunumu}
           />
+
+          <MapStilKontrolu aktifId={aktifStilId} onSec={setAktifStilId} />
 
           {!panelAcik && (
             <button

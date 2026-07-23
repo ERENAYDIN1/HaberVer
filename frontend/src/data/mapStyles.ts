@@ -9,7 +9,7 @@ function googleStili(lyrs: string): StyleSpecification {
     sources: {
       google: {
         type: "raster",
-        tiles: [`https://mt.google.com/vt/lyrs=${lyrs}&x={x}&y={y}&z={z}&scale=2`],
+        tiles: [`https://mt.google.com/vt/lyrs=${lyrs}&x={x}&y={y}&z={z}`],
         tileSize: 256,
         attribution: "© Google",
       },
@@ -20,7 +20,7 @@ function googleStili(lyrs: string): StyleSpecification {
 
 function googleOnizlemeUrl(lyrs: string): string {
   const { z, x, y } = ONIZLEME_TILE;
-  return `https://mt.google.com/vt/lyrs=${lyrs}&x=${x}&y=${y}&z=${z}&scale=2`;
+  return `https://mt.google.com/vt/lyrs=${lyrs}&x=${x}&y=${y}&z=${z}`;
 }
 
 export type HaritaStilId = "yol" | "melez" | "uydu" | "liberty" | "voyager";

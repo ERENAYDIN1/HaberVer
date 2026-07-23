@@ -755,7 +755,7 @@ export default function MapView({
     }
   }, [seciliId, assets]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return <div ref={containerRef} className="greenasset-harita h-full w-full" />;
 }
 
 function popupIcerigi(asset: AssetFeature): string {
