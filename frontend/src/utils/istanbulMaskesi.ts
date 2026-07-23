@@ -25,7 +25,7 @@ export const BOS_GEOJSON = {
 /** Genis (400km) gorunum alani icinde, Istanbul il sinirinin DISINDA kalan
  *  her yeri kaplayan bir "maske" poligonu uretir - buyuk bir dis dikdortgen +
  *  ic halka olarak il sinirinin tum parcalari (delik gibi davranir). Hem
- *  raster (Google Yol/Melez/Uydu) hem vektor (Liberty/Voyager) stillerde ayni
+ *  raster (Google Yol/Hibrit/Uydu, OSM) hem vektor (Liberty/Voyager) stillerde ayni
  *  yari saydam dolgu + Istanbul kenarini izleyen vurgu cizgisi kullanilir -
  *  altta yatan detay (yol, etiket, arazi) soluk da olsa gorunur kalir. */
 export function maskeGeometrisi(halkalar: [number, number][][]): GeoJSON.Polygon {

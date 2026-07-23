@@ -1,4 +1,9 @@
 import type { StyleSpecification } from "maplibre-gl";
+import hibritStilJson from "./hibritStil.json";
+
+/** Uydu raster goruntusu + Liberty'nin canli vektor etiketleri (OpenFreeMap).
+ *  Raster stillerin aksine etiketler haritayla birlikte donen, dinamik nesneler. */
+const hibritStili = hibritStilJson as unknown as StyleSpecification;
 
 /** Istanbul merkezine yakin, onizlemelerde kullanilan sabit bir tile (z/x/y). */
 const ONIZLEME_TILE = { z: 15, x: 19021, y: 12284 };
@@ -23,7 +28,28 @@ function googleOnizlemeUrl(lyrs: string): string {
   return `https://mt.google.com/vt/lyrs=${lyrs}&x=${x}&y=${y}&z=${z}`;
 }
 
-export type HaritaStilId = "yol" | "melez" | "uydu" | "liberty" | "voyager";
+/** Standart OpenStreetMap raster altligi (API anahtari gerektirmez). */
+function osmStili(): StyleSpecification {
+  return {
+    version: 8,
+    sources: {
+      osm: {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        attribution: "© OpenStreetMap katkida bulunanlar",
+      },
+    },
+    layers: [{ id: "osm", type: "raster", source: "osm" }],
+  };
+}
+
+function osmOnizlemeUrl(): string {
+  const { z, x, y } = ONIZLEME_TILE;
+  return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+}
+
+export type HaritaStilId = "hibrit" | "uydu" | "osm" | "liberty" | "voyager";
 
 export interface HaritaStilTanimi {
   id: HaritaStilId;
@@ -39,22 +65,22 @@ export interface HaritaStilTanimi {
 
 export const HARITA_STILLERI: HaritaStilTanimi[] = [
   {
-    id: "yol",
-    etiket: "Yol Haritası",
-    stil: googleStili("m"),
-    onizleme: { tip: "raster", url: googleOnizlemeUrl("m") },
-  },
-  {
-    id: "melez",
-    etiket: "Melez",
-    stil: googleStili("y"),
-    onizleme: { tip: "raster", url: googleOnizlemeUrl("y") },
+    id: "hibrit",
+    etiket: "Hibrit",
+    stil: hibritStili,
+    onizleme: { tip: "vektor" },
   },
   {
     id: "uydu",
     etiket: "Uydu",
     stil: googleStili("s"),
     onizleme: { tip: "raster", url: googleOnizlemeUrl("s") },
+  },
+  {
+    id: "osm",
+    etiket: "OpenStreetMap",
+    stil: osmStili(),
+    onizleme: { tip: "raster", url: osmOnizlemeUrl() },
   },
   {
     id: "liberty",
