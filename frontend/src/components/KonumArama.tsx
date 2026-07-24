@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { IconSearch, IconX } from "./icons";
+import { IconPin, IconSearch, IconX } from "./icons";
 
 interface NominatimSonuc {
   display_name: string;
@@ -112,45 +112,71 @@ export default function KonumArama({
   };
 
   return (
-    <div ref={kutuRef} className="relative w-64">
-      <div className="flex items-center border border-slate-300 bg-white px-2.5 focus-within:border-emerald-500">
-        <IconSearch className="h-3.5 w-3.5 shrink-0 text-sky-500" />
+    <div ref={kutuRef} className="relative w-72">
+      <div
+        className={`flex items-center gap-2 rounded-full border bg-white/95 pl-4 pr-2 shadow-sm backdrop-blur transition-all ${
+          aciklarKutu && (sonuclar.length > 0 || yukleniyor)
+            ? "rounded-b-none border-slate-200 shadow-md"
+            : "border-slate-200 hover:shadow-md focus-within:border-emerald-400 focus-within:shadow-md focus-within:ring-2 focus-within:ring-emerald-100"
+        }`}
+      >
+        <IconSearch className="h-4 w-4 shrink-0 text-slate-400" />
         <input
           value={sorgu}
           onChange={(e) => setSorgu(e.target.value)}
           onFocus={() => sonuclar.length > 0 && setAciklarKutu(true)}
-          placeholder="Konum ara (örn. Ayasofya)"
-          className="w-full border-none px-2 py-1.5 text-sm focus:outline-none"
+          placeholder="Haritada ara (örn. Ayasofya)"
+          className="w-full border-none bg-transparent py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
         />
-        {sorgu && (
+        {sorgu ? (
           <button
             onClick={() => {
               setSorgu("");
               setSonuclar([]);
             }}
             aria-label="Aramayı temizle"
-            className="shrink-0 text-slate-400 hover:text-red-600"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-red-500"
           >
-            <IconX className="h-3 w-3" />
+            <IconX className="h-3.5 w-3.5" />
           </button>
+        ) : (
+          <span className="h-7 w-7 shrink-0" aria-hidden />
         )}
       </div>
 
       {aciklarKutu && (sonuclar.length > 0 || yukleniyor) && (
-        <ul className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto border border-slate-300 bg-white shadow-lg">
+        <ul className="absolute left-0 right-0 top-full z-30 max-h-80 overflow-y-auto rounded-b-2xl border border-t-0 border-slate-200 bg-white py-1 shadow-xl">
           {yukleniyor && (
-            <li className="px-3 py-2 text-xs text-slate-400">Aranıyor…</li>
-          )}
-          {sonuclar.map((sonuc, i) => (
-            <li key={i}>
-              <button
-                onClick={() => sec(sonuc)}
-                className="block w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
-              >
-                {sonuc.display_name}
-              </button>
+            <li className="flex items-center gap-2 px-4 py-3 text-xs text-slate-400">
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-500" />
+              Aranıyor…
             </li>
-          ))}
+          )}
+          {sonuclar.map((sonuc, i) => {
+            const parcalar = sonuc.display_name.split(",");
+            const baslik = parcalar[0].trim();
+            const altBilgi = parcalar.slice(1).join(",").trim();
+            return (
+              <li key={i}>
+                <button
+                  onClick={() => sec(sonuc)}
+                  className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition hover:bg-emerald-50"
+                >
+                  <IconPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-slate-700">
+                      {baslik}
+                    </span>
+                    {altBilgi && (
+                      <span className="block truncate text-xs text-slate-400">
+                        {altBilgi}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

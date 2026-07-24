@@ -51,6 +51,61 @@ const BOS_GEOJSON = {
   features: [],
 } as unknown as GeoJSON.FeatureCollection;
 
+/** Varlik tipine gore isaretci rengi - liste rozetleriyle ayni palet
+ *  (agac=yesil, bank=amber, direk=mavi). Harita uzerinde tur tek bakista
+ *  ayirt edilsin diye kullanilir; bilinmeyen tip icin notr gri. */
+const TIP_RENGI_IFADESI = [
+  "match",
+  ["get", "type"],
+  "agac",
+  "#059669",
+  "bank",
+  "#d97706",
+  "direk",
+  "#0284c7",
+  "#64748b",
+] as unknown as maplibregl.ExpressionSpecification;
+
+/** Her tur icin beyaz cizgi glifi (marker dairesinin ortasina bindirilir).
+ *  Path'ler icons.tsx'teki IconTree/IconBench/IconLamp ile ayni. */
+const TIP_GLIFLERI: Record<string, string> = {
+  agac: '<path d="M12 3 6.5 11h2.7L5 18h6M12 3l5.5 8h-2.7L19 18h-6"/><path d="M12 14v7"/>',
+  bank: '<path d="M3 9h18M3 12h18M5 12v7M19 12v7M3 19h4M17 19h4"/>',
+  direk: '<path d="M12 2v3M8.5 5h7l-1.3 4.5h-4.4L8.5 5z"/><path d="M12 9.5V21M9 21h6"/>',
+};
+
+/** Bir turun beyaz glifini SVG->raster cevirip haritaya `tip-<tur>` adiyla ekler. */
+function tipIkonuYukle(map: maplibregl.Map, tur: string, ic: string): Promise<void> {
+  const id = `tip-${tur}`;
+  if (map.hasImage(id)) return Promise.resolve();
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48" height="48" ` +
+    `fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" ` +
+    `stroke-linejoin="round">${ic}</svg>`;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      if (!map.hasImage(id)) map.addImage(id, img, { pixelRatio: 2 });
+      resolve();
+    };
+    img.onerror = () => resolve();
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  });
+}
+
+/** Tum tur gliflerini haritaya yukler (stil degisiminde tekrar cagrilir). */
+function tipIkonlariniHazirla(map: maplibregl.Map): Promise<void> {
+  return Promise.all(
+    Object.entries(TIP_GLIFLERI).map(([tur, ic]) => tipIkonuYukle(map, tur, ic))
+  ).then(() => undefined);
+}
+
+const IKON_KATMAN_YERLESIMI: Record<string, unknown> = {
+  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.8],
+  "icon-allow-overlap": true,
+  "icon-ignore-placement": true,
+};
+
 /** Haritayi belirli bir bolgeye/noktaya ucurmak icin komut. `anahtar` her
  *  degistiginde yeniden tetiklenir (ayni hedefe tekrar ucmak istenirse bile
  *  benzersiz uretilmelidir, orn. crypto.randomUUID()). */
@@ -89,6 +144,9 @@ interface MapViewProps {
   aktifStilId: HaritaStilId;
   /** Verildiginde harita bu hedefe ucar (il/ilce secimi, arama sonucu vb.). */
   ucusHedefi?: UcusHedefi | null;
+  /** true ise varlik secilince haritada popup ACILMAZ (secim yerine sol-alttaki
+   *  zengin detay karti kullaniliyor). Secim halkasi + ucus yine calisir. */
+  varlikPopupKapali?: boolean;
   /** Harita her hareket ettiginde (pan/zoom) gorunen alanin sinirlarini bildirir;
    *  konum aramasini o an ekranda gorunen bolgeye onceliklendirmek icin kullanilir. */
   onGorunumDegisti?: (bounds: [[number, number], [number, number]]) => void;
@@ -113,6 +171,7 @@ export default function MapView({
   aktifStilId,
   ucusHedefi,
   onGorunumDegisti,
+  varlikPopupKapali,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -147,6 +206,7 @@ export default function MapView({
   const onIhbarSecRef = useRef(onIhbarSec);
   const cizimNoktalariRef = useRef(cizimNoktalari);
   const seciliIdRef = useRef(seciliId);
+  const varlikPopupKapaliRef = useRef(varlikPopupKapali);
   /** Cizim/olcum sirasinda son bilinen fare konumu (elastik cizgi icin). */
   const sonFareRef = useRef<[number, number] | null>(null);
   useEffect(() => {
@@ -166,6 +226,7 @@ export default function MapView({
     onIhbarSecRef.current = onIhbarSec;
     cizimNoktalariRef.current = cizimNoktalari;
     seciliIdRef.current = seciliId;
+    varlikPopupKapaliRef.current = varlikPopupKapali;
   });
 
   // Layer-scoped click/hover callback'leri sabit referans olarak tutulur ki
@@ -206,7 +267,9 @@ export default function MapView({
     }
 
     const katmanlar = ["assets-circle"];
+    if (map.getLayer("assets-icon")) katmanlar.push("assets-icon");
     if (map.getLayer("reports-circle")) katmanlar.push("reports-circle");
+    if (map.getLayer("reports-icon")) katmanlar.push("reports-icon");
     const uzerinde = map.queryRenderedFeatures(e.point, { layers: katmanlar });
     if (uzerinde.length === 0) {
       onHaritaTiklaRef.current({ longitude: koordinat[0], latitude: koordinat[1] });
@@ -468,6 +531,10 @@ export default function MapView({
     popupRef.current?.remove();
     popupRef.current = null;
 
+    // Varlik popup'i kapaliysa (sol-alttaki detay karti kullaniliyor) yalnizca
+    // secim halkasi/ucus calisir, harita uzerinde popup acilmaz.
+    if (varlikPopupKapaliRef.current) return;
+
     if (!id || !assetsRef.current) return;
     const secili = assetsRef.current.features.find((f) => f.properties.id === id);
     if (!secili) return;
@@ -508,19 +575,30 @@ export default function MapView({
     if (!map.getSource(SOURCE_ID)) {
       map.addSource(SOURCE_ID, { type: "geojson", data: BOS_KOLEKSIYON });
 
+      // Bakim gereken varliklar icin amber uyari halkasi (dairenin altinda,
+      // tur renginden bagimsiz olarak "dikkat" sinyali verir).
+      map.addLayer({
+        id: "assets-durum",
+        type: "circle",
+        source: SOURCE_ID,
+        filter: ["==", ["get", "status"], "bakim_lazim"],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 9, 16, 15],
+          "circle-color": "#f59e0b",
+          "circle-opacity": 0.28,
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#f59e0b",
+        },
+      });
+
+      // Ana isaretci: dolgu TUR rengine gore (agac/bank/direk), beyaz cerceve.
       map.addLayer({
         id: "assets-circle",
         type: "circle",
         source: SOURCE_ID,
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 5, 16, 10],
-          "circle-color": [
-            "match",
-            ["get", "status"],
-            "bakim_lazim",
-            "#d97706",
-            "#059669",
-          ],
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 7, 16, 13],
+          "circle-color": TIP_RENGI_IFADESI,
           "circle-stroke-width": 2,
           "circle-stroke-color": "#ffffff",
         },
@@ -532,7 +610,7 @@ export default function MapView({
         source: SOURCE_ID,
         filter: ["==", ["get", "id"], ""],
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 11, 16, 18],
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 12, 16, 19],
           "circle-color": "transparent",
           "circle-stroke-width": 3,
           "circle-stroke-color": "#0f766e",
@@ -709,6 +787,49 @@ export default function MapView({
     secimUygula(map);
     secimIhbarUygula(map);
     gorunumDegistiRef.current();
+
+    // Tur gliflerini (beyaz ikonlar) yukleyip sembol katmanlarini ekle.
+    // Async: gliflerin raster'a cevrilmesini bekler, boylece "eksik gorsel"
+    // uyarisi cikmadan katman referansi hazir olur.
+    tipIkonlariniHazirla(map).then(() => {
+      if (mapRef.current !== map) return; // bu arada harita/stil degistiyse birak
+
+      if (map.getSource(SOURCE_ID) && !map.getLayer("assets-icon")) {
+        map.addLayer({
+          id: "assets-icon",
+          type: "symbol",
+          source: SOURCE_ID,
+          layout: {
+            "icon-image": ["concat", "tip-", ["get", "type"]],
+            ...IKON_KATMAN_YERLESIMI,
+          },
+        });
+        map.off("click", "assets-icon", assetsTiklandiRef.current);
+        map.on("click", "assets-icon", assetsTiklandiRef.current);
+        map.off("mouseenter", "assets-icon", fareGirdiRef.current);
+        map.on("mouseenter", "assets-icon", fareGirdiRef.current);
+        map.off("mouseleave", "assets-icon", fareCiktiRef.current);
+        map.on("mouseleave", "assets-icon", fareCiktiRef.current);
+      }
+
+      if (map.getSource(REPORTS_SOURCE_ID) && !map.getLayer("reports-icon")) {
+        map.addLayer({
+          id: "reports-icon",
+          type: "symbol",
+          source: REPORTS_SOURCE_ID,
+          layout: {
+            "icon-image": ["concat", "tip-", ["get", "type"]],
+            ...IKON_KATMAN_YERLESIMI,
+          },
+        });
+        map.off("click", "reports-icon", reportsTiklandiRef.current);
+        map.on("click", "reports-icon", reportsTiklandiRef.current);
+        map.off("mouseenter", "reports-icon", fareGirdiRef.current);
+        map.on("mouseenter", "reports-icon", fareGirdiRef.current);
+        map.off("mouseleave", "reports-icon", fareCiktiRef.current);
+        map.on("mouseleave", "reports-icon", fareCiktiRef.current);
+      }
+    });
   }
 
   // --- Haritayi bir kez kur ---
@@ -734,6 +855,11 @@ export default function MapView({
 
     map.on("load", () => kaynaklariHazirla(map));
 
+    // Kapsayici boyutu degisince (orn. sol kenar cubugu acilip kapaninca)
+    // MapLibre kendiliginden yeniden boyutlanmaz; ResizeObserver ile tetikleriz.
+    const boyutGozlemci = new ResizeObserver(() => map.resize());
+    boyutGozlemci.observe(containerRef.current);
+
     // Istanbul il sinirini bir kez getirir; maske katmani bu veriyle dolar.
     let iptal = false;
     ilSiniri(ISTANBUL_IL_KODU)
@@ -748,6 +874,7 @@ export default function MapView({
 
     return () => {
       iptal = true;
+      boyutGozlemci.disconnect();
       popupRef.current?.remove();
       cizimEtiketRef.current?.remove();
       for (const marker of tamamlananEtiketleriRef.current.values()) marker.remove();
@@ -895,6 +1022,13 @@ function popupIcerigi(asset: AssetFeature): string {
     install_date ? `<div>Kurulum: ${kacis(install_date)}</div>` : "",
   ].join("");
 
+  const turRenkleri: Record<string, string> = {
+    agac: "#059669",
+    bank: "#d97706",
+    direk: "#0284c7",
+  };
+  const turRenk = turRenkleri[type] ?? "#64748b";
+
   return `
     <div style="font-family: system-ui, sans-serif; min-width: 170px">
       ${
@@ -903,7 +1037,10 @@ function popupIcerigi(asset: AssetFeature): string {
           : ""
       }
       <div style="font-weight: 600; margin-bottom: 4px">${kacis(name)}</div>
-      <div style="color:#475569; font-size:12px">${ASSET_TYPE_LABELS[type]}</div>
+      <div style="color:#475569; font-size:12px; display:flex; align-items:center; gap:5px">
+        <span style="display:inline-block; width:9px; height:9px; border-radius:9999px; background:${turRenk}"></span>
+        ${ASSET_TYPE_LABELS[type]}
+      </div>
       <div style="margin-top:6px; display:flex; gap:4px; flex-wrap:wrap">
         <span style="
           display:inline-block; padding:2px 8px; border-radius:9999px;

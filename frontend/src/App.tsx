@@ -1,11 +1,14 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { assetsWithin } from "./api/assets";
+import { listReports } from "./api/reports";
 import { ilceSiniri, mahalleSiniri } from "./api/sinirlar";
 import { useAuth } from "./auth/AuthContext";
+import AssetDetayModal from "./components/AssetDetayModal";
 import AssetForm from "./components/AssetForm";
 import AssetList from "./components/AssetList";
+import BildirimZili, { type Bildirim } from "./components/BildirimZili";
 import CizimPaneli from "./components/CizimPaneli";
 import Dashboard from "./components/Dashboard";
 import {
@@ -14,24 +17,28 @@ import {
   IconInbox,
   IconLasso,
   IconLogout,
+  IconMenu,
   IconPin,
   IconPlus,
   IconRefresh,
   IconRuler,
-  IconTree,
   IconUsers,
   IconX,
 } from "./components/icons";
+import HaritaLejant from "./components/HaritaLejant";
 import IhbarPaneli from "./components/IhbarPaneli";
+import Kenarcubugu, { type KenarOgesi } from "./components/Kenarcubugu";
+import { LogoAmblem } from "./components/icons";
 import KonumArama from "./components/KonumArama";
 import LogPaneli from "./components/LogPaneli";
 import MapStilKontrolu from "./components/MapStilKontrolu";
 import MapView, { type UcusHedefi } from "./components/MapView";
 import Modal from "./components/Modal";
 import PersonelYonetimi from "./components/PersonelYonetimi";
-import SekmeCubugu, { type SekmeKutucugu } from "./components/SekmeCubugu";
+import VarlikDetayKarti from "./components/VarlikDetayKarti";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
+import { ASSET_TYPE_LABELS } from "./types/asset";
 import { USER_ROLE_LABELS } from "./types/auth";
 import type {
   AssetFeature,
@@ -107,17 +114,12 @@ export default function App() {
   const [koordinat, setKoordinat] = useState<
     { longitude: number; latitude: number } | undefined
   >();
-  // Acilista panel kapali gelir: harita tertemiz gorunur, kullanici bir
-  // kutucuga tiklayinca ilgili panel acilir.
+  // Acilista panel kapali gelir: harita tertemiz gorunur, kullanici sol
+  // kenardan bir sekme secince ilgili panel acilir.
   const [panelAcik, setPanelAcik] = useState(false);
   const [aktifStilId, setAktifStilId] = useState<HaritaStilId>(VARSAYILAN_STIL);
-
-  // Sol çubuktaki kutucuklar rol'e göre; saha çalışanı yalnızca "Varlıklar"ı görür.
-  const kutucuklar = useMemo<SekmeKutucugu<Sekme>[]>(() => {
-    const ids: Sekme[] =
-      user?.role === "saha_calisani" ? ["liste"] : ["liste", "ekle", "ihbarlar"];
-    return ids.map((id) => ({ id, ...SEKME_TANIMLARI[id] }));
-  }, [user?.role]);
+  // Sol kenar cubugu genis (etiketli) mi - header'daki menu dugmesiyle degisir.
+  const [kenarAcik, setKenarAcik] = useState(true);
 
   // Panel kapalıyken hiçbir sekme "aktif" sayılmaz (harita sade kalır; ihbar
   // noktaları gizlenir, boş haritaya tıklama Ekle formuna düşmez).
@@ -421,52 +423,183 @@ export default function App() {
     setOlcumNoktalari([]);
   };
 
+  // --- Bildirimler (header zili) ------------------------------------------
+  // Yalniz admin/calisan ihbarlari yonetir; saha_calisani ihbar gormez.
+  const personel = user?.role === "admin" || user?.role === "calisan";
+  // Bakim bekleyen varliklar (her iki kaynaktan) - ana listeden bagimsiz sorgu.
+  const bakimSorgu = useAssets({ status: "bakim_lazim" });
+  // Bekleyen ihbarlar - yalniz personel icin cekilir.
+  const bekleyenIhbarSorgu = useQuery({
+    queryKey: ["reports", "beklemede"],
+    queryFn: () => listReports("beklemede"),
+    enabled: personel,
+  });
+  const bekleyenIhbarSayisi = bekleyenIhbarSorgu.data?.features.length ?? 0;
+
+  // Bir bildirime tiklaninca ilgili varliga git: kaynak sekmesini o varliga
+  // gore ayarla (listede gorunur olsun), sec ve haritayi oraya ucur.
+  const bildirimVarligaGit = useCallback((asset: AssetFeature) => {
+    setTamamlananAlanlar([]);
+    setFilters({ source: asset.properties.source });
+    setSekme("liste");
+    setPanelAcik(true);
+    setSeciliId(asset.properties.id);
+    setUcusHedefi({
+      anahtar: crypto.randomUUID(),
+      tip: "nokta",
+      merkez: asset.geometry.coordinates,
+      zoom: 16,
+    });
+  }, []);
+
+  // Bir ihbar bildirimine tiklaninca İhbarlar sekmesini ac, ihbari sec, ucur.
+  const bildirimIhbaraGit = useCallback((report: ReportFeature) => {
+    setSekme("ihbarlar");
+    setPanelAcik(true);
+    setSeciliIhbarId(report.properties.id);
+    setUcusHedefi({
+      anahtar: crypto.randomUUID(),
+      tip: "nokta",
+      merkez: report.geometry.coordinates,
+      zoom: 16,
+    });
+  }, []);
+
+  const bildirimler = useMemo<Bildirim[]>(() => {
+    const liste: Bildirim[] = [];
+    for (const f of bakimSorgu.data?.features ?? []) {
+      const p = f.properties;
+      liste.push({
+        id: p.id,
+        tip: p.type,
+        baslik: `${p.name} bakım bekliyor`,
+        altbaslik:
+          ASSET_TYPE_LABELS[p.type] + (p.source === "ihbar" ? " · İhbardan" : ""),
+        zaman: p.updated_at,
+        kategori: "bakim",
+        onTikla: () => bildirimVarligaGit(f),
+      });
+    }
+    if (personel) {
+      for (const r of bekleyenIhbarSorgu.data?.features ?? []) {
+        const p = r.properties;
+        liste.push({
+          id: p.id,
+          tip: p.type,
+          baslik: `Yeni ihbar: ${p.name}`,
+          altbaslik: p.note?.trim() || ASSET_TYPE_LABELS[p.type],
+          zaman: p.created_at,
+          kategori: "ihbar",
+          onTikla: () => bildirimIhbaraGit(r),
+        });
+      }
+    }
+    liste.sort((a, b) => +new Date(b.zaman) - +new Date(a.zaman));
+    return liste.slice(0, 30);
+  }, [
+    bakimSorgu.data,
+    bekleyenIhbarSorgu.data,
+    personel,
+    bildirimVarligaGit,
+    bildirimIhbaraGit,
+  ]);
+
+  // --- Sol kenar cubugu ogeleri (rol'e gore) ------------------------------
+  const kenarAnaOgeler: KenarOgesi[] = [
+    {
+      id: "liste",
+      etiket: "Varlıklar",
+      ikon: IconPin,
+      onClick: () => sekmeSec("liste"),
+      aktif: aktifSekme === "liste",
+    },
+  ];
+  if (personel) {
+    kenarAnaOgeler.push(
+      {
+        id: "ekle",
+        etiket: "Ekle",
+        ikon: IconPlus,
+        onClick: () => sekmeSec("ekle"),
+        aktif: aktifSekme === "ekle",
+      },
+      {
+        id: "ihbarlar",
+        etiket: "İhbarlar",
+        ikon: IconInbox,
+        onClick: () => sekmeSec("ihbarlar"),
+        aktif: aktifSekme === "ihbarlar",
+        rozet: bekleyenIhbarSayisi,
+      }
+    );
+  }
+
+  const kenarYonetimOgeleri: KenarOgesi[] = personel
+    ? [
+        {
+          id: "ozet",
+          etiket: "Özet",
+          ikon: IconChartBar,
+          onClick: () => setUstModal("ozet"),
+          aktif: ustModal === "ozet",
+        },
+        {
+          id: "log",
+          etiket: "Geçmiş",
+          ikon: IconHistory,
+          onClick: () => setUstModal("log"),
+          aktif: ustModal === "log",
+        },
+      ]
+    : [];
+  if (user?.role === "admin") {
+    kenarYonetimOgeleri.push({
+      id: "personel",
+      etiket: "Personel",
+      ikon: IconUsers,
+      onClick: () => setUstModal("personel"),
+      aktif: ustModal === "personel",
+    });
+  }
+
+  const kenarAltOgeler: KenarOgesi[] = [
+    { id: "temizle", etiket: "Temizle", ikon: IconRefresh, onClick: sifirla },
+  ];
+
+  // Secili varlik (detay karti icin) - o an haritada gosterilen koleksiyondan.
+  const seciliVarlik = useMemo<AssetFeature | null>(
+    () =>
+      gosterilen?.features.find((f) => f.properties.id === seciliId) ?? null,
+    [gosterilen, seciliId]
+  );
+  const [detayAsset, setDetayAsset] = useState<AssetFeature | null>(null);
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100">
       {/* Ust bar (uygulama header'i) */}
       <header className="z-20 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center border border-emerald-700 bg-emerald-600">
-              <IconTree className="h-4 w-4 text-white" />
-            </div>
-            <div className="leading-tight">
-              <h1 className="text-sm font-semibold tracking-tight text-slate-900">
-                GreenAsset
+        <div className="flex items-center gap-3">
+          {/* Sol kenar cubugunu genislet/daralt (referanstaki hamburger). */}
+          <button
+            onClick={() => setKenarAcik((v) => !v)}
+            aria-label="Menüyü aç/kapat"
+            title="Menü"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <IconMenu className="h-5 w-5" />
+          </button>
+
+          <div className="flex select-none items-center gap-2">
+            <LogoAmblem className="h-10 w-10 shrink-0" />
+            <div className="leading-none">
+              <h1 className="text-[15px] font-bold tracking-tight text-slate-900">
+                Green<span className="text-emerald-600">Asset</span>
               </h1>
-              <p className="text-[11px] text-slate-500">
+              <p className="mt-1 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                 Akıllı Şehir Varlık Yönetimi
               </p>
             </div>
           </div>
-
-          {/* Yonetim/raporlama ekranlari - haritanin yaninda durmasi gerekmedigi
-              icin sol panelden alinip ust bara tasindi, modal olarak acilir.
-              Saha calisani bunlari gormez (tam CRUD/onay yetkisi yok). */}
-          {user?.role !== "saha_calisani" && (
-            <nav className="flex items-center gap-1 border-l border-slate-200 pl-3">
-              <UstBarButonu
-                ikon={IconChartBar}
-                onClick={() => setUstModal("ozet")}
-              >
-                Özet
-              </UstBarButonu>
-              <UstBarButonu
-                ikon={IconHistory}
-                onClick={() => setUstModal("log")}
-              >
-                Geçmiş
-              </UstBarButonu>
-              {user?.role === "admin" && (
-                <UstBarButonu
-                  ikon={IconUsers}
-                  onClick={() => setUstModal("personel")}
-                >
-                  Personel
-                </UstBarButonu>
-              )}
-            </nav>
-          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -486,10 +619,10 @@ export default function App() {
           {/* Mesafe olcum kontrolu - detaylar alt ortadaki arac panelinde */}
           <button
             onClick={olcumModu ? olcumIptal : olcumBaslat}
-            className={`flex items-center gap-1.5 border px-3 py-1.5 text-sm font-medium transition ${
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium shadow-sm transition-all hover:shadow-md ${
               olcumModu || olcumNoktalari.length >= 2
-                ? "border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
-                : "border-blue-200 bg-blue-50 text-blue-800 hover:border-blue-300 hover:bg-blue-100"
+                ? "border-blue-600 bg-blue-600 text-white shadow-blue-600/20 hover:bg-blue-500"
+                : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
             }`}
           >
             <IconRuler
@@ -507,10 +640,10 @@ export default function App() {
           {/* Alan secim kontrolu - detaylar alt ortadaki arac panelinde */}
           <button
             onClick={cizimModu ? alanSecimiIptal : alanSecimiBaslat}
-            className={`flex items-center gap-1.5 border px-3 py-1.5 text-sm font-medium transition ${
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium shadow-sm transition-all hover:shadow-md ${
               cizimModu || tamamlananAlanlar.length > 0
-                ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
-                : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-300 hover:bg-emerald-100"
+                ? "border-emerald-600 bg-emerald-600 text-white shadow-emerald-600/20 hover:bg-emerald-500"
+                : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
             }`}
           >
             <IconLasso
@@ -527,6 +660,8 @@ export default function App() {
 
           <div className="mx-1 h-6 w-px bg-slate-200" />
 
+          <BildirimZili bildirimler={bildirimler} />
+
           <div className="flex items-center gap-2">
             <div className="text-right leading-tight">
               <p className="text-xs font-medium text-slate-700">
@@ -541,7 +676,7 @@ export default function App() {
             <button
               onClick={cikisYap}
               title="Çıkış yap"
-              className="flex items-center gap-1.5 border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-2 text-sm font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-red-500 hover:shadow-md"
             >
               <IconLogout className="h-3.5 w-3.5" />
             </button>
@@ -570,9 +705,17 @@ export default function App() {
         onOlcumTemizle={olcumTemizle}
       />
 
-      {/* Govde: tam ekran harita + uzerinde yuzen sol arac cubugu ve panel */}
-      <div className="relative min-h-0 flex-1">
-        <MapView
+      {/* Govde: sol kenar cubugu + tam ekran harita ve uzerindeki yuzen paneller */}
+      <div className="flex min-h-0 flex-1">
+        <Kenarcubugu
+          genis={kenarAcik}
+          ogeler={kenarAnaOgeler}
+          yonetimOgeleri={kenarYonetimOgeleri}
+          altOgeler={kenarAltOgeler}
+        />
+
+        <div className="relative min-h-0 flex-1">
+          <MapView
           assets={ihbarSekmesi ? undefined : gosterilen}
           reports={ihbarSekmesi ? ihbarKoleksiyonu : undefined}
           seciliIhbarId={seciliIhbarId}
@@ -593,24 +736,18 @@ export default function App() {
           aktifStilId={aktifStilId}
           ucusHedefi={ucusHedefi}
           onGorunumDegisti={setHaritaGorunumu}
+          varlikPopupKapali
         />
+
+        {/* Harita ust-ortasindaki aciklama seridi: tur renkleri + canli sayaclar.
+            Ihbar sekmesinde (mor noktalar) anlamli olmadigi icin gizlenir. */}
+        {!ihbarSekmesi && <HaritaLejant data={gosterilen} />}
 
         <MapStilKontrolu aktifId={aktifStilId} onSec={setAktifStilId} />
 
-        {/* Sol kenardaki yuzen kutucuklar (Varliklar / Ekle / Ihbarlar).
-            Etiket balonlari yalnizca panel kapaliyken gosterilir ki acik
-            panelin uzerine tasmasinlar. */}
-        <SekmeCubugu
-          kutucuklar={kutucuklar}
-          aktif={aktifSekme}
-          onSec={sekmeSec}
-          etiketleriGoster={!panelAcik}
-          altAksiyon={{ etiket: "Temizle", ikon: IconRefresh, onClick: sifirla }}
-        />
-
-        {/* Aktif sekmenin yuzen paneli - kutucuklarin hemen sagindan acilir. */}
+        {/* Aktif sekmenin yuzen paneli - sol kenar cubugunun hemen sagindan acilir. */}
         {panelAcik && (
-          <div className="absolute bottom-4 left-[76px] top-4 z-20 flex w-[360px] max-w-[calc(100vw-6rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur-sm">
+          <div className="absolute bottom-4 left-4 top-4 z-20 flex w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur-sm">
             <div
               className={`flex shrink-0 items-center justify-between border-b px-3.5 py-2.5 ${SEKME_RENK_SINIFLARI[SEKME_TANIMLARI[sekme].renk].aktif}`}
             >
@@ -684,7 +821,21 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* Secili varlik detay karti (sol-alt) - ihbar sekmesinde gizli;
+            "Detayları Gör" tam detay modalini acar. */}
+        {!ihbarSekmesi && seciliVarlik && (
+          <VarlikDetayKarti
+            asset={seciliVarlik}
+            onKapat={() => setSeciliId(null)}
+            onDetay={() => setDetayAsset(seciliVarlik)}
+            solKaydir={panelAcik}
+          />
+        )}
+        </div>
       </div>
+
+      <AssetDetayModal asset={detayAsset} onKapat={() => setDetayAsset(null)} />
 
       <Modal
         acik={duzenlenen !== null}
@@ -731,27 +882,6 @@ export default function App() {
         {user?.role === "admin" && <PersonelYonetimi />}
       </Modal>
     </div>
-  );
-}
-
-/** Ust bardaki (GreenAsset yazisinin yanindaki) yonetim ekrani butonu. */
-function UstBarButonu({
-  ikon: Ikon,
-  onClick,
-  children,
-}: {
-  ikon: (p: { className?: string }) => React.ReactElement;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-1.5 border border-transparent px-2.5 py-1.5 text-[13px] font-medium text-slate-600 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900"
-    >
-      <Ikon className="h-3.5 w-3.5 text-slate-400" />
-      {children}
-    </button>
   );
 }
 
