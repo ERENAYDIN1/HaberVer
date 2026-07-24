@@ -68,3 +68,9 @@ class Asset(Base):
         onupdate=func.now(),
         nullable=False,
     )
+    # Varlik "Tamir Edildi" olarak isaretlendiginde (durum -> iyi) dolar; durum
+    # tekrar 'bakim_lazim'a donerse temizlenir. Ihbar kaynakli tamir edilen
+    # varliklar bu zamandan 5 gun sonra otomatik silinir (bkz. crud.asset).
+    repaired_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

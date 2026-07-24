@@ -52,6 +52,9 @@ class AssetProperties(BaseModel):
     photo_url: str | None
     created_at: datetime
     updated_at: datetime
+    # "Tamir Edildi" olarak isaretlenme zamani; ihbar kaynakli varliklarda
+    # 5 gunluk otomatik silme geri sayimini frontend bundan hesaplar.
+    repaired_at: datetime | None
 
 
 class PointGeometry(BaseModel):
