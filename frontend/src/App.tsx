@@ -35,7 +35,7 @@ import MapStilKontrolu from "./components/MapStilKontrolu";
 import MapView, { type UcusHedefi } from "./components/MapView";
 import Modal from "./components/Modal";
 import PersonelYonetimi from "./components/PersonelYonetimi";
-import VarlikDetayKarti from "./components/VarlikDetayKarti";
+import ReportDetayModal from "./components/ReportDetayModal";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
 import { ASSET_TYPE_LABELS } from "./types/asset";
@@ -48,7 +48,11 @@ import type {
   PolygonGeometry,
 } from "./types/asset";
 import type { TamamlananAlan } from "./types/alan";
-import type { ReportFeature, ReportFeatureCollection } from "./types/report";
+import type {
+  ReportFeature,
+  ReportFeatureCollection,
+  ReportStatus,
+} from "./types/report";
 import {
   mesafeEtiketi,
   poligonAlaniM2,
@@ -110,6 +114,11 @@ export default function App() {
   // tasinir); secili ihbara tiklaninca harita oraya ucar.
   const [ihbarlar, setIhbarlar] = useState<ReportFeature[]>([]);
   const [seciliIhbarId, setSeciliIhbarId] = useState<string | null>(null);
+  // Ihbarlar sekmesinin durum alt-sekmesi (Bekleyen İhbar/Onaylandı/Reddedildi).
+  // Burada tutulur ki bir bakim bildirimine tiklaninca dogrudan "onaylandi"ya
+  // gecilebilsin ve harita, o an ham ihbar noktalarini mi yoksa onaylanmis
+  // ihbarlardan olusan varliklari mi gosterecegini bilsin.
+  const [ihbarDurum, setIhbarDurum] = useState<ReportStatus>("beklemede");
   const [duzenlenen, setDuzenlenen] = useState<AssetFeature | null>(null);
   const [koordinat, setKoordinat] = useState<
     { longitude: number; latitude: number } | undefined
@@ -144,7 +153,10 @@ export default function App() {
     setPanelAcik(false);
     setUstModal(null);
     setSeciliId(null);
+    setDetayAsset(null);
     setSeciliIhbarId(null);
+    setDetayRapor(null);
+    setIhbarDurum("beklemede");
     setDuzenlenen(null);
     setKoordinat(undefined);
     setCizimModu(false);
@@ -211,9 +223,16 @@ export default function App() {
   }, [tamamlananAlanlar]);
   const gosterilen = birlesikAlanSonucu ?? sorgu.data;
 
-  // "İhbarlar" sekmesi aktifken (panel açık) harita, varliklar yerine ihbar
-  // noktalarini gosterir; diger sekmelerde / panel kapalıyken varliklar gorunur.
-  const ihbarSekmesi = aktifSekme === "ihbarlar";
+  // Onaylanmis ihbarlardan olusan varliklar - "İhbarlar > Onaylandı" sekmesi
+  // bunu normal bir varlik listesi gibi gosterir (bkz. IhbarPaneli), harita
+  // da bu sekmedeyken ihbar noktasi yerine bu varliklari isaretler.
+  const ihbarVarlikSorgu = useAssets({ source: "ihbar" });
+
+  // "İhbarlar" sekmesi aktifken harita varsayilan olarak ham ihbar noktalarini
+  // gosterir; ancak "Onaylandı" alt-sekmesinde bunlar zaten birer varlik
+  // oldugundan, normal varlik gosterimine (renkli tur isaretcileri) donulur.
+  const ihbarRaporGorunumu = aktifSekme === "ihbarlar" && ihbarDurum !== "onaylandi";
+  const ihbarOnayliGorunumu = aktifSekme === "ihbarlar" && ihbarDurum === "onaylandi";
   const ihbarKoleksiyonu = useMemo<ReportFeatureCollection>(
     () => ({ type: "FeatureCollection", features: ihbarlar }),
     [ihbarlar]
@@ -225,6 +244,7 @@ export default function App() {
     if (aktifSekme !== "ihbarlar") {
       setIhbarlar([]);
       setSeciliIhbarId(null);
+      setDetayRapor(null);
     }
   }, [aktifSekme]);
 
@@ -234,7 +254,9 @@ export default function App() {
       // temizler - kullanici secili varligi birakip haritayi sade halde
       // gormek isteyebilir.
       setSeciliId(null);
+      setDetayAsset(null);
       setSeciliIhbarId(null);
+      setDetayRapor(null);
       // Saha calisaninin yeni varlik ekleme yetkisi yok; "Ekle" sekmesi de
       // gizli. Ihbarlar sekmesindeyken de bos alan tiklamasi "Ekle" formuna
       // dusmemeli (o an harita ihbar noktalarini gosteriyor).
@@ -247,11 +269,25 @@ export default function App() {
   );
 
   // Hem listeden hem haritadan cagrilir; zaten secili olan bir varliga
-  // tekrar tiklamak secimi iptal eder (toggle).
-  const varlikSecildi = useCallback((id: string) => {
-    setSeciliId((mevcut) => (mevcut === id ? null : id));
-    setSekme("liste");
-    setPanelAcik(true);
+  // tekrar tiklamak secimi iptal eder (toggle). "İhbarlar > Onaylandı"
+  // sekmesindeyken secim ayni ekranda kalir (Varliklar sekmesine atlamaz) -
+  // bu sekme zaten kendi varlik listesini (ihbardan olusanlar) gosteriyor.
+  const varlikSecildi = useCallback(
+    (id: string) => {
+      setSeciliId((mevcut) => (mevcut === id ? null : id));
+      setDetayAsset(null);
+      if (!(sekme === "ihbarlar" && ihbarDurum === "onaylandi")) {
+        setSekme("liste");
+      }
+      setPanelAcik(true);
+    },
+    [sekme, ihbarDurum]
+  );
+
+  // Ham ihbar (Bekleyen/Reddedildi) secimi - hem listeden hem haritadan cagrilir.
+  const ihbarSecildi = useCallback((id: string) => {
+    setSeciliIhbarId((mevcut) => (mevcut === id ? null : id));
+    setDetayRapor(null);
   }, []);
 
   const cizimNoktaEkle = useCallback((nokta: [number, number]) => {
@@ -436,14 +472,20 @@ export default function App() {
   });
   const bekleyenIhbarSayisi = bekleyenIhbarSorgu.data?.features.length ?? 0;
 
-  // Bir bildirime tiklaninca ilgili varliga git: kaynak sekmesini o varliga
-  // gore ayarla (listede gorunur olsun), sec ve haritayi oraya ucur.
+  // Bir bildirime tiklaninca ilgili varliga git: kaynagina gore dogru sekmeye
+  // gec (kayitli -> Varliklar, ihbardan gelen -> İhbarlar > Onaylandı), sec
+  // ve haritayi oraya ucur.
   const bildirimVarligaGit = useCallback((asset: AssetFeature) => {
     setTamamlananAlanlar([]);
-    setFilters({ source: asset.properties.source });
-    setSekme("liste");
+    if (asset.properties.source === "ihbar") {
+      setSekme("ihbarlar");
+      setIhbarDurum("onaylandi");
+    } else {
+      setSekme("liste");
+    }
     setPanelAcik(true);
     setSeciliId(asset.properties.id);
+    setDetayAsset(null);
     setUcusHedefi({
       anahtar: crypto.randomUUID(),
       tip: "nokta",
@@ -457,6 +499,7 @@ export default function App() {
     setSekme("ihbarlar");
     setPanelAcik(true);
     setSeciliIhbarId(report.properties.id);
+    setDetayRapor(null);
     setUcusHedefi({
       anahtar: crypto.randomUUID(),
       tip: "nokta",
@@ -566,13 +609,22 @@ export default function App() {
     { id: "temizle", etiket: "Temizle", ikon: IconRefresh, onClick: sifirla },
   ];
 
-  // Secili varlik (detay karti icin) - o an haritada gosterilen koleksiyondan.
-  const seciliVarlik = useMemo<AssetFeature | null>(
-    () =>
-      gosterilen?.features.find((f) => f.properties.id === seciliId) ?? null,
-    [gosterilen, seciliId]
-  );
+  // Secili varlik (detay karti icin) - o an haritada gosterilen koleksiyondan;
+  // "İhbarlar > Onaylandı" sekmesindeyken bu koleksiyon ihbardan olusan
+  // varliklardir (bkz. ihbarOnayliGorunumu).
+  const seciliVarlik = useMemo<AssetFeature | null>(() => {
+    const havuz = ihbarOnayliGorunumu ? ihbarVarlikSorgu.data : gosterilen;
+    return havuz?.features.find((f) => f.properties.id === seciliId) ?? null;
+  }, [gosterilen, ihbarVarlikSorgu.data, ihbarOnayliGorunumu, seciliId]);
   const [detayAsset, setDetayAsset] = useState<AssetFeature | null>(null);
+
+  // Secili ham ihbar (Bekleyen/Reddedildi sekmelerinde) - onaylanmislar zaten
+  // birer varlik oldugundan yukaridaki seciliVarlik/detayAsset akisini kullanir.
+  const seciliRapor = useMemo<ReportFeature | null>(() => {
+    if (!ihbarRaporGorunumu) return null;
+    return ihbarlar.find((r) => r.properties.id === seciliIhbarId) ?? null;
+  }, [ihbarRaporGorunumu, ihbarlar, seciliIhbarId]);
+  const [detayRapor, setDetayRapor] = useState<ReportFeature | null>(null);
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100">
@@ -716,12 +768,16 @@ export default function App() {
 
         <div className="relative min-h-0 flex-1">
           <MapView
-          assets={ihbarSekmesi ? undefined : gosterilen}
-          reports={ihbarSekmesi ? ihbarKoleksiyonu : undefined}
-          seciliIhbarId={seciliIhbarId}
-          onIhbarSec={(id) =>
-            setSeciliIhbarId((mevcut) => (mevcut === id ? null : id))
+          assets={
+            ihbarRaporGorunumu
+              ? undefined
+              : ihbarOnayliGorunumu
+                ? ihbarVarlikSorgu.data
+                : gosterilen
           }
+          reports={ihbarRaporGorunumu ? ihbarKoleksiyonu : undefined}
+          seciliIhbarId={seciliIhbarId}
+          onIhbarSec={ihbarSecildi}
           seciliId={seciliId}
           onVarlikSec={varlikSecildi}
           onHaritaTikla={haritaTiklandi}
@@ -736,12 +792,15 @@ export default function App() {
           aktifStilId={aktifStilId}
           ucusHedefi={ucusHedefi}
           onGorunumDegisti={setHaritaGorunumu}
-          varlikPopupKapali
+          onVarlikDetay={() => setDetayAsset(seciliVarlik)}
+          onIhbarDetay={() => setDetayRapor(seciliRapor)}
         />
 
         {/* Harita ust-ortasindaki aciklama seridi: tur renkleri + canli sayaclar.
-            Ihbar sekmesinde (mor noktalar) anlamli olmadigi icin gizlenir. */}
-        {!ihbarSekmesi && <HaritaLejant data={gosterilen} />}
+            Ham ihbar noktalari (mor) gosterilirken anlamli olmadigi icin gizlenir. */}
+        {!ihbarRaporGorunumu && (
+          <HaritaLejant data={ihbarOnayliGorunumu ? ihbarVarlikSorgu.data : gosterilen} />
+        )}
 
         <MapStilKontrolu aktifId={aktifStilId} onSec={setAktifStilId} />
 
@@ -808,34 +867,31 @@ export default function App() {
 
               {sekme === "ihbarlar" && (
                 <IhbarPaneli
+                  durum={ihbarDurum}
+                  onDurumChange={setIhbarDurum}
                   onVarlikOlustu={() =>
                     queryClient.invalidateQueries({ queryKey: ["assets"] })
                   }
                   onIhbarlarChange={setIhbarlar}
-                  seciliId={seciliIhbarId}
-                  onIhbarSec={(id) =>
-                    setSeciliIhbarId((mevcut) => (mevcut === id ? null : id))
-                  }
+                  seciliRaporId={seciliIhbarId}
+                  onRaporSec={ihbarSecildi}
+                  ihbarVarlikSorgu={ihbarVarlikSorgu}
+                  seciliVarlikId={seciliId}
+                  onVarlikSec={varlikSecildi}
                 />
               )}
             </div>
           </div>
         )}
 
-        {/* Secili varlik detay karti (sol-alt) - ihbar sekmesinde gizli;
-            "Detayları Gör" tam detay modalini acar. */}
-        {!ihbarSekmesi && seciliVarlik && (
-          <VarlikDetayKarti
-            asset={seciliVarlik}
-            onKapat={() => setSeciliId(null)}
-            onDetay={() => setDetayAsset(seciliVarlik)}
-            solKaydir={panelAcik}
-          />
-        )}
         </div>
       </div>
 
+      {/* Varlik/ihbar detayi artik sol-altta yer kaplayan ayri bir kart yerine
+          tek, ortalanmis bir modalde gosterilir - haritadaki popup'taki
+          "Detaylari Gor" ve listedeki "Detay" butonu ayni modali acar. */}
       <AssetDetayModal asset={detayAsset} onKapat={() => setDetayAsset(null)} />
+      <ReportDetayModal report={detayRapor} onKapat={() => setDetayRapor(null)} />
 
       <Modal
         acik={duzenlenen !== null}

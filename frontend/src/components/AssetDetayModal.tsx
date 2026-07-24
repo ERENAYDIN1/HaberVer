@@ -2,8 +2,9 @@ import { fotoUrl } from "../api/reports";
 import { useKonumCozumu } from "../hooks/useSinirlar";
 import {
   ASSET_SOURCE_LABELS,
-  ASSET_STATUS_LABELS,
   ASSET_TYPE_LABELS,
+  durumEtiketi,
+  kalanSilmeGunu,
   type AssetFeature,
 } from "../types/asset";
 import Modal from "./Modal";
@@ -28,6 +29,10 @@ export default function AssetDetayModal({ asset, onKapat }: AssetDetayModalProps
   const konumMetni = konum
     ? [konum.mahalle?.ad, konum.ilce?.ad].filter(Boolean).join(", ")
     : "";
+  const kalanGun =
+    p.source === "ihbar" && p.status === "iyi"
+      ? kalanSilmeGunu(p.repaired_at)
+      : null;
 
   return (
     <Modal acik={asset !== null} baslik="Varlık Detayı" onKapat={onKapat}>
@@ -56,7 +61,7 @@ export default function AssetDetayModal({ asset, onKapat }: AssetDetayModalProps
             <span
               className={`h-1.5 w-1.5 rounded-full ${bakim ? "bg-amber-500" : "bg-emerald-500"}`}
             />
-            {ASSET_STATUS_LABELS[p.status]}
+            {durumEtiketi(p.status, p.source)}
           </span>
           <span
             className={`inline-flex items-center border px-1.5 py-0.5 text-[11px] font-medium ${
@@ -68,6 +73,14 @@ export default function AssetDetayModal({ asset, onKapat }: AssetDetayModalProps
             {ASSET_SOURCE_LABELS[p.source]}
           </span>
         </div>
+
+        {kalanGun !== null && (
+          <p className="border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            {kalanGun === 0
+              ? "Bu varlık tamir edildiği için bugün otomatik silinecek."
+              : `Bu varlık tamir edildi; ${kalanGun} gün sonra otomatik silinecek.`}
+          </p>
+        )}
 
         <dl className="space-y-1.5 text-xs">
           {p.brand_model && (

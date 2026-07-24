@@ -18,6 +18,29 @@ export const ASSET_STATUS_LABELS: Record<AssetStatus, string> = {
   bakim_lazim: "Bakım Lazım",
 };
 
+/** Ihbar kaynakli bir varligin tamir edildikten kac gun sonra otomatik
+ *  silinecegi (backend'deki TAMIR_SAKLAMA_GUN ile ayni olmali). */
+export const TAMIR_SAKLAMA_GUN = 5;
+
+/** Durum etiketi - ihbar kaynakli ve durumu "iyi" olan varliklar tanim geregi
+ *  tamir edilmis demektir; bu baglamda "İyi" yerine "Tamir Edildi" gosterilir.
+ *  Kayitli varliklarda (hic bozulmamis olabilir) normal "İyi" etiketi kalir. */
+export function durumEtiketi(status: AssetStatus, source: AssetSource): string {
+  if (status === "iyi" && source === "ihbar") return "Tamir Edildi";
+  return ASSET_STATUS_LABELS[status];
+}
+
+/** Tamir edilmis ihbar varligi icin otomatik silmeye kalan tam gun sayisi
+ *  (yukari yuvarlanir; suresi gecmisse 0). repaired_at yoksa null. */
+export function kalanSilmeGunu(repairedAt: string | null): number | null {
+  if (!repairedAt) return null;
+  const silmeZamani =
+    new Date(repairedAt).getTime() + TAMIR_SAKLAMA_GUN * 24 * 60 * 60 * 1000;
+  const kalanMs = silmeZamani - Date.now();
+  if (kalanMs <= 0) return 0;
+  return Math.ceil(kalanMs / (24 * 60 * 60 * 1000));
+}
+
 export const ASSET_SOURCE_LABELS: Record<AssetSource, string> = {
   kayitli: "Kayıtlı Varlık",
   ihbar: "İhbar Edilen",
@@ -35,6 +58,9 @@ export interface AssetProperties {
   photo_url: string | null;
   created_at: string;
   updated_at: string;
+  /** "Tamir Edildi" isaretlenme zamani (ISO); ihbar kaynakli varliklarda
+   *  5 gunluk otomatik silme geri sayimi bundan hesaplanir. */
+  repaired_at: string | null;
 }
 
 export interface PointGeometry {

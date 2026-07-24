@@ -1,12 +1,9 @@
-import { useEffect, useRef, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { fotoUrl } from "../api/reports";
 import { useAuth } from "../auth/AuthContext";
 import { useDeleteAsset, useRepairAsset } from "../hooks/useAssets";
 import { useIlceler, useMahalleler } from "../hooks/useSinirlar";
 import {
-  ASSET_SOURCE_LABELS,
-  ASSET_SOURCES,
   ASSET_STATUSES,
   ASSET_STATUS_LABELS,
   ASSET_TYPES,
@@ -18,48 +15,8 @@ import type {
   AssetFilters,
 } from "../types/asset";
 import AssetDetayModal from "./AssetDetayModal";
-import {
-  IconBench,
-  IconBox,
-  IconInbox,
-  IconLamp,
-  IconPin,
-  IconTree,
-  IconX,
-} from "./icons";
-
-const TIP_IKONU: Record<string, (props: { className?: string }) => ReactElement> = {
-  agac: IconTree,
-  bank: IconBench,
-  direk: IconLamp,
-};
-
-/** Tip basina rozet rengi - liste ve haritada varlik turleri tek bakista
- *  ayirt edilebilsin diye (onceden hepsi ayni gri tondaydi). */
-const TIP_RENGI: Record<string, string> = {
-  agac: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  bank: "border-amber-200 bg-amber-50 text-amber-700",
-  direk: "border-sky-200 bg-sky-50 text-sky-700",
-};
-
-/** Kaynak (kayitli/ihbar) sekmesine gore ikon + renk siniflari. */
-const KAYNAK_IKONU: Record<string, (props: { className?: string }) => ReactElement> = {
-  kayitli: IconBox,
-  ihbar: IconInbox,
-};
-
-const KAYNAK_RENGI: Record<string, { aktif: string; ikonAktif: string; ikonPasif: string }> = {
-  kayitli: {
-    aktif: "border-emerald-600 bg-emerald-50 text-emerald-900",
-    ikonAktif: "text-emerald-600",
-    ikonPasif: "text-emerald-400",
-  },
-  ihbar: {
-    aktif: "border-amber-600 bg-amber-50 text-amber-900",
-    ikonAktif: "text-amber-600",
-    ikonPasif: "text-amber-400",
-  },
-};
+import VarlikSatiri from "./VarlikSatiri";
+import { IconX } from "./icons";
 
 const selectClass =
   "flex-1 border border-slate-300 bg-white px-2 py-1.5 text-xs focus:border-emerald-500 focus:outline-none";
@@ -113,10 +70,6 @@ export default function AssetList({
   const mahallelerSorgu = useMahalleler(ilceKodu);
   const [detayAsset, setDetayAsset] = useState<AssetFeature | null>(null);
 
-  // Kaynak (kayitli/ihbar) hic secilmemisse varsayilan olarak "kayitli" kabul
-  // edilir - iki kaynak birbirine karismasin diye her zaman bir sekme aktiftir.
-  const aktifKaynak = filters.source ?? "kayitli";
-
   // Haritadan secim yapildiginda listedeki karti gorunur alana kaydir.
   useEffect(() => {
     seciliRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -130,32 +83,6 @@ export default function AssetList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Kayitli varliklar / ihbardan gelenler - birbirine karismasin diye
-          ayri sekmeler, ayni anda sadece biri gorunur. */}
-      <div className="flex border-b border-slate-300 bg-slate-50">
-        {ASSET_SOURCES.map((s) => {
-          const KaynakIkonu = KAYNAK_IKONU[s];
-          const renk = KAYNAK_RENGI[s];
-          const aktif = aktifKaynak === s;
-          return (
-            <button
-              key={s}
-              onClick={() => onFiltersChange({ ...filters, source: s })}
-              className={`flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition ${
-                aktif
-                  ? renk.aktif
-                  : "border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-              }`}
-            >
-              <KaynakIkonu
-                className={`h-3.5 w-3.5 ${aktif ? renk.ikonAktif : renk.ikonPasif}`}
-              />
-              {ASSET_SOURCE_LABELS[s]}
-            </button>
-          );
-        })}
-      </div>
-
       <div className="flex gap-2 border-b border-slate-200 px-4 py-3">
         <select
           className={selectClass}
@@ -299,127 +226,23 @@ export default function AssetList({
 
         <ul className="divide-y divide-slate-100">
           {data?.features.map((asset) => {
-            const { id, name, type, status, brand_model, photo_url } =
-              asset.properties;
-            const [lng, lat] = asset.geometry.coordinates;
+            const id = asset.properties.id;
             const secili = id === seciliId;
-            const bakim = status === "bakim_lazim";
-            const TipIkonu = TIP_IKONU[type] ?? IconPin;
-
             return (
-              <li key={id} ref={secili ? seciliRef : undefined}>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onSec(id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onSec(id);
-                    }
-                  }}
-                  className={`w-full cursor-pointer border-l-2 px-4 py-2.5 text-left transition ${
-                    secili
-                      ? "border-emerald-600 bg-emerald-50"
-                      : "border-transparent hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-start gap-2.5">
-                    {photo_url ? (
-                      <img
-                        src={fotoUrl(photo_url) ?? undefined}
-                        alt=""
-                        className="h-6 w-6 shrink-0 border border-slate-200 object-cover"
-                      />
-                    ) : (
-                      <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center border ${
-                          TIP_RENGI[type] ?? "border-slate-200 bg-slate-50 text-slate-500"
-                        }`}
-                      >
-                        <TipIkonu className="h-3.5 w-3.5" />
-                      </span>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-800">
-                        {name}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {ASSET_TYPE_LABELS[type]}
-                        {brand_model ? ` · ${brand_model}` : ""}
-                      </p>
-                      <div className="mt-1.5 flex items-center gap-2">
-                        <span
-                          className={`inline-flex items-center gap-1 border px-1.5 py-0.5 text-[11px] font-medium ${
-                            bakim
-                              ? "border-amber-300 bg-amber-50 text-amber-800"
-                              : "border-emerald-300 bg-emerald-50 text-emerald-800"
-                          }`}
-                        >
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              bakim ? "bg-amber-500" : "bg-emerald-500"
-                            }`}
-                          />
-                          {ASSET_STATUS_LABELS[status]}
-                        </span>
-                        <span className="font-mono text-[11px] text-slate-400">
-                          {lng.toFixed(4)}, {lat.toFixed(4)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {secili && (
-                    <div className="mt-2 flex gap-3 pl-[34px]">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDetayAsset(asset);
-                        }}
-                        className="text-xs font-medium text-slate-600 hover:underline"
-                      >
-                        Detay
-                      </button>
-                      {bakim && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            repairAsset.mutate(id);
-                          }}
-                          disabled={repairAsset.isPending}
-                          className="text-xs font-medium text-emerald-700 hover:underline disabled:opacity-50"
-                        >
-                          Tamir Edildi
-                        </button>
-                      )}
-                      {tamCrudYetkisi && (
-                        <>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDuzenle(asset);
-                            }}
-                            className="text-xs font-medium text-emerald-700 hover:underline"
-                          >
-                            Düzenle
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              sil(asset);
-                            }}
-                            disabled={deleteAsset.isPending}
-                            className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50"
-                          >
-                            Sil
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </li>
+              <VarlikSatiri
+                key={id}
+                ref={secili ? seciliRef : undefined}
+                asset={asset}
+                secili={secili}
+                onSec={onSec}
+                onDetay={setDetayAsset}
+                onDuzenle={onDuzenle}
+                tamCrudYetkisi={tamCrudYetkisi}
+                onTamirEt={(assetId) => repairAsset.mutate(assetId)}
+                tamirPending={repairAsset.isPending}
+                onSil={sil}
+                silPending={deleteAsset.isPending}
+              />
             );
           })}
         </ul>

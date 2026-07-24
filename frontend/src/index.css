@@ -9,6 +9,21 @@
   transform: translateY(-50%);
 }
 
+/* Varlik/ihbar popup'larindaki (harita uzerindeki "Detaylari Gor" kutucuklari)
+   metin bulanikligi iki nedene dayaniyordu:
+   1) MapLibre popup konumunu tam piksele yuvarlar ama anchor'daki
+      `translate(-50%)` popup genisligi TEK sayiysa yarim piksele denk gelir ->
+      CIFT piksellik sabit genislikle cozuldu (bkz. MapView `POPUP_GENISLIK`).
+   2) Popup'u GPU katmanina alan ipuclari (`backface-visibility: hidden`,
+      `transform: translateZ` vb.) metni bir kez rasterize edip fly animasyonu
+      sirasinda dusuk cozunurlukte "dondurur"; zoom yapilana kadar bulanik kalir.
+      Bu yuzden hicbir katman promosyonu KULLANILMAZ - popup ana katmanda
+      kaldiginda tarayici metni her karede net cizer. */
+.maplibregl-popup-content {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
 /* Ozet ekraninda seviye (genel -> ilce -> mahalle) degisince icerigin
    yeniden geldigi belli olsun diye kisa bir giris animasyonu. */
 @keyframes ozet-giris {

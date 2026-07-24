@@ -8,8 +8,8 @@ import { HARITA_STILLERI, type HaritaStilId } from "../data/mapStyles";
 import type { TamamlananAlan } from "../types/alan";
 import {
   ASSET_SOURCE_LABELS,
-  ASSET_STATUS_LABELS,
   ASSET_TYPE_LABELS,
+  durumEtiketi,
 } from "../types/asset";
 import type { AssetFeature, AssetFeatureCollection } from "../types/asset";
 import { REPORT_STATUS_LABELS } from "../types/report";
@@ -100,6 +100,15 @@ function tipIkonlariniHazirla(map: maplibregl.Map): Promise<void> {
   ).then(() => undefined);
 }
 
+/** Bir varlik/ihbara ucarken kullanilan zoom/sure degerleri: haritadaki bir
+ *  noktaya tiklandiginda daha yakina ama asiri olmayan bir zoom, listeden
+ *  secildiginde ise daha uzak bir zoom kullanilir; her iki durumda da
+ *  animasyon eskisinden belirgin sekilde yavastir. */
+const SECIM_UCUS_HARITADAN = { zoom: 14, duration: 1500 };
+const SECIM_UCUS_LISTEDEN = { zoom: 12.5, duration: 2000 };
+/** Sinir/arama gibi diger ucus hedeflerinde kullanilan (yavaslatilmis) sure. */
+const UCUS_SURESI_VARSAYILAN = 1600;
+
 const IKON_KATMAN_YERLESIMI: Record<string, unknown> = {
   "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.8],
   "icon-allow-overlap": true,
@@ -144,9 +153,12 @@ interface MapViewProps {
   aktifStilId: HaritaStilId;
   /** Verildiginde harita bu hedefe ucar (il/ilce secimi, arama sonucu vb.). */
   ucusHedefi?: UcusHedefi | null;
-  /** true ise varlik secilince haritada popup ACILMAZ (secim yerine sol-alttaki
-   *  zengin detay karti kullaniliyor). Secim halkasi + ucus yine calisir. */
-  varlikPopupKapali?: boolean;
+  /** Bir varlik popup'undaki "Detaylari Gor" butonuna tiklaninca - sol-alttaki
+   *  zengin detay kartini acar (artik secim aninda otomatik acilmiyor). */
+  onVarlikDetay?: (id: string) => void;
+  /** Bir ihbar popup'undaki "Detaylari Gor" butonuna tiklaninca - ayni sekilde
+   *  ihbarin ozet kartini acar. */
+  onIhbarDetay?: (id: string) => void;
   /** Harita her hareket ettiginde (pan/zoom) gorunen alanin sinirlarini bildirir;
    *  konum aramasini o an ekranda gorunen bolgeye onceliklendirmek icin kullanilir. */
   onGorunumDegisti?: (bounds: [[number, number], [number, number]]) => void;
@@ -171,7 +183,8 @@ export default function MapView({
   aktifStilId,
   ucusHedefi,
   onGorunumDegisti,
-  varlikPopupKapali,
+  onVarlikDetay,
+  onIhbarDetay,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -206,9 +219,14 @@ export default function MapView({
   const onIhbarSecRef = useRef(onIhbarSec);
   const cizimNoktalariRef = useRef(cizimNoktalari);
   const seciliIdRef = useRef(seciliId);
-  const varlikPopupKapaliRef = useRef(varlikPopupKapali);
+  const onVarlikDetayRef = useRef(onVarlikDetay);
+  const onIhbarDetayRef = useRef(onIhbarDetay);
   /** Cizim/olcum sirasinda son bilinen fare konumu (elastik cizgi icin). */
   const sonFareRef = useRef<[number, number] | null>(null);
+  /** Son secim (varlik/ihbar) haritadaki bir noktaya tiklanarak mi yapildi;
+   * flyTo hedef zoom/suresi buna gore ayarlanir (harita tiklamasinda daha
+   * yakin, listeden secimde daha uzak ve daha yavas). */
+  const sonSecimHaritadanRef = useRef(false);
   useEffect(() => {
     onVarlikSecRef.current = onVarlikSec;
     onHaritaTiklaRef.current = onHaritaTikla;
@@ -226,20 +244,60 @@ export default function MapView({
     onIhbarSecRef.current = onIhbarSec;
     cizimNoktalariRef.current = cizimNoktalari;
     seciliIdRef.current = seciliId;
-    varlikPopupKapaliRef.current = varlikPopupKapali;
+    onVarlikDetayRef.current = onVarlikDetay;
+    onIhbarDetayRef.current = onIhbarDetay;
   });
 
   // Layer-scoped click/hover callback'leri sabit referans olarak tutulur ki
   // stil degisiminde map.off/map.on ile guvenle yeniden baglanabilsin.
+  // "assets-circle" ve "assets-icon" (aynı sekilde "reports-circle"/"reports-icon")
+  // ayni nokta icin ayri katmanlar oldugundan, tek bir tiklama her iki katmanin
+  // click handler'ini da tetikler; ayni DOM olayini iki kez islemeyi onlemek icin
+  // son islenen originalEvent'i tutuyoruz (aksi halde secim toggle'i kendi
+  // kendini iptal eder: sec -> hemen ardindan tekrar tikla -> null).
+  const sonIslenenAssetsOlayiRef = useRef<MouseEvent | null>(null);
+  const sonIslenenReportsOlayiRef = useRef<MouseEvent | null>(null);
   const assetsTiklandiRef = useRef((e: maplibregl.MapLayerMouseEvent) => {
     if (cizimModuRef.current || olcumModuRef.current) return;
+    if (sonIslenenAssetsOlayiRef.current === e.originalEvent) return;
+    sonIslenenAssetsOlayiRef.current = e.originalEvent;
     const id = e.features?.[0]?.properties?.id;
-    if (typeof id === "string") onVarlikSecRef.current(id);
+    if (typeof id === "string") {
+      sonSecimHaritadanRef.current = true;
+      onVarlikSecRef.current(id);
+    }
   });
   const reportsTiklandiRef = useRef((e: maplibregl.MapLayerMouseEvent) => {
     if (cizimModuRef.current || olcumModuRef.current) return;
+    if (sonIslenenReportsOlayiRef.current === e.originalEvent) return;
+    sonIslenenReportsOlayiRef.current = e.originalEvent;
     const id = e.features?.[0]?.properties?.id;
-    if (typeof id === "string") onIhbarSecRef.current?.(id);
+    if (typeof id === "string") {
+      sonSecimHaritadanRef.current = true;
+      onIhbarSecRef.current?.(id);
+    }
+  });
+  // Popup metnini keskin tutar: MapLibre popup'u tam CSS pikseline yuvarlar,
+  // ama Windows'ta kesirli olceklemede (%125/%150) bu kesirli bir CIHAZ
+  // pikseline denk gelip yaziyi bulaniklastirir. Her render'da popup'un toplam
+  // ceviri (translate) degerini cihaz piksel izgarasina oturtarak bunu giderir
+  // (DPR=1'de zaten hizali oldugundan dokunmaz).
+  const popupHizalaRef = useRef(() => {
+    const el = popupRef.current?.getElement() as HTMLElement | undefined;
+    if (!el) return;
+    const dpr = window.devicePixelRatio || 1;
+    if (dpr === 1) return;
+    const t = getComputedStyle(el).transform;
+    if (!t || t === "none") return;
+    let m: DOMMatrixReadOnly;
+    try {
+      m = new DOMMatrixReadOnly(t);
+    } catch {
+      return;
+    }
+    const izgara = (v: number) => Math.round(v * dpr) / dpr;
+    const yeni = `translate(${izgara(m.m41)}px, ${izgara(m.m42)}px)`;
+    if (el.style.transform !== yeni) el.style.transform = yeni;
   });
   const fareGirdiRef = useRef(() => {
     const map = mapRef.current;
@@ -531,10 +589,6 @@ export default function MapView({
     popupRef.current?.remove();
     popupRef.current = null;
 
-    // Varlik popup'i kapaliysa (sol-alttaki detay karti kullaniliyor) yalnizca
-    // secim halkasi/ucus calisir, harita uzerinde popup acilmaz.
-    if (varlikPopupKapaliRef.current) return;
-
     if (!id || !assetsRef.current) return;
     const secili = assetsRef.current.features.find((f) => f.properties.id === id);
     if (!secili) return;
@@ -545,6 +599,10 @@ export default function MapView({
       .addTo(map);
     popupRef.current = popup;
     konumSatiriDoldur(popup, secili);
+    popup
+      .getElement()
+      ?.querySelector(".popup-detay-btn")
+      ?.addEventListener("click", () => onVarlikDetayRef.current?.(secili.properties.id));
   }
 
   /** Secili ihbari haritada vurgular ve popup acar (varlik secimiyle ayni
@@ -561,10 +619,15 @@ export default function MapView({
     if (!secili) return;
 
     popupRef.current?.remove();
-    popupRef.current = new maplibregl.Popup({ offset: 14, closeButton: false })
+    const popup = new maplibregl.Popup({ offset: 14, closeButton: false })
       .setLngLat(secili.geometry.coordinates)
       .setHTML(ihbarPopupIcerigi(secili))
       .addTo(map);
+    popupRef.current = popup;
+    popup
+      .getElement()
+      ?.querySelector(".popup-detay-btn")
+      ?.addEventListener("click", () => onIhbarDetayRef.current?.(secili.properties.id));
   }
 
   /** Kaynaklar/katmanlar yoksa (ilk yukleme ya da stil degisimi sonrasi) yeniden kurar. */
@@ -854,6 +917,9 @@ export default function MapView({
     haritayaKapaliAttributionEkle(map);
 
     map.on("load", () => kaynaklariHazirla(map));
+    // Acik popup'i her karede cihaz piksel izgarasina hizala (kesirli DPR'de
+    // metin bulanikligini onler). Harita kaldirilinca map.remove() temizler.
+    map.on("render", popupHizalaRef.current);
 
     // Kapsayici boyutu degisince (orn. sol kenar cubugu acilip kapaninca)
     // MapLibre kendiliginden yeniden boyutlanmaz; ResizeObserver ile tetikleriz.
@@ -920,15 +986,19 @@ export default function MapView({
 
     secimIhbarUygula(map);
 
+    const haritadanMi = sonSecimHaritadanRef.current;
+    sonSecimHaritadanRef.current = false;
+
     if (seciliIhbarId && reports) {
       const secili = reports.features.find(
         (f) => f.properties.id === seciliIhbarId
       );
       if (secili) {
+        const hedef = haritadanMi ? SECIM_UCUS_HARITADAN : SECIM_UCUS_LISTEDEN;
         map.flyTo({
           center: secili.geometry.coordinates,
-          zoom: Math.max(map.getZoom(), 15),
-          duration: 900,
+          zoom: Math.max(map.getZoom(), hedef.zoom),
+          duration: hedef.duration,
         });
       }
     }
@@ -979,12 +1049,12 @@ export default function MapView({
     if (!map || !ucusHedefi) return;
 
     if (ucusHedefi.tip === "sinir") {
-      map.fitBounds(ucusHedefi.bounds, { padding: 40, duration: 900 });
+      map.fitBounds(ucusHedefi.bounds, { padding: 40, duration: UCUS_SURESI_VARSAYILAN });
     } else {
       map.flyTo({
         center: ucusHedefi.merkez,
         zoom: ucusHedefi.zoom ?? Math.max(map.getZoom(), 15),
-        duration: 900,
+        duration: UCUS_SURESI_VARSAYILAN,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -997,13 +1067,17 @@ export default function MapView({
 
     secimUygula(map);
 
+    const haritadanMi = sonSecimHaritadanRef.current;
+    sonSecimHaritadanRef.current = false;
+
     if (seciliId && assets) {
       const secili = assets.features.find((f) => f.properties.id === seciliId);
       if (secili) {
+        const hedef = haritadanMi ? SECIM_UCUS_HARITADAN : SECIM_UCUS_LISTEDEN;
         map.flyTo({
           center: secili.geometry.coordinates,
-          zoom: Math.max(map.getZoom(), 15),
-          duration: 900,
+          zoom: Math.max(map.getZoom(), hedef.zoom),
+          duration: hedef.duration,
         });
       }
     }
@@ -1011,6 +1085,14 @@ export default function MapView({
 
   return <div ref={containerRef} className="greenasset-harita h-full w-full" />;
 }
+
+/** Varlik ve ihbar popup'lari icin ortak, sabit ve CIFT piksellik genislik.
+ *  Ayni genislik iki popup'i birebir esitler (istenen: hepsi "onaylandi"
+ *  boyutunda). Ayrica cift sayi olmasi kritik: MapLibre popup'i kesirsiz tam
+ *  piksele yuvarlar ama anchor'daki `translate(-50%)` tek genislikte yarim
+ *  piksele denk gelip metni bulaniklastiriyordu; cift genislikte -%50 tam
+ *  piksele oturur ve yazi keskin kalir. (200 + ~20 padding = 220, cift.) */
+const POPUP_GENISLIK = "200px";
 
 function popupIcerigi(asset: AssetFeature): string {
   const { name, type, status, source, brand_model, install_date, photo_url } =
@@ -1030,7 +1112,7 @@ function popupIcerigi(asset: AssetFeature): string {
   const turRenk = turRenkleri[type] ?? "#64748b";
 
   return `
-    <div style="font-family: system-ui, sans-serif; min-width: 170px">
+    <div style="font-family: system-ui, sans-serif; width: ${POPUP_GENISLIK}">
       ${
         foto
           ? `<img src="${kacis(foto)}" style="width:100%; max-height:120px; object-fit:cover; margin-bottom:6px; border:1px solid #e2e8f0;" />`
@@ -1047,7 +1129,7 @@ function popupIcerigi(asset: AssetFeature): string {
           font-size:11px; font-weight:500;
           background:${bakim ? "#fef3c7" : "#d1fae5"};
           color:${bakim ? "#92400e" : "#065f46"}">
-          ${ASSET_STATUS_LABELS[status]}
+          ${durumEtiketi(status, source)}
         </span>
         <span style="
           display:inline-block; padding:2px 8px; border-radius:9999px;
@@ -1059,6 +1141,10 @@ function popupIcerigi(asset: AssetFeature): string {
       </div>
       <div style="color:#64748b; font-size:11px; margin-top:6px">${satirlar}</div>
       <div class="popup-konum" style="color:#64748b; font-size:11px; margin-top:2px"></div>
+      <button type="button" class="popup-detay-btn" style="
+        margin-top:8px; width:100%; padding:5px 0; border:1px solid #059669;
+        border-radius:6px; background:#fff; color:#059669; font-size:11px;
+        font-weight:600; cursor:pointer;">Detayları Gör</button>
     </div>
   `;
 }
@@ -1088,7 +1174,7 @@ function ihbarPopupIcerigi(report: ReportFeature): string {
   const dr = durumRenk[status] ?? durumRenk.beklemede;
 
   return `
-    <div style="font-family: system-ui, sans-serif; min-width: 180px">
+    <div style="font-family: system-ui, sans-serif; width: ${POPUP_GENISLIK}">
       ${
         foto
           ? `<img src="${kacis(foto)}" style="width:100%; max-height:120px; object-fit:cover; margin-bottom:6px; border:1px solid #e2e8f0;" />`
@@ -1105,9 +1191,13 @@ function ihbarPopupIcerigi(report: ReportFeature): string {
       </div>
       ${
         note
-          ? `<div style="color:#64748b; font-size:11px; margin-top:6px">${kacis(note)}</div>`
+          ? `<div style="color:#64748b; font-size:11px; margin-top:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden">${kacis(note)}</div>`
           : ""
       }
+      <button type="button" class="popup-detay-btn" style="
+        margin-top:8px; width:100%; padding:5px 0; border:1px solid #9333ea;
+        border-radius:6px; background:#fff; color:#9333ea; font-size:11px;
+        font-weight:600; cursor:pointer;">Detayları Gör</button>
     </div>
   `;
 }

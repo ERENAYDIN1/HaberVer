@@ -4,7 +4,7 @@ export const REPORT_STATUSES = ["beklemede", "onaylandi", "reddedildi"] as const
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
 export const REPORT_STATUS_LABELS: Record<ReportStatus, string> = {
-  beklemede: "Beklemede",
+  beklemede: "Bekleyen İhbar",
   onaylandi: "Onaylandı",
   reddedildi: "Reddedildi",
 };
