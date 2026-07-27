@@ -76,6 +76,25 @@ export function IconLamp({ className }: IconProps) {
   );
 }
 
+/** Yol tarifi / navigasyon - yonlu ok. */
+export function IconRoute({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} className={className}>
+      <path d="M3 11l18-8-8 18-2-8-8-2z" />
+    </svg>
+  );
+}
+
+/** Sulama sistemi - su damlasi. */
+export function IconDrop({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} className={className}>
+      <path d="M12 3s6 6.3 6 10.5a6 6 0 0 1-12 0C6 9.3 12 3 12 3z" />
+      <path d="M9.5 13.5a2.5 2.5 0 0 0 2.5 2.5" />
+    </svg>
+  );
+}
+
 export function IconPin({ className }: IconProps) {
   return (
     <svg {...temelOzellikler} className={className}>

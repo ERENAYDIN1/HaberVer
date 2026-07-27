@@ -14,6 +14,7 @@ class AssetType(str, enum.Enum):
     agac = "agac"
     bank = "bank"
     direk = "direk"
+    sulama = "sulama"
 
 
 class AssetStatus(str, enum.Enum):

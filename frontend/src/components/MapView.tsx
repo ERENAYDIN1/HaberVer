@@ -65,15 +65,19 @@ const TIP_RENGI_IFADESI = [
   "#d97706",
   "direk",
   "#0284c7",
+  "sulama",
+  "#0891b2",
   "#64748b",
 ] as unknown as maplibregl.ExpressionSpecification;
 
 /** Her tur icin beyaz cizgi glifi (marker dairesinin ortasina bindirilir).
- *  Path'ler icons.tsx'teki IconTree/IconBench/IconLamp ile ayni. */
+ *  Path'ler icons.tsx'teki IconTree/IconBench/IconLamp/IconDrop ile ayni. */
 const TIP_GLIFLERI: Record<string, string> = {
   agac: '<path d="M12 3 6.5 11h2.7L5 18h6M12 3l5.5 8h-2.7L19 18h-6"/><path d="M12 14v7"/>',
   bank: '<path d="M3 9h18M3 12h18M5 12v7M19 12v7M3 19h4M17 19h4"/>',
   direk: '<path d="M12 2v3M8.5 5h7l-1.3 4.5h-4.4L8.5 5z"/><path d="M12 9.5V21M9 21h6"/>',
+  sulama:
+    '<path d="M12 3s6 6.3 6 10.5a6 6 0 0 1-12 0C6 9.3 12 3 12 3z"/><path d="M9.5 13.5a2.5 2.5 0 0 0 2.5 2.5"/>',
 };
 
 /** Bir turun beyaz glifini SVG->raster cevirip haritaya `tip-<tur>` adiyla ekler. */
@@ -1148,6 +1152,7 @@ function popupIcerigi(asset: AssetFeature): string {
     agac: "#059669",
     bank: "#d97706",
     direk: "#0284c7",
+    sulama: "#0891b2",
   };
   const turRenk = turRenkleri[type] ?? "#64748b";
 

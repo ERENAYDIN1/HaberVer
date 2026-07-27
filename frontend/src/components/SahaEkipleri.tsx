@@ -18,6 +18,7 @@ import {
 } from "../types/saha";
 import {
   IconBench,
+  IconDrop,
   IconInbox,
   IconLamp,
   IconRefresh,
@@ -43,6 +44,7 @@ const TIP_STILI: Record<
   agac: { ikon: IconTree, rozet: "bg-emerald-100 text-emerald-700" },
   bank: { ikon: IconBench, rozet: "bg-amber-100 text-amber-700" },
   direk: { ikon: IconLamp, rozet: "bg-sky-100 text-sky-700" },
+  sulama: { ikon: IconDrop, rozet: "bg-cyan-100 text-cyan-700" },
 };
 
 /** Son gorulme tazeligine gore renk + insana okunur metin. */
@@ -84,6 +86,21 @@ function TipRozet({ type }: { type: AssetType }) {
   );
 }
 
+/** Gorevin kaynagi: kayitli varlik mi yoksa vatandas ihbari mi (kucuk rozet). */
+function KaynakRozet({ source }: { source: AssetSource }) {
+  const ihbar = source === "ihbar";
+  return (
+    <span
+      className={`rounded px-1 py-px text-[10px] font-medium ${
+        ihbar ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"
+      }`}
+      title={ihbar ? "Vatandaş ihbarından oluştu" : "Belediyeye kayıtlı varlık"}
+    >
+      {ihbar ? "İhbar" : "Varlık"}
+    </span>
+  );
+}
+
 /** Bir ekibin altindaki tek gorev satiri: baska ekibe tasi ya da havuza al. */
 function GorevSatiri({
   gorev,
@@ -97,15 +114,16 @@ function GorevSatiri({
   calisiyor: boolean;
 }) {
   return (
-    <li className="px-3 py-2.5">
+    <li className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
       <div className="flex items-start gap-2.5">
         <TipRozet type={gorev.type} />
         <div className="min-w-0 flex-1">
           <p className="break-words text-sm font-medium leading-snug text-slate-800">
             {gorev.name}
           </p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
             <span className="text-slate-500">{ASSET_TYPE_LABELS[gorev.type]}</span>
+            <KaynakRozet source={gorev.source} />
             <span
               className={`rounded-full px-1.5 py-px font-medium ${
                 gorev.otomatik
@@ -165,21 +183,26 @@ function EkipKarti({
   const diger = tumEkipler.filter((e) => e.id !== ekip.id);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <div className="flex items-center gap-3 border-b border-slate-100 px-3 py-2.5">
+    <div className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
+      {/* Ekip basligi: koyu bant + "SAHA EKIBI" ustyazisiyla altindaki gorev
+          kartlarindan net ayrilir (bir baslik gibi okunur). */}
+      <div className="flex items-center gap-3 bg-slate-800 px-3 py-2.5 text-white">
         <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-600"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white"
           title={ekip.email}
         >
           <IconUsers className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-slate-800">
+          <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+            Saha Ekibi
+          </p>
+          <p className="truncate text-sm font-semibold leading-tight text-white">
             {ekip.full_name || ekip.email}
           </p>
-          <p className="flex items-center gap-1.5 text-xs text-slate-500">
+          <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-300">
             <span
-              className="inline-block h-2 w-2 rounded-full"
+              className="inline-block h-2 w-2 rounded-full ring-1 ring-white/40"
               style={{ background: t.renk }}
             />
             {t.metin}
@@ -187,7 +210,7 @@ function EkipKarti({
         </div>
         <span
           className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-            dolu ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+            dolu ? "bg-red-500 text-white" : "bg-emerald-500 text-white"
           }`}
         >
           {dolu && <IconWarning className="h-3 w-3" />}
@@ -196,9 +219,11 @@ function EkipKarti({
       </div>
 
       {ekip.gorevler.length === 0 ? (
-        <p className="px-3 py-3 text-xs text-slate-400">Aktif görev yok.</p>
+        <p className="px-3 py-4 text-center text-xs text-slate-400">
+          Aktif görev yok.
+        </p>
       ) : (
-        <ul className="divide-y divide-slate-100">
+        <ul className="space-y-1.5 bg-slate-50 p-2">
           {ekip.gorevler.map((g) => (
             <GorevSatiri
               key={g.assignment_id}
@@ -227,15 +252,16 @@ function HavuzSatiri({
   calisiyor: boolean;
 }) {
   return (
-    <li className="px-3 py-2.5">
+    <li className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
       <div className="flex items-start gap-2.5">
         <TipRozet type={varlik.type} />
         <div className="min-w-0 flex-1">
           <p className="break-words text-sm font-medium leading-snug text-slate-800">
             {varlik.name}
           </p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
             <span className="text-slate-500">{ASSET_TYPE_LABELS[varlik.type]}</span>
+            <KaynakRozet source={varlik.source} />
             <span className="rounded-full bg-amber-100 px-1.5 py-px font-medium text-amber-700">
               {beklemeMetni(varlik.created_at)}
             </span>
@@ -302,7 +328,7 @@ function HavuzGrup({
         </span>
         <span className="h-px flex-1 bg-slate-200" />
       </div>
-      <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+      <ul className="space-y-1.5">
         {varliklar.map((h) => (
           <HavuzSatiri
             key={h.asset_id}

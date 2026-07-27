@@ -20,6 +20,9 @@ export interface HaritaIsaret {
   lat: number;
   renk: string;
   onClick?: () => void;
+  /** Verilirse isaretciye tiklaninca gosterilecek MapLibre popup icerigi (HTML).
+   *  Icerik bizim urettigimiz guvenli HTML olmali (kullanici metni kacislanir). */
+  popupHtml?: string;
 }
 
 interface KonumSecMapProps {
@@ -154,6 +157,12 @@ export default function KonumSecMap({
       const marker = new maplibregl.Marker({ color: i.renk })
         .setLngLat([i.lng, i.lat])
         .addTo(map);
+      if (i.popupHtml) {
+        marker.setPopup(
+          new maplibregl.Popup({ offset: 24, closeButton: true }).setHTML(i.popupHtml)
+        );
+        marker.getElement().style.cursor = "pointer";
+      }
       if (i.onClick) {
         const el = marker.getElement();
         el.style.cursor = "pointer";

@@ -4,19 +4,21 @@ import { fotoUrl } from "../api/reports";
 import { ASSET_TYPE_LABELS, type AssetType } from "../types/asset";
 import type { ReportFeature } from "../types/report";
 import FotoBuyutucu from "./FotoBuyutucu";
-import { IconBench, IconLamp, IconPin, IconTree } from "./icons";
+import { IconBench, IconDrop, IconLamp, IconPin, IconTree } from "./icons";
 import IhbarDurumRozeti from "./IhbarDurumRozeti";
 
 const TIP_IKONU: Record<AssetType, (props: { className?: string }) => ReactElement> = {
   agac: IconTree,
   bank: IconBench,
   direk: IconLamp,
+  sulama: IconDrop,
 };
 
 const TIP_RENGI: Record<AssetType, string> = {
   agac: "border-emerald-200 bg-emerald-50 text-emerald-700",
   bank: "border-amber-200 bg-amber-50 text-amber-700",
   direk: "border-sky-200 bg-sky-50 text-sky-700",
+  sulama: "border-cyan-200 bg-cyan-50 text-cyan-700",
 };
 
 interface IhbarSatiriProps {

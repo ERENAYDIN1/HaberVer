@@ -9,9 +9,11 @@ import KonumSecMap, { type HaritaIsaret } from "../components/KonumSecMap";
 import {
   IconBench,
   IconCheck,
+  IconDrop,
   IconLamp,
   IconLogout,
   IconPin,
+  IconRoute,
   IconTree,
   IconWarning,
 } from "../components/icons";
@@ -21,9 +23,28 @@ const TIP_IKON: Record<AssetType, (p: { className?: string }) => React.ReactElem
   agac: IconTree,
   bank: IconBench,
   direk: IconLamp,
+  sulama: IconDrop,
 };
 
 const GOREV_RENGI = "#d97706"; // amber - "iş bekliyor"
+
+/** Google Haritalar'da bu noktaya (kullanicinin konumundan) yol tarifi acar. */
+function yolTarifiAc(lng: number, lat: number) {
+  window.open(
+    `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+    "_blank",
+    "noopener"
+  );
+}
+
+/** Popup HTML'ine gomulen metinleri kacisla (basit XSS korumasi). */
+function kacis(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!
+  );
+}
 
 /** Saha ekibi ekrani: konumunu periyodik yayinlar, yalnizca kendisine atanan
  *  gorevleri (varliklari) gorur ve tamamladikca "Tamir Edildi" isaretler. */
@@ -39,6 +60,8 @@ export default function SahaEkran() {
     zoom?: number;
   } | null>(null);
   const [tamirEdilen, setTamirEdilen] = useState<string | null>(null);
+  // "Tamir Edildi" iki adimli: ilk tik onay ister, ikinci tik tamamlar.
+  const [onayBekleyen, setOnayBekleyen] = useState<string | null>(null);
 
   // Konum yayini: mount'ta ve her 30sn'de bir tarayici konumunu backend'e gonder.
   useEffect(() => {
@@ -83,18 +106,36 @@ export default function SahaEkran() {
 
   const isaretler = useMemo<HaritaIsaret[]>(
     () =>
-      (gorevSorgu.data?.features ?? []).map((g) => ({
-        id: g.properties.assignment_id,
-        lng: g.geometry.coordinates[0],
-        lat: g.geometry.coordinates[1],
-        renk: GOREV_RENGI,
-        onClick: () =>
-          setUcus({
-            anahtar: crypto.randomUUID(),
-            merkez: g.geometry.coordinates,
-            zoom: 16,
-          }),
-      })),
+      (gorevSorgu.data?.features ?? []).map((g) => {
+        const p = g.properties;
+        const [lng, lat] = g.geometry.coordinates;
+        const foto = fotoUrl(p.photo_url);
+        // Haritadaki pine tiklaninca: foto + detay + Google yol tarifi baglantisi.
+        const popupHtml =
+          `<div style="font-family:system-ui,sans-serif;width:200px">` +
+          (foto
+            ? `<img src="${kacis(foto)}" style="width:100%;max-height:110px;object-fit:cover;border:1px solid #e2e8f0;border-radius:4px;margin-bottom:6px"/>`
+            : "") +
+          `<div style="font-weight:600;font-size:13px;color:#0f172a">${kacis(p.name)}</div>` +
+          `<div style="font-size:11px;color:#64748b;margin:2px 0 6px">${kacis(
+            ASSET_TYPE_LABELS[p.type]
+          )}${p.brand_model ? " · " + kacis(p.brand_model) : ""}</div>` +
+          `<div style="font-size:10px;color:#94a3b8;margin-bottom:6px">#${kacis(
+            p.asset_id.slice(0, 8)
+          )}</div>` +
+          `<a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" ` +
+          `target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;` +
+          `background:#059669;color:#fff;font-size:12px;font-weight:600;padding:5px 10px;` +
+          `border-radius:6px;text-decoration:none">▸ Yol tarifi al</a>` +
+          `</div>`;
+        return {
+          id: p.assignment_id,
+          lng,
+          lat,
+          renk: GOREV_RENGI,
+          popupHtml,
+        };
+      }),
     [gorevSorgu.data]
   );
 
@@ -105,6 +146,7 @@ export default function SahaEkran() {
       await queryClient.invalidateQueries({ queryKey: ["saha", "gorevlerim"] });
     } finally {
       setTamirEdilen(null);
+      setOnayBekleyen(null);
     }
   };
 
@@ -208,28 +250,62 @@ export default function SahaEkran() {
                           </p>
                           <p className="text-xs text-slate-500">
                             {ASSET_TYPE_LABELS[p.type]}
+                            {p.brand_model ? ` · ${p.brand_model}` : ""}
                           </p>
                           <p className="mt-1 inline-flex items-center gap-1 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
                             <IconWarning className="h-3 w-3" />
                             Bakım Lazım
                           </p>
                           <p className="mt-1 font-mono text-[10px] text-slate-400">
+                            #{p.asset_id.slice(0, 8)} ·{" "}
                             {g.geometry.coordinates[1].toFixed(5)},{" "}
                             {g.geometry.coordinates[0].toFixed(5)}
                           </p>
                         </div>
                       </button>
-                      <div className="border-t border-slate-100 p-2">
+                      <div className="space-y-1.5 border-t border-slate-100 p-2">
                         <button
-                          onClick={() => tamirEt(p.asset_id)}
-                          disabled={tamirEdilen === p.asset_id}
-                          className="flex w-full items-center justify-center gap-1.5 bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                          onClick={() =>
+                            yolTarifiAc(
+                              g.geometry.coordinates[0],
+                              g.geometry.coordinates[1]
+                            )
+                          }
+                          className="flex w-full items-center justify-center gap-1.5 border border-emerald-600 bg-white px-3 py-1.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50"
                         >
-                          <IconCheck className="h-3.5 w-3.5" />
-                          {tamirEdilen === p.asset_id
-                            ? "Kaydediliyor…"
-                            : "Tamir Edildi"}
+                          <IconRoute className="h-3.5 w-3.5" />
+                          Yol tarifi al
                         </button>
+
+                        {onayBekleyen === p.asset_id ? (
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => setOnayBekleyen(null)}
+                              disabled={tamirEdilen === p.asset_id}
+                              className="flex-1 border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              Vazgeç
+                            </button>
+                            <button
+                              onClick={() => tamirEt(p.asset_id)}
+                              disabled={tamirEdilen === p.asset_id}
+                              className="flex flex-1 items-center justify-center gap-1.5 bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                            >
+                              <IconCheck className="h-3.5 w-3.5" />
+                              {tamirEdilen === p.asset_id
+                                ? "Kaydediliyor…"
+                                : "Evet, tamamla"}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setOnayBekleyen(p.asset_id)}
+                            className="flex w-full items-center justify-center gap-1.5 bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700"
+                          >
+                            <IconCheck className="h-3.5 w-3.5" />
+                            Tamir Edildi
+                          </button>
+                        )}
                       </div>
                     </li>
                   );
