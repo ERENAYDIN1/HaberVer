@@ -59,12 +59,17 @@ export interface HavuzVarlik {
   longitude: number;
   latitude: number;
   created_at: string;
+  /** Varligin bakima dusme/son guncellenme zamani; havuzdaki bekleme suresi
+   *  bundan hesaplanir (created_at kayitli varliklarda kurulus tarihidir). */
+  updated_at: string;
 }
 
 /** Bir gorevin (assignment) + uzerindeki varligin ozellikleri. */
 export interface GorevProperties {
   assignment_id: string;
   assigned_at: string;
+  /** Tamamlanan gorevlerde dolu; aktif gorevlerde null. */
+  completed_at: string | null;
   asset_id: string;
   name: string;
   type: AssetType;

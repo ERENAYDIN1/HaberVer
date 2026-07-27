@@ -17,6 +17,7 @@ from ..schemas.saha import (
     EkipOzet,
     GorevFeatureCollection,
     GorevOzet,
+    GorevRef,
     HavuzVarlik,
     KonumGuncelle,
     VarlikRef,
@@ -51,6 +52,33 @@ def gorevlerim(
 ):
     """Giris yapan saha ekibinin aktif gorevleri (kendisine atanan varliklar)."""
     return GorevFeatureCollection.from_rows(crud.gorevlerim(db, user.id))
+
+
+@router.get("/tamamlananlarim", response_model=GorevFeatureCollection)
+def tamamlananlarim(
+    user: User = Depends(require_role(UserRole.saha_calisani)),
+    db: Session = Depends(get_db),
+):
+    """Giris yapan saha ekibinin yakinda tamamladigi gorevler ('Tamamlanan
+    İşler'). Yanlislikla tamamlanan bir is buradan geri alinabilir."""
+    return GorevFeatureCollection.from_rows(crud.tamamlananlarim(db, user.id))
+
+
+@router.post("/tamamlanan-geri-al", status_code=status.HTTP_204_NO_CONTENT)
+def tamamlanan_geri_al(
+    data: GorevRef,
+    user: User = Depends(require_role(UserRole.saha_calisani)),
+    db: Session = Depends(get_db),
+):
+    """Saha ekibi yanlislikla tamamladigi bir gorevi geri alir (varlik yeniden
+    'bakim_lazim', gorev yeniden 'atandi'). Kapasite dolu olsa bile izin verilir."""
+    asset = crud.tamamlanani_geri_al(db, data.assignment_id, user.id)
+    if asset is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Geri alinabilecek tamamlanmis gorev bulunamadi",
+        )
+    db.commit()
 
 
 @router.get("/ekipler", response_model=list[EkipOzet])

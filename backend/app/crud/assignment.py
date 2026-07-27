@@ -96,7 +96,9 @@ def bekleyen_gorevleri_dagit(db: Session) -> int:
                 Asset.status == AssetStatus.bakim_lazim,
                 Asset.id.not_in(atanmis),
             )
-            .order_by(Asset.created_at.asc())
+            # Havuza giris (bakima dusme/olusma) sirasina gore FIFO: updated_at
+            # varlik bakim_lazim'a cekildiginde tazelenir, en uzun bekleyen once.
+            .order_by(Asset.updated_at.asc())
         )
         .scalars()
         .all()
@@ -253,6 +255,88 @@ def gorevlerim(db: Session, worker_id: uuid.UUID):
     return db.execute(stmt).all()
 
 
+def tamamlananlarim(db: Session, worker_id: uuid.UUID, limit: int = 30):
+    """Bir ekibin GERI ALINABILIR tamamlanmis gorevlerini dondurur: yalnizca hala
+    'iyi' (tamir edilmis) durumdaki varliklar ve VARLIK BASINA yalnizca en son
+    tamamlanan gorev. Boylece ayni varlik icin birden fazla tamamlanmis kayit
+    listeye dusup, ikisini birden geri alinca aktif gorev tekil kisitini (bir
+    varlik = tek aktif gorev) ihlal etmez. En son tamamlanan once."""
+    # Once varlik basina en son tamamlanan gorevi sec (DISTINCT ON asset_id).
+    en_son = (
+        select(Assignment.id.label("aid"))
+        .join(Asset, Asset.id == Assignment.asset_id)
+        .where(
+            Assignment.worker_id == worker_id,
+            Assignment.status == AssignmentStatus.tamamlandi,
+            Asset.status == AssetStatus.iyi,
+        )
+        .distinct(Assignment.asset_id)
+        .order_by(Assignment.asset_id, Assignment.completed_at.desc())
+        .subquery()
+    )
+    stmt = (
+        select(
+            Assignment,
+            Asset,
+            func.ST_X(Asset.geometry).label("longitude"),
+            func.ST_Y(Asset.geometry).label("latitude"),
+        )
+        .join(Asset, Asset.id == Assignment.asset_id)
+        .where(Assignment.id.in_(select(en_son.c.aid)))
+        .order_by(Assignment.completed_at.desc())
+        .limit(limit)
+    )
+    return db.execute(stmt).all()
+
+
+def tamamlanani_geri_al(
+    db: Session, assignment_id: uuid.UUID, worker_id: uuid.UUID
+) -> Asset | None:
+    """Ekibin yanlislikla tamamladigi bir gorevi geri alir: gorevi tekrar 'atandi'
+    yapar ve varligi 'bakim_lazim'a dondurur. Bu ekibin kapasitesi dolmus olsa bile
+    (arada havuzdan yeni is dusmus olabilir) izin verilir - nadir bir durum oldugu
+    icin ekip gecici olarak MAKS_AKTIF_GOREV'i asabilir. commit cagirmaz.
+
+    Gorev bu ekibe ait ve 'tamamlandi' degilse None doner."""
+    gorev = db.get(Assignment, assignment_id)
+    if (
+        gorev is None
+        or gorev.worker_id != worker_id
+        or gorev.status != AssignmentStatus.tamamlandi
+    ):
+        return None
+    asset = db.get(Asset, gorev.asset_id)
+    if asset is None:
+        return None
+
+    # Varlik bu arada yeniden bakima dusup baska bir goreve atanmis olabilir; o
+    # zaman geri alma "bir varlik = tek aktif gorev" tekil kisitini ihlal eder.
+    # Boyle bir durumda 500 yerine temiz bir "bulunamadi/cakisti" (None) donduru.
+    zaten_aktif = db.execute(
+        select(Assignment.id).where(
+            Assignment.asset_id == asset.id,
+            Assignment.status == AssignmentStatus.atandi,
+        )
+    ).first()
+    if zaten_aktif is not None:
+        return None
+
+    gorev.status = AssignmentStatus.atandi
+    gorev.completed_at = None
+    asset.status = AssetStatus.bakim_lazim
+    asset.repaired_at = None
+    add_log(
+        db,
+        action=LogAction.asset_status_changed,
+        actor=None,
+        entity_type="asset",
+        entity_id=asset.id,
+        entity_name=asset.name,
+        detail="Tamamlanan iş geri alındı (yeniden bakım bekliyor)",
+    )
+    return asset
+
+
 def aktif_atamalar(db: Session):
     """Tum aktif ('atandi') gorevleri worker_id + varlik + koordinatla dondurur
     (personel yonetim panosunda ekip bazinda gruplanir). En eski once."""
@@ -283,7 +367,8 @@ def havuz_varliklari(db: Session):
             func.ST_Y(Asset.geometry).label("latitude"),
         )
         .where(Asset.status == AssetStatus.bakim_lazim, Asset.id.not_in(atanmis))
-        .order_by(Asset.created_at.asc())
+        # En uzun bekleyen once (updated_at = bakima dusme/olusma zamani).
+        .order_by(Asset.updated_at.asc())
     )
     return db.execute(stmt).all()
 

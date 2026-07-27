@@ -28,6 +28,12 @@ class VarlikRef(BaseModel):
     asset_id: uuid.UUID
 
 
+class GorevRef(BaseModel):
+    """Yalniz gorev (assignment) referansi (tamamlanan gorevi geri alma icin)."""
+
+    assignment_id: uuid.UUID
+
+
 class AktifGorevBilgi(BaseModel):
     """Bir varligin o an atali oldugu ekip + atama bilgisi (elle yonlendirme
     ekraninda 'su an hangi ekipte' gostermek icin). Aktif gorev yoksa uc null
@@ -118,6 +124,10 @@ class HavuzVarlik(BaseModel):
     longitude: float
     latitude: float
     created_at: datetime
+    # Varligin son bakima dusme/guncellenme zamani; havuzdaki "bekleme suresi"
+    # bundan hesaplanir (created_at kayitli varliklarda kurulus tarihi oldugu
+    # icin yaniltici olur - bkz. istek 4).
+    updated_at: datetime
 
     @classmethod
     def from_row(cls, row) -> "HavuzVarlik":
@@ -130,6 +140,7 @@ class HavuzVarlik(BaseModel):
             longitude=longitude,
             latitude=latitude,
             created_at=asset.created_at,
+            updated_at=asset.updated_at,
         )
 
 
@@ -140,6 +151,8 @@ class GorevProperties(BaseModel):
 
     assignment_id: uuid.UUID
     assigned_at: datetime
+    # Tamamlanan gorevlerde dolu (aktif gorevlerde None) - "Tamamlanan İşler".
+    completed_at: datetime | None = None
     asset_id: uuid.UUID
     name: str
     type: AssetType
@@ -164,6 +177,7 @@ class GorevFeature(BaseModel):
             properties=GorevProperties(
                 assignment_id=gorev.id,
                 assigned_at=gorev.created_at,
+                completed_at=gorev.completed_at,
                 asset_id=asset.id,
                 name=asset.name,
                 type=asset.type,

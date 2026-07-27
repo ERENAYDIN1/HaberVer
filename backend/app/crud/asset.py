@@ -133,6 +133,12 @@ def create_asset(db: Session, data: AssetCreate, actor: User | None = None):
         entity_id=asset.id,
         entity_name=asset.name,
     )
+    # Dogrudan "Bakim Lazim" olarak eklenen varlik da en yakin uygun ekibe
+    # otomatik yonlendirilir (bkz. update_asset - ayni davranis).
+    if asset.status == AssetStatus.bakim_lazim:
+        ekip = assignment_crud.en_yakin_uygun_ekip(db, asset.geometry)
+        if ekip is not None:
+            assignment_crud.ata(db, asset, ekip, assigned_by=None)
     db.commit()
     return get_asset(db, asset.id)
 
@@ -178,6 +184,15 @@ def update_asset(
                 entity_name=asset.name,
                 detail=f"{eski_durum.value} → {asset.status.value}",
             )
+            # Kayitli bir varlik "Bakim Lazim"a cekilince (ihbar onayindaki gibi)
+            # en yakin uygun saha ekibine otomatik yonlendirilir. Menzilde uygun
+            # ekip yoksa havuzda bekler; bir ekip kapasite/menzil acinca otomatik
+            # dagitilir (bekleyen_gorevleri_dagit).
+            if asset.status == AssetStatus.bakim_lazim:
+                db.flush()
+                ekip = assignment_crud.en_yakin_uygun_ekip(db, asset.geometry)
+                if ekip is not None:
+                    assignment_crud.ata(db, asset, ekip, assigned_by=None)
         else:
             add_log(
                 db,

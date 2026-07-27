@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { assetsWithin } from "./api/assets";
 import { listReports } from "./api/reports";
-import { ekipler as ekipleriGetir } from "./api/saha";
+import { ekipGorevleri as ekipGorevleriGetir } from "./api/saha";
 import { ilceSiniri, mahalleSiniri } from "./api/sinirlar";
 import { useAuth } from "./auth/AuthContext";
 import AssetDetayModal from "./components/AssetDetayModal";
@@ -474,11 +474,13 @@ export default function App() {
   });
   const bekleyenIhbarSayisi = bekleyenIhbarSorgu.data?.features.length ?? 0;
 
-  // Canli saha ekibi konumlari - yalniz personel icin, haritada gosterilir +
-  // varlik detayindaki elle atama listesini besler.
+  // Canli saha ekibi konumlari + kendilerine dusen aktif gorevler - yalniz
+  // personel icin. Haritada marker + tiklayinca gorev popup'i, ayrica varlik
+  // detayindaki elle atama listesini besler. (EkipGorevleri, EkipOzet'in ust
+  // kumesi oldugundan yalniz konum/yuk isteyen tuketiciler de calisir.)
   const ekipSorgu = useQuery({
     queryKey: ["saha", "ekipler"],
-    queryFn: ekipleriGetir,
+    queryFn: ekipGorevleriGetir,
     enabled: personel,
     refetchInterval: 20000,
   });

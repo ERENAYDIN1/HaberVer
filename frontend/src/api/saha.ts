@@ -53,6 +53,19 @@ export function gorevlerim() {
   return istekJson<GorevFeatureCollection>("/saha/gorevlerim");
 }
 
+/** Giris yapan saha ekibinin yakinda tamamladigi gorevler ('Tamamlanan İşler'). */
+export function tamamlananlarim() {
+  return istekJson<GorevFeatureCollection>("/saha/tamamlananlarim");
+}
+
+/** Saha ekibi yanlislikla tamamladigi bir gorevi geri alir (yeniden bakim). */
+export function tamamlananiGeriAl(assignment_id: string) {
+  return istekBos("/saha/tamamlanan-geri-al", {
+    method: "POST",
+    body: JSON.stringify({ assignment_id }),
+  });
+}
+
 /** Personel: tum saha ekiplerinin konum + yuk ozeti. */
 export function ekipler() {
   return istekJson<EkipOzet[]>("/saha/ekipler");

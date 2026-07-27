@@ -3,7 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { repairAsset } from "../api/assets";
 import { fotoUrl } from "../api/reports";
-import { gorevlerim, konumGuncelle } from "../api/saha";
+import {
+  gorevlerim,
+  konumGuncelle,
+  tamamlananiGeriAl,
+  tamamlananlarim,
+} from "../api/saha";
 import { useAuth } from "../auth/AuthContext";
 import KonumSecMap, { type HaritaIsaret } from "../components/KonumSecMap";
 import {
@@ -62,6 +67,13 @@ export default function SahaEkran() {
   const [tamirEdilen, setTamirEdilen] = useState<string | null>(null);
   // "Tamir Edildi" iki adimli: ilk tik onay ister, ikinci tik tamamlar.
   const [onayBekleyen, setOnayBekleyen] = useState<string | null>(null);
+  // Geri alinmakta olan tamamlanmis gorev (assignment_id).
+  const [geriAlinan, setGeriAlinan] = useState<string | null>(null);
+  // Bu oturumda geri alinan gorevler (assignment_id) - aktif listede "geri
+  // alindi" rozetiyle isaretlenir ki hangi isin geri getirildigi belli olsun.
+  const [geriAlinanlar, setGeriAlinanlar] = useState<Set<string>>(new Set());
+  // Islem sonrasi bilgilendirme seridi.
+  const [durum, setDurum] = useState<{ ok: boolean; metin: string } | null>(null);
 
   // Konum yayini: mount'ta ve her 30sn'de bir tarayici konumunu backend'e gonder.
   useEffect(() => {
@@ -104,6 +116,14 @@ export default function SahaEkran() {
   });
   const gorevler = gorevSorgu.data?.features ?? [];
 
+  // Tamamlanan isler: hemen silinmez, burada tutulur ve geri alinabilir.
+  const tamamlananSorgu = useQuery({
+    queryKey: ["saha", "tamamlananlarim"],
+    queryFn: tamamlananlarim,
+    refetchInterval: 20000,
+  });
+  const tamamlananlar = tamamlananSorgu.data?.features ?? [];
+
   const isaretler = useMemo<HaritaIsaret[]>(
     () =>
       (gorevSorgu.data?.features ?? []).map((g) => {
@@ -139,14 +159,33 @@ export default function SahaEkran() {
     [gorevSorgu.data]
   );
 
-  const tamirEt = async (assetId: string) => {
+  const tamirEt = async (assetId: string, ad: string) => {
     setTamirEdilen(assetId);
     try {
       await repairAsset(assetId);
-      await queryClient.invalidateQueries({ queryKey: ["saha", "gorevlerim"] });
+      // Aktif liste + tamamlananlar tazelenir; is silinmez, alttaki
+      // "Tamamlanan İşler"e taşınır ve oradan geri alınabilir.
+      await queryClient.invalidateQueries({ queryKey: ["saha"] });
+      setDurum({ ok: true, metin: `"${ad}" işi tamamlandı olarak işaretlendi.` });
+    } catch (e) {
+      setDurum({ ok: false, metin: (e as Error).message });
     } finally {
       setTamirEdilen(null);
       setOnayBekleyen(null);
+    }
+  };
+
+  const geriAl = async (assignmentId: string, ad: string) => {
+    setGeriAlinan(assignmentId);
+    try {
+      await tamamlananiGeriAl(assignmentId);
+      setGeriAlinanlar((prev) => new Set(prev).add(assignmentId));
+      await queryClient.invalidateQueries({ queryKey: ["saha"] });
+      setDurum({ ok: true, metin: `"${ad}" işi geri alındı, yeniden bakım bekliyor.` });
+    } catch (e) {
+      setDurum({ ok: false, metin: (e as Error).message });
+    } finally {
+      setGeriAlinan(null);
     }
   };
 
@@ -197,6 +236,24 @@ export default function SahaEkran() {
                 <IconWarning className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>{konumHatasi}</span>
               </p>
+            )}
+            {durum && (
+              <div
+                className={`mt-2 flex items-start justify-between gap-2 border px-2.5 py-1.5 text-xs ${
+                  durum.ok
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-red-200 bg-red-50 text-red-700"
+                }`}
+              >
+                <span>{durum.metin}</span>
+                <button
+                  onClick={() => setDurum(null)}
+                  className="shrink-0 font-medium opacity-70 hover:opacity-100"
+                  aria-label="Kapat"
+                >
+                  ×
+                </button>
+              </div>
             )}
           </div>
 
@@ -252,9 +309,16 @@ export default function SahaEkran() {
                             {ASSET_TYPE_LABELS[p.type]}
                             {p.brand_model ? ` · ${p.brand_model}` : ""}
                           </p>
-                          <p className="mt-1 inline-flex items-center gap-1 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
-                            <IconWarning className="h-3 w-3" />
-                            Bakım Lazım
+                          <p className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="inline-flex items-center gap-1 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                              <IconWarning className="h-3 w-3" />
+                              Bakım Lazım
+                            </span>
+                            {geriAlinanlar.has(p.assignment_id) && (
+                              <span className="inline-flex items-center gap-1 rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-semibold text-rose-700 ring-1 ring-rose-200">
+                                ↩ Geri alındı
+                              </span>
+                            )}
                           </p>
                           <p className="mt-1 font-mono text-[10px] text-slate-400">
                             #{p.asset_id.slice(0, 8)} ·{" "}
@@ -287,7 +351,7 @@ export default function SahaEkran() {
                               Vazgeç
                             </button>
                             <button
-                              onClick={() => tamirEt(p.asset_id)}
+                              onClick={() => tamirEt(p.asset_id, p.name)}
                               disabled={tamirEdilen === p.asset_id}
                               className="flex flex-1 items-center justify-center gap-1.5 bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
                             >
@@ -311,6 +375,58 @@ export default function SahaEkran() {
                   );
                 })}
               </ul>
+            )}
+
+            {/* Tamamlanan İşler: tamamlanan is hemen silinmez; yanlislikla
+                isaretlenirse buradan geri alinabilir. */}
+            {tamamlananlar.length > 0 && (
+              <div className="mt-5 border-t border-slate-200 pt-4">
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+                  <IconCheck className="h-4 w-4 text-emerald-600" />
+                  Tamamlanan İşler{" "}
+                  <span className="text-xs font-normal text-slate-400">
+                    ({tamamlananlar.length})
+                  </span>
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Yanlışlıkla tamamladıysanız "Geri Al" ile yeniden bakıma
+                  alabilirsiniz.
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {tamamlananlar.map((g) => {
+                    const p = g.properties;
+                    const Ikon = TIP_IKON[p.type];
+                    return (
+                      <li
+                        key={p.assignment_id}
+                        className="flex items-center gap-2.5 border border-slate-200 bg-slate-50 p-2.5"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center border border-slate-200 bg-white">
+                          <Ikon className="h-4 w-4 text-slate-400" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-slate-700 line-through decoration-slate-300">
+                            {p.name}
+                          </p>
+                          <p className="text-[11px] text-emerald-700">
+                            Tamamlandı
+                            {p.completed_at
+                              ? ` · ${new Date(p.completed_at).toLocaleString("tr-TR")}`
+                              : ""}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => geriAl(p.assignment_id, p.name)}
+                          disabled={geriAlinan === p.assignment_id}
+                          className="shrink-0 border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+                        >
+                          {geriAlinan === p.assignment_id ? "Geri alınıyor…" : "↩ Geri Al"}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
           </div>
         </aside>

@@ -159,7 +159,12 @@ export default function KonumSecMap({
         .addTo(map);
       if (i.popupHtml) {
         marker.setPopup(
-          new maplibregl.Popup({ offset: 24, closeButton: true }).setHTML(i.popupHtml)
+          // anchor sabit: harita kaydirilirken popup karsi tarafa "atlamasin".
+          new maplibregl.Popup({
+            offset: 24,
+            closeButton: true,
+            anchor: "bottom",
+          }).setHTML(i.popupHtml)
         );
         marker.getElement().style.cursor = "pointer";
       }

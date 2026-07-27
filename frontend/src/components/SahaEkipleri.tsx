@@ -63,13 +63,14 @@ function tazelik(iso: string | null): { renk: string; metin: string } {
   return { renk, metin };
 }
 
-/** Havuzdaki bir isin ne kadar suredir bekledigini insana okunur verir. */
+/** Havuzdaki bir isin ne zamandir bakim bekledigini insana okunur verir
+ *  (updated_at = varligin bakima dusme zamani; created_at yaniltici olurdu). */
 function beklemeMetni(iso: string): string {
   const farkSn = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (farkSn < 60) return "az önce eklendi";
-  if (farkSn < 3600) return `${Math.floor(farkSn / 60)} dk bekliyor`;
-  if (farkSn < 86400) return `${Math.floor(farkSn / 3600)} sa bekliyor`;
-  return `${Math.floor(farkSn / 86400)} gün bekliyor`;
+  if (farkSn < 60) return "az önce bakıma alındı";
+  if (farkSn < 3600) return `${Math.floor(farkSn / 60)} dk önce bakıma alındı`;
+  if (farkSn < 86400) return `${Math.floor(farkSn / 3600)} sa önce bakıma alındı`;
+  return `${Math.floor(farkSn / 86400)} gün önce bakıma alındı`;
 }
 
 /** Tipe gore renkli, ikonlu kare rozet (satirlarin basinda). */
@@ -263,7 +264,7 @@ function HavuzSatiri({
             <span className="text-slate-500">{ASSET_TYPE_LABELS[varlik.type]}</span>
             <KaynakRozet source={varlik.source} />
             <span className="rounded-full bg-amber-100 px-1.5 py-px font-medium text-amber-700">
-              {beklemeMetni(varlik.created_at)}
+              {beklemeMetni(varlik.updated_at)}
             </span>
           </p>
         </div>
@@ -386,7 +387,7 @@ export default function SahaEkipleri() {
     .slice()
     .sort((a, b) => {
       const fark =
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
       return havuzSira === "eski" ? fark : -fark;
     });
   const havuzKayitli = havuzFiltreli.filter((h) => h.source === "kayitli");

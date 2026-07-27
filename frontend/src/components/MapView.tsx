@@ -15,7 +15,7 @@ import type { AssetFeature, AssetFeatureCollection } from "../types/asset";
 import { REPORT_STATUS_LABELS } from "../types/report";
 import type { ReportFeature, ReportFeatureCollection } from "../types/report";
 import { MAKS_AKTIF_GOREV } from "../types/saha";
-import type { EkipOzet } from "../types/saha";
+import type { EkipGorevleri } from "../types/saha";
 import {
   alanEtiketi,
   cokHalkaliAlanM2,
@@ -170,7 +170,7 @@ interface MapViewProps {
   onGorunumDegisti?: (bounds: [[number, number], [number, number]]) => void;
   /** Personel gorunumunde canli saha ekibi konumlari (DOM marker olarak cizilir);
    *  verilmezse hicbir sey gosterilmez. */
-  ekipler?: EkipOzet[];
+  ekipler?: EkipGorevleri[];
 }
 
 export default function MapView({
@@ -606,7 +606,13 @@ export default function MapView({
     const secili = assetsRef.current.features.find((f) => f.properties.id === id);
     if (!secili) return;
 
-    const popup = new maplibregl.Popup({ offset: 14, closeButton: false })
+    // anchor sabit: harita kaydirilirken popup bir anda karsi tarafa "atlamasin"
+    // (sabit anchor olmadan MapLibre gorunurde tutmak icin anchor'i degistirir).
+    const popup = new maplibregl.Popup({
+      offset: 14,
+      closeButton: false,
+      anchor: "bottom",
+    })
       .setLngLat(secili.geometry.coordinates)
       .setHTML(popupIcerigi(secili))
       .addTo(map);
@@ -632,7 +638,11 @@ export default function MapView({
     if (!secili) return;
 
     popupRef.current?.remove();
-    const popup = new maplibregl.Popup({ offset: 14, closeButton: false })
+    const popup = new maplibregl.Popup({
+      offset: 14,
+      closeButton: false,
+      anchor: "bottom",
+    })
       .setLngLat(secili.geometry.coordinates)
       .setHTML(ihbarPopupIcerigi(secili))
       .addTo(map);
@@ -1059,13 +1069,31 @@ export default function MapView({
       if (!marker) {
         const el = document.createElement("div");
         ekipMarkerGuncelle(el, e);
-        marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        const yeni = new maplibregl.Marker({ element: el, anchor: "bottom" })
           .setLngLat([e.longitude, e.latitude])
+          .setPopup(
+            new maplibregl.Popup({
+              offset: 30,
+              closeButton: true,
+              anchor: "bottom",
+            }).setHTML(ekipPopupHtml(e))
+          )
           .addTo(map);
+        // Marker'a tiklama, haritanin kendi tiklamasi (sol "Ekle" formunu acar)
+        // olarak algilanmasin: mousedown'i canvas'a birakma. MapLibre'nin
+        // otomatik popup toggle'i harita click'ine bagli oldugundan mousedown
+        // durunca calismaz; bu yuzden popup'i kendimiz ac/kapa.
+        el.addEventListener("mousedown", (ev) => ev.stopPropagation());
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          yeni.togglePopup();
+        });
+        marker = yeni;
         ekipMarkerlariRef.current.set(e.id, marker);
       } else {
         marker.setLngLat([e.longitude, e.latitude]);
         ekipMarkerGuncelle(marker.getElement(), e);
+        marker.getPopup()?.setHTML(ekipPopupHtml(e));
       }
     }
     for (const [id, marker] of ekipMarkerlariRef.current) {
@@ -1247,12 +1275,15 @@ function ihbarPopupIcerigi(report: ReportFeature): string {
   `;
 }
 
-/** Bir saha ekibi DOM marker'inin icerigini (avatar + yuk rozeti + ad etiketi)
- *  kurar/gunceller. Ayni element hem olusturmada hem guncellemede kullanilir. */
-function ekipMarkerGuncelle(el: HTMLElement, e: EkipOzet): void {
+/** Bir saha ekibi DOM marker'inin icerigini (avatar + yuk rozeti + kisa ad
+ *  etiketi) kurar/gunceller. Ayni element hem olusturmada hem guncellemede
+ *  kullanilir. Etiket kisa tutulur (parantez ici, orn. "(Kadikoy)" atilir) -
+ *  tam ad + gorevler markera tiklaninca acilan popup'ta gosterilir. */
+function ekipMarkerGuncelle(el: HTMLElement, e: EkipGorevleri): void {
   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
   const rozetRenk = dolu ? "#dc2626" : "#059669";
-  el.style.cursor = "default";
+  const kisaAd = (e.full_name || e.email).replace(/\s*\(.*\)\s*$/, "");
+  el.style.cursor = "pointer";
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;font-family:system-ui,sans-serif">
       <div style="position:relative">
@@ -1261,13 +1292,39 @@ function ekipMarkerGuncelle(el: HTMLElement, e: EkipOzet): void {
         </div>
         <div style="position:absolute;top:-6px;right:-8px;min-width:16px;height:16px;padding:0 3px;border-radius:9999px;background:${rozetRenk};color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center;border:1.5px solid #fff">${e.aktif_gorev}</div>
       </div>
-      <div style="margin-top:2px;max-width:110px;padding:1px 5px;border-radius:4px;background:rgba(15,23,42,.82);color:#fff;font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${kacis(e.full_name || e.email)}</div>
+      <div style="margin-top:2px;max-width:84px;padding:1px 5px;border-radius:4px;background:rgba(15,23,42,.82);color:#fff;font-size:9px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${kacis(kisaAd)}</div>
     </div>`;
-  el.title =
-    `${e.full_name || e.email} · ${e.aktif_gorev}/${MAKS_AKTIF_GOREV} görev` +
-    (e.last_seen_at
-      ? ` · son görülme ${new Date(e.last_seen_at).toLocaleString("tr-TR")}`
-      : " · konum yok");
+  el.title = "Detay için tıklayın";
+}
+
+/** Bir saha ekibi marker'ina tiklaninca acilan popup: tam ad + yuk + son
+ *  gorulme + o an ustundeki aktif gorevlerin listesi (istek: haritadan ekibe
+ *  basinca hangi gorevler onda, kac tane gorunsun). */
+function ekipPopupHtml(e: EkipGorevleri): string {
+  const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
+  const rozetRenk = dolu ? "#dc2626" : "#059669";
+  const sonGorulme = e.last_seen_at
+    ? `Son görülme: ${new Date(e.last_seen_at).toLocaleString("tr-TR")}`
+    : "Konum bilgisi yok";
+  const satirlar = e.gorevler.length
+    ? e.gorevler
+        .map(
+          (g) =>
+            `<li style="margin-bottom:2px">${kacis(g.name)} <span style="color:#94a3b8">· ${kacis(
+              ASSET_TYPE_LABELS[g.type]
+            )}</span></li>`
+        )
+        .join("")
+    : `<li style="list-style:none;margin-left:-14px;color:#94a3b8">Şu an aktif görev yok</li>`;
+  return (
+    `<div style="font-family:system-ui,sans-serif;min-width:190px;max-width:240px">` +
+    `<div style="font-weight:600;font-size:13px;color:#0f172a">${kacis(e.full_name || e.email)}</div>` +
+    `<div style="display:inline-block;margin:4px 0;padding:1px 8px;border-radius:9999px;background:${rozetRenk};color:#fff;font-size:11px;font-weight:700">${e.aktif_gorev}/${MAKS_AKTIF_GOREV} görev</div>` +
+    `<div style="font-size:10px;color:#94a3b8;margin-bottom:6px">${kacis(sonGorulme)}</div>` +
+    `<div style="font-size:11px;font-weight:600;color:#475569;margin-bottom:2px">Üzerindeki İşler</div>` +
+    `<ul style="margin:0;padding-left:14px;font-size:11px;color:#334155;line-height:1.45">${satirlar}</ul>` +
+    `</div>`
+  );
 }
 
 /** Kullanici verisini HTML'e gomerken kacis uygular. */
