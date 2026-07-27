@@ -1,5 +1,11 @@
 import { authHeader } from "../auth/token";
-import type { EkipOzet, GorevFeatureCollection } from "../types/saha";
+import type {
+  AktifGorevBilgi,
+  EkipGorevleri,
+  EkipOzet,
+  GorevFeatureCollection,
+  HavuzVarlik,
+} from "../types/saha";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 
@@ -52,10 +58,33 @@ export function ekipler() {
   return istekJson<EkipOzet[]>("/saha/ekipler");
 }
 
+/** Personel yonetim panosu: her ekip + kendine dusen aktif gorevler. */
+export function ekipGorevleri() {
+  return istekJson<EkipGorevleri[]>("/saha/ekip-gorevleri");
+}
+
+/** Personel: havuzda bekleyen (atanmamis) bakim varliklari. */
+export function havuz() {
+  return istekJson<HavuzVarlik[]>("/saha/havuz");
+}
+
 /** Personel: bir bakim varligini elle bir ekibe (yeniden) yonlendirir. */
 export function ekibeAta(asset_id: string, worker_id: string) {
   return istekBos("/saha/ata", {
     method: "POST",
     body: JSON.stringify({ asset_id, worker_id }),
+  });
+}
+
+/** Personel: bir varligin o an atali oldugu ekip bilgisi (havuzdaysa null). */
+export function gorevDurumu(asset_id: string) {
+  return istekJson<AktifGorevBilgi | null>(`/saha/gorev/${asset_id}`);
+}
+
+/** Personel: bir varligin aktif gorevini iptal edip havuza geri alir. */
+export function gorevGeriAl(asset_id: string) {
+  return istekBos("/saha/geri-al", {
+    method: "POST",
+    body: JSON.stringify({ asset_id }),
   });
 }

@@ -1,6 +1,14 @@
 import { useLogs } from "../hooks/useLogs";
 import { LOG_ACTION_LABELS, type LogAction, type LogEntry } from "../types/log";
-import { IconBox, IconCheck, IconHistory, IconPlus, IconUsers, IconX } from "./icons";
+import {
+  IconBox,
+  IconCheck,
+  IconHistory,
+  IconInbox,
+  IconPlus,
+  IconUsers,
+  IconX,
+} from "./icons";
 
 const ACTION_STIL: Record<
   LogAction,
@@ -13,6 +21,9 @@ const ACTION_STIL: Record<
   report_approved: { ikon: IconCheck, rozet: "bg-emerald-100 text-emerald-700" },
   report_rejected: { ikon: IconX, rozet: "bg-red-100 text-red-700" },
   user_created: { ikon: IconUsers, rozet: "bg-indigo-100 text-indigo-700" },
+  assignment_created: { ikon: IconUsers, rozet: "bg-indigo-100 text-indigo-700" },
+  assignment_completed: { ikon: IconCheck, rozet: "bg-emerald-100 text-emerald-700" },
+  assignment_cancelled: { ikon: IconInbox, rozet: "bg-slate-100 text-slate-600" },
 };
 
 /** Sistem genelindeki islem gecmisi: varlik ekleme/guncelleme/silme, durum

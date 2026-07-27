@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,7 +10,17 @@ from ..crud import assignment as crud
 from ..database import get_db
 from ..models.asset import AssetStatus
 from ..models.user import User, UserRole
-from ..schemas.saha import AtamaGirdi, EkipOzet, GorevFeatureCollection, KonumGuncelle
+from ..schemas.saha import (
+    AktifGorevBilgi,
+    AtamaGirdi,
+    EkipGorevleri,
+    EkipOzet,
+    GorevFeatureCollection,
+    GorevOzet,
+    HavuzVarlik,
+    KonumGuncelle,
+    VarlikRef,
+)
 from ..security import personel, require_role
 
 router = APIRouter(prefix="/api/saha", tags=["saha"])
@@ -27,6 +38,9 @@ def konum_guncelle(
         func.ST_MakePoint(data.longitude, data.latitude), 4326
     )
     user.last_seen_at = datetime.now(timezone.utc)
+    # Ekip yeni konumuyla havuzda bekleyen bir isin menziline girmis olabilir;
+    # bekleyen gorevleri yeniden dagit (kapasite/mesafe uygunsa otomatik atanir).
+    crud.bekleyen_gorevleri_dagit(db)
     db.commit()
 
 
@@ -46,6 +60,44 @@ def ekipler(
 ):
     """Personel (admin/calisan) tum saha ekiplerini konum + yuk ozetiyle gorur."""
     return [EkipOzet.from_row(r) for r in crud.ekipler_ozeti(db)]
+
+
+@router.get("/ekip-gorevleri", response_model=list[EkipGorevleri])
+def ekip_gorevleri(
+    _: User = Depends(personel),
+    db: Session = Depends(get_db),
+):
+    """Personel yonetim panosu: her ekip + kendine dusen aktif gorevler. Ekip
+    ozetleri (konum/yuk) ile aktif atamalar tek seferde cekilip ekip bazinda
+    gruplanir."""
+    ozetler = crud.ekipler_ozeti(db)
+    grup: dict[uuid.UUID, list[GorevOzet]] = {}
+    for row in crud.aktif_atamalar(db):
+        gorev = row[0]
+        grup.setdefault(gorev.worker_id, []).append(GorevOzet.from_row(row))
+    return [
+        EkipGorevleri(
+            id=o.id,
+            full_name=o.full_name,
+            email=o.email,
+            longitude=o.longitude,
+            latitude=o.latitude,
+            last_seen_at=o.last_seen_at,
+            aktif_gorev=o.aktif_gorev,
+            gorevler=grup.get(o.id, []),
+        )
+        for o in ozetler
+    ]
+
+
+@router.get("/havuz", response_model=list[HavuzVarlik])
+def havuz(
+    _: User = Depends(personel),
+    db: Session = Depends(get_db),
+):
+    """Personel: havuzda bekleyen (henuz bir ekibe atanmamis) bakim varliklari.
+    Buradan elle bir ekibe atanabilir (POST /ata)."""
+    return [HavuzVarlik.from_row(r) for r in crud.havuz_varliklari(db)]
 
 
 @router.post("/ata", status_code=status.HTTP_204_NO_CONTENT)
@@ -73,4 +125,30 @@ def ata(
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(e))
+    db.commit()
+
+
+@router.get("/gorev/{asset_id}", response_model=AktifGorevBilgi | None)
+def gorev_bilgi(
+    asset_id: uuid.UUID,
+    _: User = Depends(personel),
+    db: Session = Depends(get_db),
+):
+    """Bir varligin su an atali oldugu ekip + atama bilgisi (yoksa null: havuzda
+    bekliyor). Elle yonlendirme ekraninda 'once hangi ekipteydi' gostermek icin."""
+    return crud.aktif_gorev_bilgisi(db, asset_id)
+
+
+@router.post("/geri-al", status_code=status.HTTP_204_NO_CONTENT)
+def geri_al(
+    data: VarlikRef,
+    user: User = Depends(personel),
+    db: Session = Depends(get_db),
+):
+    """Personel bir varligin aktif gorevini iptal edip varligi havuza dondurur."""
+    row = asset_crud.get_asset(db, data.asset_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Varlik bulunamadi")
+    if not crud.geri_al(db, data.asset_id, actor=user):
+        raise HTTPException(status_code=409, detail="Bu varligin aktif bir gorevi yok")
     db.commit()

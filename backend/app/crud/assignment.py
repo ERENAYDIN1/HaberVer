@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models.asset import Asset
+from ..models.asset import Asset, AssetStatus
 from ..models.assignment import Assignment, AssignmentStatus
 from ..models.log import LogAction
 from ..models.user import User, UserRole
@@ -19,6 +19,13 @@ from .log import add_log
 
 # Bir saha ekibine ayni anda dusebilecek en fazla aktif gorev sayisi.
 MAKS_AKTIF_GOREV = 3
+
+# Otomatik atamada bir bakim varligini bir ekibe baglamak icin izin verilen azami
+# mesafe (metre, ~5 km). Bundan uzaktaki tek uygun (bos) ekip bile olsa varlik
+# atanmaz; havuzda bekler ve menzildeki bir ekibin kapasitesi acildiginda ona
+# yonlendirilir. Elle atamada (personel) bu sinir uygulanmaz - personel yetkisi
+# istedigi ekibe (menzil disi olsa da) atayabilir.
+MAKS_ATAMA_MESAFE_M = 5000
 
 
 def aktif_gorev_sayisi(db: Session, worker_id: uuid.UUID) -> int:
@@ -49,23 +56,58 @@ def _aktif_sayi_subq():
 
 
 def en_yakin_uygun_ekip(db: Session, asset_geom) -> User | None:
-    """Konumu bilinen, aktif, kapasitesi (aktif gorev < MAKS) olan saha
-    calisanlari arasindan varliga en yakin olani dondurur. Uygun ekip yoksa
-    None (varlik atanmadan kalir; personel elle yonlendirebilir)."""
+    """Konumu bilinen, aktif, kapasitesi (aktif gorev < MAKS) olan ve varliga en
+    fazla MAKS_ATAMA_MESAFE_M mesafede bulunan saha calisanlari arasindan en yakin
+    olani dondurur. Menzilde uygun ekip yoksa None (varlik atanmadan havuzda
+    bekler; personel elle yonlendirebilir ya da bir ekip menzile girip/kapasite
+    acilinca otomatik yonlendirilir)."""
     cnt = _aktif_sayi_subq().label("cnt")
+    mesafe = func.ST_DistanceSphere(User.last_location, asset_geom)
     rows = db.execute(
         select(User, cnt)
         .where(
             User.role == UserRole.saha_calisani,
             User.is_active.is_(True),
             User.last_location.isnot(None),
+            mesafe <= MAKS_ATAMA_MESAFE_M,
         )
-        .order_by(func.ST_DistanceSphere(User.last_location, asset_geom).asc())
+        .order_by(mesafe.asc())
     ).all()
     for user, aktif in rows:
         if aktif < MAKS_AKTIF_GOREV:
             return user
     return None
+
+
+def bekleyen_gorevleri_dagit(db: Session) -> int:
+    """Havuzda bekleyen (durumu 'bakim_lazim' ve aktif gorevi olmayan) varliklari,
+    en eski once (FIFO) olacak sekilde, mesafe sinirini saglayan en yakin uygun
+    ekiplere otomatik dagitir. Bir ekibin kapasitesi acildiginda (gorev
+    tamamlaninca) veya bir ekip menzile girecek sekilde konumunu guncelledginde
+    cagirilir. Atanan gorev sayisini dondurur. commit CAGIRMAZ - cagiran commit
+    eder."""
+    atanmis = select(Assignment.asset_id).where(
+        Assignment.status == AssignmentStatus.atandi
+    )
+    bekleyenler = (
+        db.execute(
+            select(Asset)
+            .where(
+                Asset.status == AssetStatus.bakim_lazim,
+                Asset.id.not_in(atanmis),
+            )
+            .order_by(Asset.created_at.asc())
+        )
+        .scalars()
+        .all()
+    )
+    dagitilan = 0
+    for asset in bekleyenler:
+        ekip = en_yakin_uygun_ekip(db, asset.geometry)
+        if ekip is not None:
+            ata(db, asset, ekip, assigned_by=None)
+            dagitilan += 1
+    return dagitilan
 
 
 def ata(
@@ -139,6 +181,57 @@ def gorev_tamamla(db: Session, asset_id: uuid.UUID, actor: User | None = None) -
         entity_name=asset.name if asset else None,
         detail="Görev tamamlandı (tamir edildi)",
     )
+    # Bu ekibin kapasitesi acildi: havuzda bekleyen varliklari yeniden dagit.
+    bekleyen_gorevleri_dagit(db)
+
+
+def geri_al(db: Session, asset_id: uuid.UUID, actor: User | None = None) -> bool:
+    """Varligin aktif gorevini 'iptal' edip varligi havuza dondurur (personel
+    elle atamayi geri alir). Aktif gorev yoksa False. Otomatik yeniden dagitim
+    TETIKLEMEZ - amac bilincli olarak varligi havuzda beklemeye almaktir; kontenjan
+    acildiginda / personel elle atadiginda tekrar yonlendirilir. commit cagirmaz."""
+    gorev = db.execute(
+        select(Assignment).where(
+            Assignment.asset_id == asset_id,
+            Assignment.status == AssignmentStatus.atandi,
+        )
+    ).scalar_one_or_none()
+    if gorev is None:
+        return False
+    gorev.status = AssignmentStatus.iptal
+    asset = db.get(Asset, asset_id)
+    add_log(
+        db,
+        action=LogAction.assignment_cancelled,
+        actor=actor,
+        entity_type="asset",
+        entity_id=asset_id,
+        entity_name=asset.name if asset else None,
+        detail="Görev geri alındı (havuza alındı)",
+    )
+    return True
+
+
+def aktif_gorev_bilgisi(db: Session, asset_id: uuid.UUID) -> dict | None:
+    """Bir varligin aktif gorevini (hangi ekip, ne zaman, otomatik mi elle mi)
+    dondurur; aktif gorev yoksa None (varlik havuzda bekliyor)."""
+    row = db.execute(
+        select(Assignment, User)
+        .join(User, User.id == Assignment.worker_id)
+        .where(
+            Assignment.asset_id == asset_id,
+            Assignment.status == AssignmentStatus.atandi,
+        )
+    ).first()
+    if row is None:
+        return None
+    gorev, worker = row
+    return {
+        "worker_id": worker.id,
+        "worker_ad": worker.full_name or worker.email,
+        "assigned_at": gorev.created_at,
+        "otomatik": gorev.assigned_by is None,
+    }
 
 
 def gorevlerim(db: Session, worker_id: uuid.UUID):
@@ -156,6 +249,41 @@ def gorevlerim(db: Session, worker_id: uuid.UUID):
             Assignment.status == AssignmentStatus.atandi,
         )
         .order_by(Assignment.created_at.desc())
+    )
+    return db.execute(stmt).all()
+
+
+def aktif_atamalar(db: Session):
+    """Tum aktif ('atandi') gorevleri worker_id + varlik + koordinatla dondurur
+    (personel yonetim panosunda ekip bazinda gruplanir). En eski once."""
+    stmt = (
+        select(
+            Assignment,
+            Asset,
+            func.ST_X(Asset.geometry).label("longitude"),
+            func.ST_Y(Asset.geometry).label("latitude"),
+        )
+        .join(Asset, Asset.id == Assignment.asset_id)
+        .where(Assignment.status == AssignmentStatus.atandi)
+        .order_by(Assignment.created_at.asc())
+    )
+    return db.execute(stmt).all()
+
+
+def havuz_varliklari(db: Session):
+    """Havuzda bekleyen (bakim_lazim + aktif gorevi olmayan) varliklari koordinatla
+    dondurur (personel elle atayabilsin diye). En eski once."""
+    atanmis = select(Assignment.asset_id).where(
+        Assignment.status == AssignmentStatus.atandi
+    )
+    stmt = (
+        select(
+            Asset,
+            func.ST_X(Asset.geometry).label("longitude"),
+            func.ST_Y(Asset.geometry).label("latitude"),
+        )
+        .where(Asset.status == AssetStatus.bakim_lazim, Asset.id.not_in(atanmis))
+        .order_by(Asset.created_at.asc())
     )
     return db.execute(stmt).all()
 

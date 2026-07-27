@@ -1,7 +1,8 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { fotoUrl } from "../api/reports";
-import { ekibeAta } from "../api/saha";
+import { ekibeAta, gorevDurumu, gorevGeriAl } from "../api/saha";
 import { useKonumCozumu } from "../hooks/useSinirlar";
 import {
   ASSET_SOURCE_LABELS,
@@ -37,11 +38,24 @@ export default function AssetDetayModal({
 }: AssetDetayModalProps) {
   const koord = asset ? asset.geometry.coordinates : null;
   const { data: konum } = useKonumCozumu(koord ? koord[1] : null, koord ? koord[0] : null);
+  const queryClient = useQueryClient();
 
   const [seciliEkip, setSeciliEkip] = useState("");
   const [atamaHatasi, setAtamaHatasi] = useState<string | null>(null);
   const [atamaBasari, setAtamaBasari] = useState<string | null>(null);
   const [atanıyor, setAtaniyor] = useState(false);
+
+  // Elle yonlendirme yalnizca bakim bekleyen varliklarda ve personele acilir.
+  const assetId = asset?.properties.id;
+  const bakimVar = asset?.properties.status === "bakim_lazim";
+  const atamaGoster = Boolean(atayabilir && bakimVar && assetId);
+
+  // Varligin o an atali oldugu ekip (yoksa null: havuzda bekliyor).
+  const { data: mevcutGorev, isLoading: gorevYukleniyor } = useQuery({
+    queryKey: ["saha", "gorev", assetId],
+    queryFn: () => gorevDurumu(assetId!),
+    enabled: atamaGoster,
+  });
 
   // Varlik degisince atama durumunu sifirla.
   useEffect(() => {
@@ -63,8 +77,11 @@ export default function AssetDetayModal({
       ? kalanSilmeGunu(p.repaired_at)
       : null;
 
-  // Elle yonlendirme yalnizca bakim bekleyen varliklarda ve personele acilir.
-  const atamaGoster = atayabilir && bakim;
+  // Atama/geri-alma sonrasi hem gorev durumunu hem ekip yuklerini tazele.
+  const tazele = () => {
+    queryClient.invalidateQueries({ queryKey: ["saha", "gorev", p.id] });
+    onAtandi?.();
+  };
 
   const atamaYap = async () => {
     if (!seciliEkip) return;
@@ -76,7 +93,23 @@ export default function AssetDetayModal({
       const ek = ekipler?.find((x) => x.id === seciliEkip);
       setAtamaBasari(`${ek?.full_name || ek?.email || "Ekip"} ekibine yönlendirildi`);
       setSeciliEkip("");
-      onAtandi?.();
+      tazele();
+    } catch (e) {
+      setAtamaHatasi((e as Error).message);
+    } finally {
+      setAtaniyor(false);
+    }
+  };
+
+  const geriAlYap = async () => {
+    setAtaniyor(true);
+    setAtamaHatasi(null);
+    setAtamaBasari(null);
+    try {
+      await gorevGeriAl(p.id);
+      setAtamaBasari("Görev geri alındı; varlık havuzda bekliyor.");
+      setSeciliEkip("");
+      tazele();
     } catch (e) {
       setAtamaHatasi((e as Error).message);
     } finally {
@@ -170,6 +203,31 @@ export default function AssetDetayModal({
             <p className="mb-1.5 text-xs font-semibold text-slate-700">
               Saha ekibine yönlendir
             </p>
+
+            {/* Su anki atama durumu: hangi ekipte (otomatik/elle) ya da havuzda. */}
+            <div
+              className={`mb-2 border px-2.5 py-1.5 text-xs ${
+                mevcutGorev
+                  ? "border-indigo-200 bg-indigo-50 text-indigo-800"
+                  : "border-slate-200 bg-slate-50 text-slate-600"
+              }`}
+            >
+              {gorevYukleniyor ? (
+                "Görev durumu yükleniyor…"
+              ) : mevcutGorev ? (
+                <>
+                  Şu an <strong>{mevcutGorev.worker_ad}</strong> ekibinde
+                  <span className="text-indigo-500">
+                    {" "}
+                    ({mevcutGorev.otomatik ? "otomatik atandı" : "elle atandı"})
+                  </span>
+                  . Başka bir ekip seçip yeniden yönlendirebilirsiniz.
+                </>
+              ) : (
+                "Henüz bir ekibe atanmadı — havuzda bekliyor (menzilde uygun ekip yok)."
+              )}
+            </div>
+
             <div className="flex gap-2">
               <select
                 value={seciliEkip}
@@ -179,25 +237,38 @@ export default function AssetDetayModal({
                 <option value="">Ekip seçin…</option>
                 {(ekipler ?? []).map((e) => {
                   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
+                  const suanki = mevcutGorev?.worker_id === e.id;
                   return (
-                    <option key={e.id} value={e.id} disabled={dolu}>
+                    <option key={e.id} value={e.id} disabled={dolu && !suanki}>
                       {(e.full_name || e.email) +
                         ` (${e.aktif_gorev}/${MAKS_AKTIF_GOREV}` +
                         (dolu ? " · dolu)" : ")") +
-                        (e.last_seen_at ? "" : " · konum yok")}
+                        (e.last_seen_at ? "" : " · konum yok") +
+                        (suanki ? " · şu an atalı" : "")}
                     </option>
                   );
                 })}
               </select>
               <button
                 onClick={atamaYap}
-                disabled={!seciliEkip || atanıyor}
+                disabled={!seciliEkip || seciliEkip === mevcutGorev?.worker_id || atanıyor}
                 className="flex shrink-0 items-center gap-1.5 bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
                 <IconCheck className="h-3.5 w-3.5" />
                 {atanıyor ? "…" : "Ata"}
               </button>
             </div>
+
+            {mevcutGorev && (
+              <button
+                onClick={geriAlYap}
+                disabled={atanıyor}
+                className="mt-2 text-xs font-medium text-slate-500 underline-offset-2 transition hover:text-red-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-300"
+              >
+                Görevi geri al (havuza al)
+              </button>
+            )}
+
             {atamaHatasi && (
               <p className="mt-1.5 text-xs text-red-600">{atamaHatasi}</p>
             )}

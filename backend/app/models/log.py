@@ -19,6 +19,7 @@ class LogAction(str, enum.Enum):
     user_created = "user_created"
     assignment_created = "assignment_created"
     assignment_completed = "assignment_completed"
+    assignment_cancelled = "assignment_cancelled"
 
 
 class ActivityLog(Base):

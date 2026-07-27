@@ -22,6 +22,23 @@ class AtamaGirdi(BaseModel):
     worker_id: uuid.UUID
 
 
+class VarlikRef(BaseModel):
+    """Yalniz varlik referansi (gorevi havuza geri alma icin)."""
+
+    asset_id: uuid.UUID
+
+
+class AktifGorevBilgi(BaseModel):
+    """Bir varligin o an atali oldugu ekip + atama bilgisi (elle yonlendirme
+    ekraninda 'su an hangi ekipte' gostermek icin). Aktif gorev yoksa uc null
+    doner."""
+
+    worker_id: uuid.UUID
+    worker_ad: str
+    assigned_at: datetime
+    otomatik: bool
+
+
 class EkipOzet(BaseModel):
     """Bir saha ekibinin (saha_calisani) konum + yuk ozeti."""
 
@@ -43,6 +60,76 @@ class EkipOzet(BaseModel):
             latitude=row.latitude,
             last_seen_at=row.last_seen_at,
             aktif_gorev=row.aktif_gorev,
+        )
+
+
+class GorevOzet(BaseModel):
+    """Personel yonetim panosunda bir ekibin altinda gosterilen tek gorev +
+    uzerindeki varlik ozeti."""
+
+    assignment_id: uuid.UUID
+    asset_id: uuid.UUID
+    name: str
+    type: AssetType
+    status: AssetStatus
+    source: AssetSource
+    otomatik: bool
+    assigned_at: datetime
+    longitude: float
+    latitude: float
+
+    @classmethod
+    def from_row(cls, row) -> "GorevOzet":
+        gorev, asset, longitude, latitude = row
+        return cls(
+            assignment_id=gorev.id,
+            asset_id=asset.id,
+            name=asset.name,
+            type=asset.type,
+            status=asset.status,
+            source=asset.source,
+            otomatik=gorev.assigned_by is None,
+            assigned_at=gorev.created_at,
+            longitude=longitude,
+            latitude=latitude,
+        )
+
+
+class EkipGorevleri(BaseModel):
+    """Bir saha ekibi + kendine dusen aktif gorevler (personel yonetim panosu)."""
+
+    id: uuid.UUID
+    full_name: str | None
+    email: str
+    longitude: float | None
+    latitude: float | None
+    last_seen_at: datetime | None
+    aktif_gorev: int
+    gorevler: list[GorevOzet]
+
+
+class HavuzVarlik(BaseModel):
+    """Havuzda bekleyen (henuz bir ekibe atanmamis) bakim varligi."""
+
+    asset_id: uuid.UUID
+    name: str
+    type: AssetType
+    source: AssetSource
+    longitude: float
+    latitude: float
+    created_at: datetime
+
+    @classmethod
+    def from_row(cls, row) -> "HavuzVarlik":
+        asset, longitude, latitude = row
+        return cls(
+            asset_id=asset.id,
+            name=asset.name,
+            type=asset.type,
+            source=asset.source,
+            longitude=longitude,
+            latitude=latitude,
+            created_at=asset.created_at,
         )
 
 
