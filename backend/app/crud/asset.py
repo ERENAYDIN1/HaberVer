@@ -8,6 +8,7 @@ from ..models import Asset, User
 from ..models.asset import AssetSource, AssetStatus, AssetType
 from ..models.log import LogAction
 from ..schemas.asset import AssetCreate, AssetUpdate
+from . import assignment as assignment_crud
 from .log import add_log
 
 # Ihbar kaynakli bir varlik "Tamir Edildi" (durum -> iyi) olarak isaretlendikten
@@ -163,6 +164,9 @@ def update_asset(
             # silme sayaci buna gore isler.
             if asset.status == AssetStatus.iyi:
                 asset.repaired_at = datetime.now(timezone.utc)
+                # Tamir edildi: varsa aktif saha gorevini de kapat (hem /onar
+                # ucundan hem personel PUT'undan tek yerde tetiklenir).
+                assignment_crud.gorev_tamamla(db, asset.id, actor=actor)
             elif asset.status == AssetStatus.bakim_lazim:
                 asset.repaired_at = None
             add_log(

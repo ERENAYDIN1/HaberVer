@@ -13,6 +13,15 @@ import {
   maskeKaynagiHazirla,
 } from "../utils/istanbulMaskesi";
 
+/** Haritada gosterilecek salt-okunur bir isaret (orn. saha gorev pini). */
+export interface HaritaIsaret {
+  id: string;
+  lng: number;
+  lat: number;
+  renk: string;
+  onClick?: () => void;
+}
+
 interface KonumSecMapProps {
   /** Secili konum ([lon, lat]) veya henuz secilmediyse null. */
   secili: [number, number] | null;
@@ -20,17 +29,35 @@ interface KonumSecMapProps {
   /** Disaridan (orn. "Konumumu kullan" butonu) harita bu hedefe ucar. `anahtar`
    *  her degistiginde tetiklenir. */
   ucus?: { anahtar: string; merkez: [number, number]; zoom?: number } | null;
+  /** Salt-okunur isaretler (orn. saha calisaninin gorev pinleri). */
+  isaretler?: HaritaIsaret[];
+  /** Kullanicinin kendi (canli) konumu - ayirt edici mavi nokta. */
+  benimKonumum?: [number, number] | null;
+  /** false ise haritaya tiklayarak konum secme kapatilir (salt goruntuleme). */
+  tiklanabilir?: boolean;
 }
 
 /** Vatandas ihbari icin basit bir harita: tiklanan noktaya (ya da cihaz
- *  konumuna) tek bir isaretci koyar ve koordinati bildirir. */
-export default function KonumSecMap({ secili, onSec, ucus }: KonumSecMapProps) {
+ *  konumuna) tek bir isaretci koyar ve koordinati bildirir. Saha ekraninda
+ *  ayni harita salt-okunur gorev pinleriyle (isaretler) yeniden kullanilir. */
+export default function KonumSecMap({
+  secili,
+  onSec,
+  ucus,
+  isaretler,
+  benimKonumum,
+  tiklanabilir = true,
+}: KonumSecMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const isaretMarkerRef = useRef<maplibregl.Marker[]>([]);
+  const benimMarkerRef = useRef<maplibregl.Marker | null>(null);
   const onSecRef = useRef(onSec);
+  const tiklanabilirRef = useRef(tiklanabilir);
   useEffect(() => {
     onSecRef.current = onSec;
+    tiklanabilirRef.current = tiklanabilir;
   });
 
   useEffect(() => {
@@ -102,6 +129,7 @@ export default function KonumSecMap({ secili, onSec, ucus }: KonumSecMapProps) {
     }
 
     map.on("click", (e) => {
+      if (!tiklanabilirRef.current) return;
       onSecRef.current([
         Number(e.lngLat.lng.toFixed(6)),
         Number(e.lngLat.lat.toFixed(6)),
@@ -110,10 +138,56 @@ export default function KonumSecMap({ secili, onSec, ucus }: KonumSecMapProps) {
 
     return () => {
       markerRef.current?.remove();
+      isaretMarkerRef.current.forEach((m) => m.remove());
+      benimMarkerRef.current?.remove();
       map.remove();
       mapRef.current = null;
     };
   }, []);
+
+  // Salt-okunur isaretler (gorev pinleri) - degisince yeniden kur.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    isaretMarkerRef.current.forEach((m) => m.remove());
+    isaretMarkerRef.current = (isaretler ?? []).map((i) => {
+      const marker = new maplibregl.Marker({ color: i.renk })
+        .setLngLat([i.lng, i.lat])
+        .addTo(map);
+      if (i.onClick) {
+        const el = marker.getElement();
+        el.style.cursor = "pointer";
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          i.onClick!();
+        });
+      }
+      return marker;
+    });
+  }, [isaretler]);
+
+  // Kullanicinin kendi konumu - ayirt edici mavi nokta.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!benimKonumum) {
+      benimMarkerRef.current?.remove();
+      benimMarkerRef.current = null;
+      return;
+    }
+    if (!benimMarkerRef.current) {
+      const el = document.createElement("div");
+      el.style.cssText =
+        "width:16px;height:16px;border-radius:9999px;background:#2563eb;" +
+        "border:3px solid #fff;box-shadow:0 0 0 2px rgba(37,99,235,.4)";
+      el.title = "Konumunuz";
+      benimMarkerRef.current = new maplibregl.Marker({ element: el })
+        .setLngLat(benimKonumum)
+        .addTo(map);
+    } else {
+      benimMarkerRef.current.setLngLat(benimKonumum);
+    }
+  }, [benimKonumum]);
 
   // Secili konum degisince isaretciyi guncelle.
   useEffect(() => {

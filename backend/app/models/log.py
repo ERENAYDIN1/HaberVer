@@ -17,6 +17,8 @@ class LogAction(str, enum.Enum):
     report_approved = "report_approved"
     report_rejected = "report_rejected"
     user_created = "user_created"
+    assignment_created = "assignment_created"
+    assignment_completed = "assignment_completed"
 
 
 class ActivityLog(Base):

@@ -14,6 +14,8 @@ import {
 import type { AssetFeature, AssetFeatureCollection } from "../types/asset";
 import { REPORT_STATUS_LABELS } from "../types/report";
 import type { ReportFeature, ReportFeatureCollection } from "../types/report";
+import { MAKS_AKTIF_GOREV } from "../types/saha";
+import type { EkipOzet } from "../types/saha";
 import {
   alanEtiketi,
   cokHalkaliAlanM2,
@@ -162,6 +164,9 @@ interface MapViewProps {
   /** Harita her hareket ettiginde (pan/zoom) gorunen alanin sinirlarini bildirir;
    *  konum aramasini o an ekranda gorunen bolgeye onceliklendirmek icin kullanilir. */
   onGorunumDegisti?: (bounds: [[number, number], [number, number]]) => void;
+  /** Personel gorunumunde canli saha ekibi konumlari (DOM marker olarak cizilir);
+   *  verilmezse hicbir sey gosterilmez. */
+  ekipler?: EkipOzet[];
 }
 
 export default function MapView({
@@ -185,6 +190,7 @@ export default function MapView({
   onGorunumDegisti,
   onVarlikDetay,
   onIhbarDetay,
+  ekipler,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -193,6 +199,9 @@ export default function MapView({
   /** Aktif cizimin alan etiketi (m2/ha) ve tamamlanan alanlarin kalici etiketleri. */
   const cizimEtiketRef = useRef<maplibregl.Marker | null>(null);
   const tamamlananEtiketleriRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  /** Canli saha ekibi konumlari - DOM marker olarak; stil degisiminden
+   *  etkilenmez (style katmani degil), ekipler prop'u degisince senkronlanir. */
+  const ekipMarkerlariRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   /** Istanbul il sinirinin halkalari - bir kez getirilir, stil degisiminde
    *  maske katmani yeniden kurulunca buradan tekrar uygulanir. */
   const istanbulSiniriRef = useRef<[number, number][][] | null>(null);
@@ -945,6 +954,8 @@ export default function MapView({
       cizimEtiketRef.current?.remove();
       for (const marker of tamamlananEtiketleriRef.current.values()) marker.remove();
       tamamlananEtiketleriRef.current.clear();
+      for (const marker of ekipMarkerlariRef.current.values()) marker.remove();
+      ekipMarkerlariRef.current.clear();
       map.remove();
       mapRef.current = null;
       hazirRef.current = false;
@@ -1031,6 +1042,35 @@ export default function MapView({
     if (!map) return;
     if (hazirRef.current) olcumUygula(map);
   }, [olcumNoktalari]);
+
+  // --- Canli saha ekibi konumlarini (DOM marker) senkronla ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const guncel = new Set<string>();
+    for (const e of ekipler ?? []) {
+      if (e.longitude == null || e.latitude == null) continue;
+      guncel.add(e.id);
+      let marker = ekipMarkerlariRef.current.get(e.id);
+      if (!marker) {
+        const el = document.createElement("div");
+        ekipMarkerGuncelle(el, e);
+        marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+          .setLngLat([e.longitude, e.latitude])
+          .addTo(map);
+        ekipMarkerlariRef.current.set(e.id, marker);
+      } else {
+        marker.setLngLat([e.longitude, e.latitude]);
+        ekipMarkerGuncelle(marker.getElement(), e);
+      }
+    }
+    for (const [id, marker] of ekipMarkerlariRef.current) {
+      if (!guncel.has(id)) {
+        marker.remove();
+        ekipMarkerlariRef.current.delete(id);
+      }
+    }
+  }, [ekipler]);
 
   // --- Cizim/olcum modunda imleci artiya cevir, yeni oturumda elastik cizgiyi sifirla ---
   useEffect(() => {
@@ -1200,6 +1240,29 @@ function ihbarPopupIcerigi(report: ReportFeature): string {
         font-weight:600; cursor:pointer;">Detayları Gör</button>
     </div>
   `;
+}
+
+/** Bir saha ekibi DOM marker'inin icerigini (avatar + yuk rozeti + ad etiketi)
+ *  kurar/gunceller. Ayni element hem olusturmada hem guncellemede kullanilir. */
+function ekipMarkerGuncelle(el: HTMLElement, e: EkipOzet): void {
+  const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
+  const rozetRenk = dolu ? "#dc2626" : "#059669";
+  el.style.cursor = "default";
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;font-family:system-ui,sans-serif">
+      <div style="position:relative">
+        <div style="width:28px;height:28px;border-radius:9999px;background:#4f46e5;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
+        <div style="position:absolute;top:-6px;right:-8px;min-width:16px;height:16px;padding:0 3px;border-radius:9999px;background:${rozetRenk};color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center;border:1.5px solid #fff">${e.aktif_gorev}</div>
+      </div>
+      <div style="margin-top:2px;max-width:110px;padding:1px 5px;border-radius:4px;background:rgba(15,23,42,.82);color:#fff;font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${kacis(e.full_name || e.email)}</div>
+    </div>`;
+  el.title =
+    `${e.full_name || e.email} · ${e.aktif_gorev}/${MAKS_AKTIF_GOREV} görev` +
+    (e.last_seen_at
+      ? ` · son görülme ${new Date(e.last_seen_at).toLocaleString("tr-TR")}`
+      : " · konum yok");
 }
 
 /** Kullanici verisini HTML'e gomerken kacis uygular. */

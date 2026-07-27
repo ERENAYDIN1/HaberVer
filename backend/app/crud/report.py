@@ -8,6 +8,7 @@ from ..models.asset import Asset, AssetSource, AssetStatus
 from ..models.log import LogAction
 from ..models.report import Report, ReportStatus
 from ..models.user import User
+from . import assignment as assignment_crud
 from .log import add_log
 
 
@@ -101,6 +102,14 @@ def approve_report(db: Session, report: Report, reviewer: User):
         entity_name=asset.name,
         detail="İhbardan oluşturuldu",
     )
+
+    # Olusan bakim varligini en yakin uygun saha ekibine otomatik yonlendir.
+    # Uygun ekip yoksa (hepsi dolu / konumu yok) varlik atanmadan kalir;
+    # personel daha sonra elle atayabilir.
+    ekip = assignment_crud.en_yakin_uygun_ekip(db, asset.geometry)
+    if ekip is not None:
+        assignment_crud.ata(db, asset, ekip, assigned_by=None)
+
     db.commit()
     return get(db, report.id)
 

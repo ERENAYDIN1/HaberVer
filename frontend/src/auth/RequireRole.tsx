@@ -4,9 +4,12 @@ import { Navigate } from "react-router-dom";
 import type { UserRole } from "../types/auth";
 import { useAuth } from "./AuthContext";
 
-/** Vatandas ana ekrani /vatandas, personel/admin ana ekrani / dir. */
+/** Her rolun kendi ana ekrani: vatandas -> /vatandas, saha calisani -> /saha,
+ *  admin/calisan -> / (ana konsol). */
 export function rolAnaSayfasi(rol: UserRole): string {
-  return rol === "vatandas" ? "/vatandas" : "/";
+  if (rol === "vatandas") return "/vatandas";
+  if (rol === "saha_calisani") return "/saha";
+  return "/";
 }
 
 interface RequireRoleProps {

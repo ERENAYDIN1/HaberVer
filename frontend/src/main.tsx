@@ -10,6 +10,7 @@ import "./index.css";
 import KayitVatandas from "./pages/KayitVatandas";
 import LoginPersonel from "./pages/LoginPersonel";
 import LoginVatandas from "./pages/LoginVatandas";
+import SahaEkran from "./pages/SahaEkran";
 import VatandasEkran from "./pages/VatandasEkran";
 
 const queryClient = new QueryClient({
@@ -36,12 +37,17 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               }
             />
             <Route
+              path="/saha"
+              element={
+                <RequireRole roller={["saha_calisani"]} girisYolu="/giris">
+                  <SahaEkran />
+                </RequireRole>
+              }
+            />
+            <Route
               path="/"
               element={
-                <RequireRole
-                  roller={["admin", "calisan", "saha_calisani"]}
-                  girisYolu="/giris"
-                >
+                <RequireRole roller={["admin", "calisan"]} girisYolu="/giris">
                   <App />
                 </RequireRole>
               }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { assetsWithin } from "./api/assets";
 import { listReports } from "./api/reports";
+import { ekipler as ekipleriGetir } from "./api/saha";
 import { ilceSiniri, mahalleSiniri } from "./api/sinirlar";
 import { useAuth } from "./auth/AuthContext";
 import AssetDetayModal from "./components/AssetDetayModal";
@@ -36,6 +37,7 @@ import MapView, { type UcusHedefi } from "./components/MapView";
 import Modal from "./components/Modal";
 import PersonelYonetimi from "./components/PersonelYonetimi";
 import ReportDetayModal from "./components/ReportDetayModal";
+import SahaEkipleri from "./components/SahaEkipleri";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
 import { ASSET_TYPE_LABELS } from "./types/asset";
@@ -99,7 +101,7 @@ const SEKME_TANIMLARI: Record<
 };
 
 /** Ust bardan modal olarak acilan yonetim/raporlama ekranlari. */
-type UstModal = "ozet" | "log" | "personel";
+type UstModal = "ozet" | "log" | "personel" | "saha";
 
 export default function App() {
   const { user, cikisYap } = useAuth();
@@ -472,6 +474,15 @@ export default function App() {
   });
   const bekleyenIhbarSayisi = bekleyenIhbarSorgu.data?.features.length ?? 0;
 
+  // Canli saha ekibi konumlari - yalniz personel icin, haritada gosterilir +
+  // varlik detayindaki elle atama listesini besler.
+  const ekipSorgu = useQuery({
+    queryKey: ["saha", "ekipler"],
+    queryFn: ekipleriGetir,
+    enabled: personel,
+    refetchInterval: 20000,
+  });
+
   // Bir bildirime tiklaninca ilgili varliga git: kaynagina gore dogru sekmeye
   // gec (kayitli -> Varliklar, ihbardan gelen -> İhbarlar > Onaylandı), sec
   // ve haritayi oraya ucur.
@@ -579,6 +590,13 @@ export default function App() {
 
   const kenarYonetimOgeleri: KenarOgesi[] = personel
     ? [
+        {
+          id: "saha",
+          etiket: "Saha Ekipleri",
+          ikon: IconUsers,
+          onClick: () => setUstModal("saha"),
+          aktif: ustModal === "saha",
+        },
         {
           id: "ozet",
           etiket: "Özet",
@@ -794,6 +812,7 @@ export default function App() {
           onGorunumDegisti={setHaritaGorunumu}
           onVarlikDetay={() => setDetayAsset(seciliVarlik)}
           onIhbarDetay={() => setDetayRapor(seciliRapor)}
+          ekipler={personel ? ekipSorgu.data : undefined}
         />
 
         {/* Harita ust-ortasindaki aciklama seridi: tur renkleri + canli sayaclar.
@@ -890,7 +909,15 @@ export default function App() {
       {/* Varlik/ihbar detayi artik sol-altta yer kaplayan ayri bir kart yerine
           tek, ortalanmis bir modalde gosterilir - haritadaki popup'taki
           "Detaylari Gor" ve listedeki "Detay" butonu ayni modali acar. */}
-      <AssetDetayModal asset={detayAsset} onKapat={() => setDetayAsset(null)} />
+      <AssetDetayModal
+        asset={detayAsset}
+        onKapat={() => setDetayAsset(null)}
+        atayabilir={personel}
+        ekipler={ekipSorgu.data}
+        onAtandi={() =>
+          queryClient.invalidateQueries({ queryKey: ["saha", "ekipler"] })
+        }
+      />
       <ReportDetayModal report={detayRapor} onKapat={() => setDetayRapor(null)} />
 
       <Modal
@@ -936,6 +963,16 @@ export default function App() {
         onKapat={() => setUstModal(null)}
       >
         {user?.role === "admin" && <PersonelYonetimi />}
+      </Modal>
+
+      <Modal
+        acik={ustModal === "saha"}
+        baslik="Saha Ekipleri"
+        genis
+        icerikSinifi="flex h-[70vh] flex-col"
+        onKapat={() => setUstModal(null)}
+      >
+        {personel && <SahaEkipleri />}
       </Modal>
     </div>
   );
