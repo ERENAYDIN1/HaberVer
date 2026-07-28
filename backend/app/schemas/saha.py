@@ -36,13 +36,23 @@ class GorevRef(BaseModel):
 
 class AktifGorevBilgi(BaseModel):
     """Bir varligin o an atali oldugu ekip + atama bilgisi (elle yonlendirme
-    ekraninda 'su an hangi ekipte' gostermek icin). Aktif gorev yoksa uc null
-    doner."""
+    ekraninda 'su an hangi ekipte' gostermek icin). Aktif gorev yoksa null."""
 
     worker_id: uuid.UUID
     worker_ad: str
     assigned_at: datetime
     otomatik: bool
+
+
+class GorevDurumu(BaseModel):
+    """GET /saha/gorev/{asset_id} yaniti: varligin aktif gorevi (yoksa null) +
+    varligin hangi yakada oldugu. Yaka, elle yonlendirme ekraninda 'bu ekip karsi
+    yakada' uyarisini gosterebilmek icin dondurulur (elle atama yaka kisitindan
+    muaftir, ama personel ne yaptigini gormeli)."""
+
+    gorev: AktifGorevBilgi | None = None
+    varlik_yaka: str | None = None
+    varlik_yaka_ad: str | None = None
 
 
 class EkipOzet(BaseModel):
@@ -55,6 +65,9 @@ class EkipOzet(BaseModel):
     latitude: float | None
     last_seen_at: datetime | None
     aktif_gorev: int
+    # Ekibin etkin yakasi: users.yaka doluysa o, yoksa son konumundan turetilen
+    # (konum da yoksa None). Otomatik atamada bu yakadaki isler verilir.
+    yaka: str | None = None
 
     @classmethod
     def from_row(cls, row) -> "EkipOzet":
@@ -66,6 +79,7 @@ class EkipOzet(BaseModel):
             latitude=row.latitude,
             last_seen_at=row.last_seen_at,
             aktif_gorev=row.aktif_gorev,
+            yaka=row.yaka,
         )
 
 
@@ -83,10 +97,12 @@ class GorevOzet(BaseModel):
     assigned_at: datetime
     longitude: float
     latitude: float
+    # Varligin dustugu yaka; panoda "karsi yakadaki ekibe tasima" uyarisi icin.
+    yaka: str | None = None
 
     @classmethod
     def from_row(cls, row) -> "GorevOzet":
-        gorev, asset, longitude, latitude = row
+        gorev, asset, longitude, latitude, yaka = row
         return cls(
             assignment_id=gorev.id,
             asset_id=asset.id,
@@ -98,6 +114,7 @@ class GorevOzet(BaseModel):
             assigned_at=gorev.created_at,
             longitude=longitude,
             latitude=latitude,
+            yaka=yaka,
         )
 
 
@@ -111,6 +128,7 @@ class EkipGorevleri(BaseModel):
     latitude: float | None
     last_seen_at: datetime | None
     aktif_gorev: int
+    yaka: str | None = None
     gorevler: list[GorevOzet]
 
 
@@ -128,10 +146,12 @@ class HavuzVarlik(BaseModel):
     # bundan hesaplanir (created_at kayitli varliklarda kurulus tarihi oldugu
     # icin yaniltici olur - bkz. istek 4).
     updated_at: datetime
+    # Varligin dustugu yaka; havuzdan elle atarken "karsi yaka" uyarisi icin.
+    yaka: str | None = None
 
     @classmethod
     def from_row(cls, row) -> "HavuzVarlik":
-        asset, longitude, latitude = row
+        asset, longitude, latitude, yaka = row
         return cls(
             asset_id=asset.id,
             name=asset.name,
@@ -141,6 +161,7 @@ class HavuzVarlik(BaseModel):
             latitude=latitude,
             created_at=asset.created_at,
             updated_at=asset.updated_at,
+            yaka=yaka,
         )
 
 

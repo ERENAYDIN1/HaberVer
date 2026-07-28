@@ -3,6 +3,7 @@ from .assignment import Assignment, AssignmentStatus
 from .log import ActivityLog, LogAction
 from .report import Report, ReportStatus
 from .user import User, UserRole
+from .yaka import Yaka, YakaAlani
 
 __all__ = [
     "ActivityLog",
@@ -16,4 +17,6 @@ __all__ = [
     "ReportStatus",
     "User",
     "UserRole",
+    "Yaka",
+    "YakaAlani",
 ]

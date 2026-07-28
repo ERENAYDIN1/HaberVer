@@ -1,8 +1,8 @@
 import { authHeader } from "../auth/token";
 import type {
-  AktifGorevBilgi,
   EkipGorevleri,
   EkipOzet,
+  GorevDurumu,
   GorevFeatureCollection,
   HavuzVarlik,
 } from "../types/saha";
@@ -89,9 +89,10 @@ export function ekibeAta(asset_id: string, worker_id: string) {
   });
 }
 
-/** Personel: bir varligin o an atali oldugu ekip bilgisi (havuzdaysa null). */
+/** Personel: bir varligin o an atali oldugu ekip (havuzdaysa null) + varligin
+ *  yakasi (elle atamada 'secilen ekip karsi yakada' uyarisi icin). */
 export function gorevDurumu(asset_id: string) {
-  return istekJson<AktifGorevBilgi | null>(`/saha/gorev/${asset_id}`);
+  return istekJson<GorevDurumu>(`/saha/gorev/${asset_id}`);
 }
 
 /** Personel: bir varligin aktif gorevini iptal edip havuza geri alir. */

@@ -1,3 +1,5 @@
+import type { Yaka } from "./saha";
+
 export const USER_ROLES = ["admin", "calisan", "saha_calisani", "vatandas"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
@@ -15,6 +17,9 @@ export interface User {
   role: UserRole;
   is_active: boolean;
   created_at: string;
+  /** Yalnizca saha_calisani icin: ekibin kadro yakasi. null ise ekibin yakasi
+   *  son bildirdigi konumdan turetilir (bkz. types/saha.ts). */
+  yaka: Yaka | null;
 }
 
 export interface TokenResponse {

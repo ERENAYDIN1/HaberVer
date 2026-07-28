@@ -12,9 +12,12 @@ import {
 import {
   MAKS_AKTIF_GOREV,
   MAKS_ATAMA_MESAFE_KM,
+  YAKA_KISA,
+  yakaEtiketi,
   type EkipGorevleri,
   type GorevOzet,
   type HavuzVarlik,
+  type Yaka,
 } from "../types/saha";
 import {
   IconDrop,
@@ -100,6 +103,36 @@ function KaynakRozet({ source }: { source: AssetSource }) {
   );
 }
 
+/** Yaka rozeti (Avrupa / Anadolu / Adalar). Otomatik atama yalnizca ayni yaka
+ *  icinde yapildigi icin ekip ve is kartlarinda gorunur tutulur. */
+function YakaRozet({ yaka, koyu }: { yaka: string | null; koyu?: boolean }) {
+  if (!yaka) return null;
+  const kisa = YAKA_KISA[yaka as Yaka] ?? yaka;
+  return (
+    <span
+      className={`rounded px-1 py-px text-[10px] font-medium ${
+        koyu ? "bg-white/15 text-slate-100" : "bg-violet-100 text-violet-700"
+      }`}
+      title={yakaEtiketi(yaka) ?? undefined}
+    >
+      {kisa}
+    </span>
+  );
+}
+
+/** Bir ekip secim <option>'unun etiketi: yuk + konum + karsi yaka uyarisi.
+ *  hedefYaka verilirse (isin yakasi) farkli yakadaki ekipler isaretlenir. */
+function ekipSecenegi(e: EkipGorevleri, hedefYaka: string | null): string {
+  const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
+  const karsi = Boolean(e.yaka && hedefYaka && e.yaka !== hedefYaka);
+  return (
+    (e.full_name || e.email) +
+    ` (${e.aktif_gorev}/${MAKS_AKTIF_GOREV}` +
+    (dolu ? " · dolu)" : ")") +
+    (karsi ? ` · ⚠ karşı yaka (${YAKA_KISA[e.yaka as Yaka] ?? e.yaka})` : "")
+  );
+}
+
 /** Bir ekibin altindaki tek gorev satiri: baska ekibe tasi ya da havuza al. */
 function GorevSatiri({
   gorev,
@@ -123,6 +156,7 @@ function GorevSatiri({
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
             <span className="text-slate-500">{ASSET_TYPE_LABELS[gorev.type]}</span>
             <KaynakRozet source={gorev.source} />
+            <YakaRozet yaka={gorev.yaka} />
             <span
               className={`rounded-full px-1.5 py-px font-medium ${
                 gorev.otomatik
@@ -148,16 +182,15 @@ function GorevSatiri({
       >
         <option value="">{calisiyor ? "İşleniyor…" : "Taşı / işlem…"}</option>
         <optgroup label="Başka ekibe taşı">
-          {digerEkipler.map((e) => {
-            const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
-            return (
-              <option key={e.id} value={e.id} disabled={dolu}>
-                {(e.full_name || e.email) +
-                  ` (${e.aktif_gorev}/${MAKS_AKTIF_GOREV}` +
-                  (dolu ? " · dolu)" : ")")}
-              </option>
-            );
-          })}
+          {digerEkipler.map((e) => (
+            <option
+              key={e.id}
+              value={e.id}
+              disabled={e.aktif_gorev >= MAKS_AKTIF_GOREV}
+            >
+              {ekipSecenegi(e, gorev.yaka)}
+            </option>
+          ))}
         </optgroup>
         <option value="__havuz__">↩ Havuza al (iptal)</option>
       </select>
@@ -199,12 +232,13 @@ function EkipKarti({
           <p className="truncate text-sm font-semibold leading-tight text-white">
             {ekip.full_name || ekip.email}
           </p>
-          <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-300">
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-300">
             <span
               className="inline-block h-2 w-2 rounded-full ring-1 ring-white/40"
               style={{ background: t.renk }}
             />
             {t.metin}
+            <YakaRozet yaka={ekip.yaka} koyu />
           </p>
         </div>
         <span
@@ -261,6 +295,7 @@ function HavuzSatiri({
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
             <span className="text-slate-500">{ASSET_TYPE_LABELS[varlik.type]}</span>
             <KaynakRozet source={varlik.source} />
+            <YakaRozet yaka={varlik.yaka} />
             <span className="rounded-full bg-amber-100 px-1.5 py-px font-medium text-amber-700">
               {beklemeMetni(varlik.updated_at)}
             </span>
@@ -277,16 +312,11 @@ function HavuzSatiri({
         className="mt-2 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
       >
         <option value="">{calisiyor ? "İşleniyor…" : "Ekibe ata…"}</option>
-        {ekipler.map((e) => {
-          const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
-          return (
-            <option key={e.id} value={e.id} disabled={dolu}>
-              {(e.full_name || e.email) +
-                ` (${e.aktif_gorev}/${MAKS_AKTIF_GOREV}` +
-                (dolu ? " · dolu)" : ")")}
-            </option>
-          );
-        })}
+        {ekipler.map((e) => (
+          <option key={e.id} value={e.id} disabled={e.aktif_gorev >= MAKS_AKTIF_GOREV}>
+            {ekipSecenegi(e, varlik.yaka)}
+          </option>
+        ))}
       </select>
     </li>
   );
@@ -406,8 +436,10 @@ export default function SahaEkipleri() {
           </h2>
           <p className="text-xs text-slate-500">
             Hangi ekipte hangi görevin olduğunu görün; görevleri başka ekibe taşıyın,
-            havuza alın veya havuzdaki işleri elle atayın. Otomatik atama ~
-            {MAKS_ATAMA_MESAFE_KM} km içindeki en yakın uygun ekibe yapılır.
+            havuza alın veya havuzdaki işleri elle atayın. Otomatik atama{" "}
+            <strong>aynı yakadaki</strong>, ~{MAKS_ATAMA_MESAFE_KM} km içindeki en
+            yakın uygun ekibe yapılır — bir ekip Boğaz'ın karşısına otomatik
+            gönderilmez. Elle atarken karşı yakadaki ekipler ⚠ ile işaretlenir.
           </p>
         </div>
         <button
@@ -463,8 +495,9 @@ export default function SahaEkipleri() {
           <span className="text-xs font-normal text-slate-400">({havuz.length})</span>
         </h3>
         <p className="mb-2 text-xs text-slate-500">
-          Menzilde uygun (boş) ekip olmadığı için bekleyen işler. Bir ekip kapasite
-          açınca otomatik yönlendirilir; dilerseniz aşağıdan elle atayabilirsiniz.
+          Kendi yakasında menzilde uygun (boş) ekip olmadığı için bekleyen işler.
+          Aynı yakadaki bir ekip kapasite açınca otomatik yönlendirilir; dilerseniz
+          aşağıdan elle atayabilirsiniz.
         </p>
 
         {havuz.length > 0 && (

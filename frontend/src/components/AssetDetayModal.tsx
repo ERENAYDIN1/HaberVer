@@ -11,7 +11,13 @@ import {
   kalanSilmeGunu,
   type AssetFeature,
 } from "../types/asset";
-import { MAKS_AKTIF_GOREV, type EkipOzet } from "../types/saha";
+import {
+  MAKS_AKTIF_GOREV,
+  YAKA_KISA,
+  yakaEtiketi,
+  type EkipOzet,
+  type Yaka,
+} from "../types/saha";
 import { IconCheck } from "./icons";
 import Modal from "./Modal";
 
@@ -50,12 +56,23 @@ export default function AssetDetayModal({
   const bakimVar = asset?.properties.status === "bakim_lazim";
   const atamaGoster = Boolean(atayabilir && bakimVar && assetId);
 
-  // Varligin o an atali oldugu ekip (yoksa null: havuzda bekliyor).
-  const { data: mevcutGorev, isLoading: gorevYukleniyor } = useQuery({
+  // Varligin o an atali oldugu ekip (yoksa null: havuzda bekliyor) + varligin
+  // yakasi (karsi yakadaki ekibe elle atama uyarisi icin).
+  const { data: durum, isLoading: gorevYukleniyor } = useQuery({
     queryKey: ["saha", "gorev", assetId],
     queryFn: () => gorevDurumu(assetId!),
     enabled: atamaGoster,
   });
+  const mevcutGorev = durum?.gorev ?? null;
+  const varlikYaka = durum?.varlik_yaka ?? null;
+
+  // Secilen ekip varligin yakasinin disindaysa uyari gosterilir. Elle atama
+  // bilincli olarak yaka kisitindan MUAFTIR (otomatik atama degildir), ama
+  // personel "bu ekip Bogaz'in karsisinda" bilgisini gormeden onaylamamali.
+  const seciliEkipNesnesi = ekipler?.find((e) => e.id === seciliEkip);
+  const karsiYaka = Boolean(
+    seciliEkipNesnesi?.yaka && varlikYaka && seciliEkipNesnesi.yaka !== varlikYaka,
+  );
 
   // Varlik degisince atama durumunu sifirla.
   useEffect(() => {
@@ -202,6 +219,11 @@ export default function AssetDetayModal({
           <div className="border-t border-slate-200 pt-3">
             <p className="mb-1.5 text-xs font-semibold text-slate-700">
               Saha ekibine yönlendir
+              {yakaEtiketi(varlikYaka) && (
+                <span className="ml-1.5 font-normal text-slate-500">
+                  · varlık {yakaEtiketi(varlikYaka)}'nda
+                </span>
+              )}
             </p>
 
             {/* Su anki atama durumu: hangi ekipte (otomatik/elle) ya da havuzda. */}
@@ -224,7 +246,7 @@ export default function AssetDetayModal({
                   . Başka bir ekip seçip yeniden yönlendirebilirsiniz.
                 </>
               ) : (
-                "Henüz bir ekibe atanmadı — havuzda bekliyor (menzilde uygun ekip yok)."
+                "Henüz bir ekibe atanmadı — havuzda bekliyor (aynı yakada menzilde uygun ekip yok)."
               )}
             </div>
 
@@ -238,12 +260,14 @@ export default function AssetDetayModal({
                 {(ekipler ?? []).map((e) => {
                   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
                   const suanki = mevcutGorev?.worker_id === e.id;
+                  const uzak = Boolean(e.yaka && varlikYaka && e.yaka !== varlikYaka);
                   return (
                     <option key={e.id} value={e.id} disabled={dolu && !suanki}>
                       {(e.full_name || e.email) +
                         ` (${e.aktif_gorev}/${MAKS_AKTIF_GOREV}` +
                         (dolu ? " · dolu)" : ")") +
                         (e.last_seen_at ? "" : " · konum yok") +
+                        (uzak ? ` · karşı yaka (${YAKA_KISA[e.yaka as Yaka] ?? e.yaka})` : "") +
                         (suanki ? " · şu an atalı" : "")}
                     </option>
                   );
@@ -258,6 +282,15 @@ export default function AssetDetayModal({
                 {atanıyor ? "…" : "Ata"}
               </button>
             </div>
+
+            {karsiYaka && (
+              <p className="mt-2 border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+                <strong>Karşı yaka:</strong> seçtiğiniz ekip{" "}
+                {yakaEtiketi(seciliEkipNesnesi?.yaka)}'nda, varlık ise{" "}
+                {yakaEtiketi(varlikYaka)}'nda. Ekibin köprüden geçmesi gerekir —
+                otomatik atama bunu yapmaz, elle atarsanız yine de yönlendirilir.
+              </p>
+            )}
 
             {mevcutGorev && (
               <button

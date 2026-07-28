@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..crud import asset as asset_crud
 from ..crud import assignment as crud
+from ..crud import yaka as yaka_crud
 from ..database import get_db
 from ..models.asset import AssetStatus
 from ..models.user import User, UserRole
@@ -15,6 +16,7 @@ from ..schemas.saha import (
     AtamaGirdi,
     EkipGorevleri,
     EkipOzet,
+    GorevDurumu,
     GorevFeatureCollection,
     GorevOzet,
     GorevRef,
@@ -112,6 +114,7 @@ def ekip_gorevleri(
             latitude=o.latitude,
             last_seen_at=o.last_seen_at,
             aktif_gorev=o.aktif_gorev,
+            yaka=o.yaka,
             gorevler=grup.get(o.id, []),
         )
         for o in ozetler
@@ -156,15 +159,23 @@ def ata(
     db.commit()
 
 
-@router.get("/gorev/{asset_id}", response_model=AktifGorevBilgi | None)
+@router.get("/gorev/{asset_id}", response_model=GorevDurumu)
 def gorev_bilgi(
     asset_id: uuid.UUID,
     _: User = Depends(personel),
     db: Session = Depends(get_db),
 ):
-    """Bir varligin su an atali oldugu ekip + atama bilgisi (yoksa null: havuzda
-    bekliyor). Elle yonlendirme ekraninda 'once hangi ekipteydi' gostermek icin."""
-    return crud.aktif_gorev_bilgisi(db, asset_id)
+    """Bir varligin su an atali oldugu ekip (yoksa null: havuzda bekliyor) +
+    varligin hangi yakada oldugu. Elle yonlendirme ekraninda 'once hangi ekipteydi'
+    ve 'secilen ekip karsi yakada mi' gostermek icin."""
+    gorev = crud.aktif_gorev_bilgisi(db, asset_id)
+    row = asset_crud.get_asset(db, asset_id)
+    kod = yaka_crud.yaka_bul(db, row[0].geometry) if row is not None else None
+    return GorevDurumu(
+        gorev=AktifGorevBilgi(**gorev) if gorev else None,
+        varlik_yaka=kod,
+        varlik_yaka_ad=yaka_crud.yaka_adlari(db).get(kod) if kod else None,
+    )
 
 
 @router.post("/geri-al", status_code=status.HTTP_204_NO_CONTENT)

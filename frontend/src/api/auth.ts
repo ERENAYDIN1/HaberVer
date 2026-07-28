@@ -1,5 +1,6 @@
 import { authHeader } from "../auth/token";
 import type { TokenResponse, User, UserRole } from "../types/auth";
+import type { Yaka } from "../types/saha";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 
@@ -54,9 +55,24 @@ export function createUser(data: {
   password: string;
   full_name?: string;
   role: UserRole;
+  /** Yalnizca saha_calisani icin anlamli; bos birakilirsa ekibin yakasi son
+   *  bildirdigi konumdan turetilir. */
+  yaka?: Yaka | null;
 }) {
   return istek<User>("/users", {
     method: "POST",
-    body: JSON.stringify({ ...data, full_name: data.full_name || null }),
+    body: JSON.stringify({
+      ...data,
+      full_name: data.full_name || null,
+      yaka: data.yaka || null,
+    }),
+  });
+}
+
+/** Admin: bir saha ekibinin kadro yakasini ayarlar (null: konumdan turet). */
+export function updateUserYaka(user_id: string, yaka: Yaka | null) {
+  return istek<User>(`/users/${user_id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ yaka }),
   });
 }

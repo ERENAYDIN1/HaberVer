@@ -15,6 +15,7 @@ from ..models.asset import Asset, AssetStatus
 from ..models.assignment import Assignment, AssignmentStatus
 from ..models.log import LogAction
 from ..models.user import User, UserRole
+from . import yaka as yaka_crud
 from .log import add_log
 
 # Bir saha ekibine ayni anda dusebilecek en fazla aktif gorev sayisi.
@@ -56,23 +57,29 @@ def _aktif_sayi_subq():
 
 
 def en_yakin_uygun_ekip(db: Session, asset_geom) -> User | None:
-    """Konumu bilinen, aktif, kapasitesi (aktif gorev < MAKS) olan ve varliga en
-    fazla MAKS_ATAMA_MESAFE_M mesafede bulunan saha calisanlari arasindan en yakin
-    olani dondurur. Menzilde uygun ekip yoksa None (varlik atanmadan havuzda
-    bekler; personel elle yonlendirebilir ya da bir ekip menzile girip/kapasite
-    acilinca otomatik yonlendirilir)."""
+    """Konumu bilinen, aktif, kapasitesi (aktif gorev < MAKS) olan, varlikla AYNI
+    YAKADA bulunan ve varliga en fazla MAKS_ATAMA_MESAFE_M mesafede olan saha
+    calisanlari arasindan en yakin olani dondurur. Uygun ekip yoksa None (varlik
+    atanmadan havuzda bekler; personel elle yonlendirebilir ya da bir ekip menzile
+    girip/kapasite acilinca otomatik yonlendirilir).
+
+    Yaka kisiti mesafe esiginin yerine degil, USTUNE gelir: Bogaz'in iki yakasi
+    kus ucusu 2 km olabilir ama arac ile ancak koprüden (~25 km) gecilir, yani
+    hicbir mesafe esigi tek basina 'karsiya gecme' kuralini kuramaz."""
+    asset_yaka = yaka_crud.yaka_bul(db, asset_geom)
     cnt = _aktif_sayi_subq().label("cnt")
     mesafe = func.ST_DistanceSphere(User.last_location, asset_geom)
-    rows = db.execute(
-        select(User, cnt)
-        .where(
-            User.role == UserRole.saha_calisani,
-            User.is_active.is_(True),
-            User.last_location.isnot(None),
-            mesafe <= MAKS_ATAMA_MESAFE_M,
-        )
-        .order_by(mesafe.asc())
-    ).all()
+    kosullar = [
+        User.role == UserRole.saha_calisani,
+        User.is_active.is_(True),
+        User.last_location.isnot(None),
+        mesafe <= MAKS_ATAMA_MESAFE_M,
+    ]
+    # asset_yaka None ise (yakalar tablosu bos) kisit uygulanmaz - sistem eski
+    # davranisina duser, sessizce hicbir sey atanmamasindansa.
+    if asset_yaka is not None:
+        kosullar.append(yaka_crud.ekip_yakasi_ifadesi() == asset_yaka)
+    rows = db.execute(select(User, cnt).where(*kosullar).order_by(mesafe.asc())).all()
     for user, aktif in rows:
         if aktif < MAKS_AKTIF_GOREV:
             return user
@@ -346,6 +353,7 @@ def aktif_atamalar(db: Session):
             Asset,
             func.ST_X(Asset.geometry).label("longitude"),
             func.ST_Y(Asset.geometry).label("latitude"),
+            yaka_crud.nokta_yakasi_ifadesi(Asset.geometry).label("yaka"),
         )
         .join(Asset, Asset.id == Assignment.asset_id)
         .where(Assignment.status == AssignmentStatus.atandi)
@@ -365,6 +373,7 @@ def havuz_varliklari(db: Session):
             Asset,
             func.ST_X(Asset.geometry).label("longitude"),
             func.ST_Y(Asset.geometry).label("latitude"),
+            yaka_crud.nokta_yakasi_ifadesi(Asset.geometry).label("yaka"),
         )
         .where(Asset.status == AssetStatus.bakim_lazim, Asset.id.not_in(atanmis))
         # En uzun bekleyen once (updated_at = bakima dusme/olusma zamani).
@@ -385,6 +394,7 @@ def ekipler_ozeti(db: Session):
             func.ST_Y(User.last_location).label("latitude"),
             User.last_seen_at,
             cnt,
+            yaka_crud.ekip_yakasi_ifadesi().label("yaka"),
         )
         .where(User.role == UserRole.saha_calisani, User.is_active.is_(True))
         .order_by(User.full_name)

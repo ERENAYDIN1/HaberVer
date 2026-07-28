@@ -28,14 +28,19 @@ def create_user(
     role: UserRole,
     full_name: str | None = None,
     actor: User | None = None,
+    yaka: str | None = None,
 ) -> User:
     """actor verildiginde (admin panelinden personel/admin hesabi acilirken) bir
-    log kaydi olusur; vatandas oz-kaydinda actor None kalir, loglanmaz."""
+    log kaydi olusur; vatandas oz-kaydinda actor None kalir, loglanmaz.
+
+    yaka yalnizca saha_calisani icin anlamlidir (bkz. models/yaka.py); diger
+    rollerde yok sayilir."""
     user = User(
         email=email.lower(),
         hashed_password=hash_password(password),
         full_name=full_name,
         role=role,
+        yaka=yaka if role == UserRole.saha_calisani else None,
     )
     db.add(user)
     db.flush()  # id'yi almak icin
@@ -51,6 +56,24 @@ def create_user(
             detail=role.value,
         )
 
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def set_yaka(db: Session, user: User, yaka: str | None, actor: User) -> User:
+    """Bir saha ekibinin kadro yakasini ayarlar/temizler (None: yaka artik son
+    konumdan turetilir)."""
+    user.yaka = yaka
+    add_log(
+        db,
+        action=LogAction.user_updated,
+        actor=actor,
+        entity_type="user",
+        entity_id=user.id,
+        entity_name=user.email,
+        detail=f"Yaka: {yaka or 'konumdan türet'}",
+    )
     db.commit()
     db.refresh(user)
     return user

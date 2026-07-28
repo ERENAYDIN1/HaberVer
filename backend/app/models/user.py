@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, DateTime, Enum, String, func, text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -43,6 +43,13 @@ class User(Base):
     )
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    # Saha ekibinin kadro olarak bagli oldugu yaka (yakalar.kod). NULL ise ekibin
+    # yakasi son konumundan turetilir; dolu ise konum ne olursa olsun bu gecerlidir
+    # (ekip Bogaz kiyisinda/koprude iken GPS'in yanlis yakaya dusmesini onler).
+    # Otomatik atamada ekip ile varligin yakasi ayni olmak zorundadir.
+    yaka: Mapped[str | None] = mapped_column(
+        String(16), ForeignKey("yakalar.kod"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
