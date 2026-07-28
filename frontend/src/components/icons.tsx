@@ -59,14 +59,6 @@ export function IconMarkaLogo({ className }: IconProps) {
   );
 }
 
-export function IconBench({ className }: IconProps) {
-  return (
-    <svg {...temelOzellikler} className={className}>
-      <path d="M3 9h18M3 12h18M5 12v7M19 12v7M3 19h4M17 19h4" />
-    </svg>
-  );
-}
-
 export function IconLamp({ className }: IconProps) {
   return (
     <svg {...temelOzellikler} className={className}>

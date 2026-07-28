@@ -28,6 +28,8 @@ services:
       - "${BACKEND_PORT}:8000"
     volumes:
       - ./backend:/app
+      # Ihbar fotograflari proje dizinine degil, Docker'in kendi volume'une yazilsin.
+      - media:/app/media
     depends_on:
       db:
         condition: service_healthy
@@ -49,3 +51,4 @@ services:
 
 volumes:
   pgdata:
+  media:

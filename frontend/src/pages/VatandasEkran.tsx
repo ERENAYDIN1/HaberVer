@@ -168,7 +168,7 @@ export default function VatandasEkran() {
               <input
                 id="ad"
                 className={inputClass}
-                placeholder="Örn. Kırık bank"
+                placeholder="Örn. Kurumuş ağaç"
                 value={ad}
                 onChange={(e) => setAd(e.target.value)}
               />

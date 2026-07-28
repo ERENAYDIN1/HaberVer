@@ -1,4 +1,4 @@
-export const ASSET_TYPES = ["agac", "bank", "direk", "sulama"] as const;
+export const ASSET_TYPES = ["agac", "direk", "sulama"] as const;
 export const ASSET_STATUSES = ["iyi", "bakim_lazim"] as const;
 export const ASSET_SOURCES = ["kayitli", "ihbar"] as const;
 
@@ -6,16 +6,13 @@ export type AssetType = (typeof ASSET_TYPES)[number];
 export type AssetStatus = (typeof ASSET_STATUSES)[number];
 export type AssetSource = (typeof ASSET_SOURCES)[number];
 
-/** Belediyeye dogrudan KAYITLI varlik olarak eklenebilen turler. Bank haric
- *  tutulur: banklar proaktif takip edilmez, yalnizca ihbar geldiginde bakilir
- *  (bkz. istek: "Banklari kayitli varliklardan silelim"). Bank tipi enum'da
- *  yine de var - vatandas kirik bank ihbari gonderebilir. */
+/** Belediyeye dogrudan KAYITLI varlik olarak eklenebilen turler. Su an tum
+ *  varlik turleri kayitli olarak eklenebiliyor (bank turu tamamen kaldirildi). */
 export const KAYITLI_ASSET_TYPES = ["agac", "direk", "sulama"] as const;
 
 /** Arayuzde gosterilecek Turkce etiketler. */
 export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   agac: "Ağaç",
-  bank: "Bank",
   direk: "Direk",
   sulama: "Sulama",
 };

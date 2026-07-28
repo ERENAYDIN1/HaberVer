@@ -9,6 +9,15 @@
   transform: translateY(-50%);
 }
 
+/* Attribution kontrolu (24px beyaz altlik + "i" butonu) ile zoom butonlari (29px)
+   sag kenarlari hizali istiflenince attribution merkezi zoom sutununun ~2.5px
+   sagina dusuyordu. Butonu tek basina degil, BEYAZ ALTLIGI (container'i) o kadar
+   sola alarak altlik + buton birlikte zoom butonlariyla yatayda ortalanir
+   (varsayilan margin 10px + 2.5px). */
+.greenasset-harita .maplibregl-ctrl-attrib.maplibregl-compact {
+  margin-right: 12.5px;
+}
+
 /* Varlik/ihbar popup'larindaki (harita uzerindeki "Detaylari Gor" kutucuklari)
    metin bulanikligi iki nedene dayaniyordu:
    1) MapLibre popup konumunu tam piksele yuvarlar ama anchor'daki

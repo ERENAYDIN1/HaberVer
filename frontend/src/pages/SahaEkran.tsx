@@ -12,7 +12,6 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import KonumSecMap, { type HaritaIsaret } from "../components/KonumSecMap";
 import {
-  IconBench,
   IconCheck,
   IconDrop,
   IconLamp,
@@ -26,7 +25,6 @@ import { ASSET_TYPE_LABELS, type AssetType } from "../types/asset";
 
 const TIP_IKON: Record<AssetType, (p: { className?: string }) => React.ReactElement> = {
   agac: IconTree,
-  bank: IconBench,
   direk: IconLamp,
   sulama: IconDrop,
 };

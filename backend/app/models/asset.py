@@ -12,7 +12,6 @@ from ..database import Base
 
 class AssetType(str, enum.Enum):
     agac = "agac"
-    bank = "bank"
     direk = "direk"
     sulama = "sulama"
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   HARITA_STILLERI,
   ONIZLEME_MERKEZI,
+  ONIZLEME_ZOOM,
   type HaritaStilId,
   type HaritaStilTanimi,
 } from "../data/mapStyles";
@@ -37,89 +38,67 @@ export default function MapStilKontrolu({ aktifId, onSec }: MapStilKontroluProps
   return (
     <div ref={kutuRef} className="absolute bottom-6 right-4 z-20">
       {acik && (
-        <div className="absolute bottom-full right-0 z-20 mb-2 grid w-64 grid-cols-2 gap-1.5 rounded-xl border border-slate-300 bg-white p-2 shadow-xl">
-          {HARITA_STILLERI.map((stil) => (
-            <button
-              key={stil.id}
-              onClick={() => {
-                onSec(stil.id);
-                setAcik(false);
-              }}
-              className={`flex flex-col gap-1 rounded-lg border p-1 text-xs transition ${
-                stil.id === aktifId
-                  ? "border-emerald-600 bg-emerald-50"
-                  : "border-transparent hover:bg-slate-50"
-              }`}
-            >
-              <div className="relative h-14 w-full overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-                <Onizleme stil={stil} />
-              </div>
-              <span
-                className={
-                  stil.id === aktifId
-                    ? "font-medium text-emerald-800"
-                    : "text-slate-600"
-                }
+        <div className="absolute bottom-full right-0 z-20 mb-3 w-80 rounded-2xl border border-slate-200/80 bg-white/95 p-3 shadow-[0_12px_32px_-8px_rgba(15,23,42,0.35)] backdrop-blur">
+          <p className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            Harita çeşidi
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {HARITA_STILLERI.map((stil) => (
+              <button
+                key={stil.id}
+                onClick={() => {
+                  onSec(stil.id);
+                  setAcik(false);
+                }}
+                className="group text-left"
               >
-                {stil.etiket}
-              </span>
-            </button>
-          ))}
+                <div
+                  className={`relative h-20 w-full overflow-hidden rounded-lg bg-slate-100 ring-1 transition ${
+                    stil.id === aktifId
+                      ? "ring-2 ring-emerald-500"
+                      : "ring-slate-200 group-hover:ring-slate-400"
+                  }`}
+                >
+                  <Onizleme stil={stil} />
+                </div>
+                <span
+                  className={`mt-1.5 block truncate text-xs transition ${
+                    stil.id === aktifId
+                      ? "font-semibold text-emerald-700"
+                      : "text-slate-600 group-hover:text-slate-900"
+                  }`}
+                >
+                  {stil.etiket}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       <button
         onClick={() => setAcik((a) => !a)}
         title="Harita çeşidi"
-        className="group relative block rounded-2xl bg-white p-1.5 shadow-[0_4px_16px_rgba(0,0,0,0.35)] ring-2 ring-emerald-500 transition hover:scale-105"
+        aria-expanded={acik}
+        className="group block rounded-xl bg-white/90 p-1 shadow-[0_6px_20px_-6px_rgba(15,23,42,0.45)] ring-1 ring-slate-900/10 backdrop-blur transition hover:ring-slate-900/25"
       >
-        <div className="relative h-14 w-14 overflow-hidden rounded-lg">
+        <div className="relative h-20 w-20 overflow-hidden rounded-lg">
           {aktifStil && <Onizleme stil={aktifStil} />}
-          <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-[10px] font-medium text-white">
-            {aktifStil?.etiket}
+          <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/85 via-slate-900/45 to-transparent pt-3">
+            <span className="flex items-center justify-center gap-1 pb-1 text-[10px] font-medium text-white">
+              <IconLayers className="h-3 w-3" />
+              <span className="truncate">{aktifStil?.etiket}</span>
+            </span>
           </span>
         </div>
-
-        <span className="absolute -left-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md ring-2 ring-white">
-          <IconLayers className="h-3.5 w-3.5" />
-        </span>
       </button>
     </div>
   );
 }
 
-/** Stil tanimina gore uygun onizlemeyi (statik gorsel ya da mini canli harita) gosterir. */
+/** Tum stiller icin ayni merkez/zoom degerleriyle olusturulan, etkilesimsiz
+ *  mini onizleme haritasi — boylece bes onizleme de ayni kadraji gosterir. */
 function Onizleme({ stil }: { stil: HaritaStilTanimi }) {
-  if (stil.onizleme.tip === "raster") {
-    return (
-      <img
-        src={stil.onizleme.url}
-        alt={stil.etiket}
-        className="h-full w-full object-cover"
-        loading="lazy"
-      />
-    );
-  }
-  if (stil.onizleme.tip === "raster-yigin") {
-    return (
-      <>
-        {stil.onizleme.urls.map((url, i) => (
-          <img
-            key={url}
-            src={url}
-            alt={i === 0 ? stil.etiket : ""}
-            className="absolute inset-0 h-full w-full object-cover"
-            loading="lazy"
-          />
-        ))}
-      </>
-    );
-  }
-  return <MiniOnizleme stil={stil.stil} />;
-}
-
-/** Vektor stiller icin gercek, kucuk ve etkilesimsiz bir onizleme haritasi. */
-function MiniOnizleme({ stil }: { stil: string | maplibregl.StyleSpecification }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -127,9 +106,9 @@ function MiniOnizleme({ stil }: { stil: string | maplibregl.StyleSpecification }
 
     const mini = new maplibregl.Map({
       container: containerRef.current,
-      style: stil,
+      style: stil.stil,
       center: ONIZLEME_MERKEZI,
-      zoom: 12,
+      zoom: ONIZLEME_ZOOM,
       interactive: false,
       attributionControl: false,
     });

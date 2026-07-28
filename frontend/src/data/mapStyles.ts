@@ -5,9 +5,6 @@ import hibritStilJson from "./hibritStil.json";
  *  Raster stillerin aksine etiketler haritayla birlikte donen, dinamik nesneler. */
 const hibritStili = hibritStilJson as unknown as StyleSpecification;
 
-/** Istanbul merkezine yakin, onizlemelerde kullanilan sabit bir tile (z/x/y). */
-const ONIZLEME_TILE = { z: 15, x: 19021, y: 12284 };
-
 function googleStili(lyrs: string): StyleSpecification {
   return {
     version: 8,
@@ -21,11 +18,6 @@ function googleStili(lyrs: string): StyleSpecification {
     },
     layers: [{ id: "google", type: "raster", source: "google" }],
   };
-}
-
-function googleOnizlemeUrl(lyrs: string): string {
-  const { z, x, y } = ONIZLEME_TILE;
-  return `https://mt.google.com/vt/lyrs=${lyrs}&x=${x}&y=${y}&z=${z}`;
 }
 
 /** Standart OpenStreetMap raster altligi (API anahtari gerektirmez). */
@@ -44,58 +36,30 @@ function osmStili(): StyleSpecification {
   };
 }
 
-function osmOnizlemeUrl(): string {
-  const { z, x, y } = ONIZLEME_TILE;
-  return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
-}
-
 export type HaritaStilId = "hibrit" | "uydu" | "osm" | "liberty" | "voyager";
 
 export interface HaritaStilTanimi {
   id: HaritaStilId;
   etiket: string;
   stil: StyleSpecification | string;
-  /** Raster onizlemeler dogrudan <img>, arazi iki katmanin ustuste bindirilmis
-   *  onizlemesini gosterir, vektor stiller mini canli harita ile gosterilir. */
-  onizleme:
-    | { tip: "raster"; url: string }
-    | { tip: "raster-yigin"; urls: [string, string] }
-    | { tip: "vektor" };
 }
 
 export const HARITA_STILLERI: HaritaStilTanimi[] = [
-  {
-    id: "hibrit",
-    etiket: "Hibrit",
-    stil: hibritStili,
-    onizleme: { tip: "vektor" },
-  },
-  {
-    id: "uydu",
-    etiket: "Uydu",
-    stil: googleStili("s"),
-    onizleme: { tip: "raster", url: googleOnizlemeUrl("s") },
-  },
-  {
-    id: "osm",
-    etiket: "OpenStreetMap",
-    stil: osmStili(),
-    onizleme: { tip: "raster", url: osmOnizlemeUrl() },
-  },
-  {
-    id: "liberty",
-    etiket: "Liberty",
-    stil: "https://tiles.openfreemap.org/styles/liberty",
-    onizleme: { tip: "vektor" },
-  },
+  { id: "hibrit", etiket: "Hibrit", stil: hibritStili },
+  { id: "uydu", etiket: "Uydu", stil: googleStili("s") },
+  { id: "osm", etiket: "OpenStreetMap", stil: osmStili() },
+  { id: "liberty", etiket: "Liberty", stil: "https://tiles.openfreemap.org/styles/liberty" },
   {
     id: "voyager",
     etiket: "Voyager",
     stil: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
-    onizleme: { tip: "vektor" },
   },
 ];
 
-export const ONIZLEME_MERKEZI: [number, number] = [28.9784, 41.0082];
+/** Tum stil onizlemeleri ayni kadraji gosterir: Bogaz'in iki yakasi, "Istanbul"
+ *  etiketiyle birlikte Bakirkoy-Umraniye arasini kapsayan hafif genis aci.
+ *  Zoom, kucuk onizleme kutularinda bu kadrajin sigmasi icin secildi. */
+export const ONIZLEME_MERKEZI: [number, number] = [28.975, 41.025];
+export const ONIZLEME_ZOOM = 9.6;
 
 export const VARSAYILAN_STIL: HaritaStilId = "liberty";

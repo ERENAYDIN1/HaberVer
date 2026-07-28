@@ -3,7 +3,6 @@ import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { AssetType } from "../types/asset";
 import {
   IconBell,
-  IconBench,
   IconDrop,
   IconInbox,
   IconLamp,
@@ -13,14 +12,12 @@ import {
 
 const TIP_RENGI: Record<AssetType, string> = {
   agac: "#059669",
-  bank: "#d97706",
   direk: "#0284c7",
   sulama: "#0891b2",
 };
 
 const TIP_IKONU: Record<AssetType, (p: { className?: string }) => ReactElement> = {
   agac: IconTree,
-  bank: IconBench,
   direk: IconLamp,
   sulama: IconDrop,
 };

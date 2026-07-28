@@ -43,6 +43,19 @@ const OLCUM_RENK = "#2563eb";
  *  ayrilsin diye mor tonuyla gosterilir - "İhbarlar" sekmesindeki queue. */
 const IHBAR_RENK = "#9333ea";
 
+/** Ihbar noktasi durumuna gore renk: beklemede mor (yeni ihbar kimligi),
+ *  onaylandi yesil (cozuldu), reddedildi kirmizi. Sag-ustteki katman
+ *  filtresindeki durum rozetleriyle birebir ayni palet. */
+const IHBAR_DURUM_RENGI_IFADESI = [
+  "match",
+  ["get", "status"],
+  "onaylandi",
+  "#059669",
+  "reddedildi",
+  "#e11d48",
+  IHBAR_RENK,
+] as unknown as maplibregl.ExpressionSpecification;
+
 const BOS_KOLEKSIYON: AssetFeatureCollection = {
   type: "FeatureCollection",
   features: [],
@@ -54,15 +67,13 @@ const BOS_GEOJSON = {
 } as unknown as GeoJSON.FeatureCollection;
 
 /** Varlik tipine gore isaretci rengi - liste rozetleriyle ayni palet
- *  (agac=yesil, bank=amber, direk=mavi). Harita uzerinde tur tek bakista
+ *  (agac=yesil, direk=mavi, sulama=camgobegi). Harita uzerinde tur tek bakista
  *  ayirt edilsin diye kullanilir; bilinmeyen tip icin notr gri. */
 const TIP_RENGI_IFADESI = [
   "match",
   ["get", "type"],
   "agac",
   "#059669",
-  "bank",
-  "#d97706",
   "direk",
   "#0284c7",
   "sulama",
@@ -71,10 +82,9 @@ const TIP_RENGI_IFADESI = [
 ] as unknown as maplibregl.ExpressionSpecification;
 
 /** Her tur icin beyaz cizgi glifi (marker dairesinin ortasina bindirilir).
- *  Path'ler icons.tsx'teki IconTree/IconBench/IconLamp/IconDrop ile ayni. */
+ *  Path'ler icons.tsx'teki IconTree/IconLamp/IconDrop ile ayni. */
 const TIP_GLIFLERI: Record<string, string> = {
   agac: '<path d="M12 3 6.5 11h2.7L5 18h6M12 3l5.5 8h-2.7L19 18h-6"/><path d="M12 14v7"/>',
-  bank: '<path d="M3 9h18M3 12h18M5 12v7M19 12v7M3 19h4M17 19h4"/>',
   direk: '<path d="M12 2v3M8.5 5h7l-1.3 4.5h-4.4L8.5 5z"/><path d="M12 9.5V21M9 21h6"/>',
   sulama:
     '<path d="M12 3s6 6.3 6 10.5a6 6 0 0 1-12 0C6 9.3 12 3 12 3z"/><path d="M9.5 13.5a2.5 2.5 0 0 0 2.5 2.5"/>',
@@ -116,10 +126,37 @@ const SECIM_UCUS_LISTEDEN = { zoom: 12.5, duration: 2000 };
 const UCUS_SURESI_VARSAYILAN = 1600;
 
 const IKON_KATMAN_YERLESIMI: Record<string, unknown> = {
-  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 16, 0.8],
+  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.7, 16, 1.05],
   "icon-allow-overlap": true,
   "icon-ignore-placement": true,
 };
+
+/** Isaretci olculeri tek yerde: tur glifi sehir olceginde (z10-12) de okunabilsin
+ *  diye daireler buyuk, beyaz halka kalin ve altlarinda yumusak bir golge var. */
+const ISARETCI = {
+  /** Varlik dairesi yaricapi (zoom 10 -> 16 arasi interpolasyon). */
+  varlikYaricap: ["interpolate", ["linear"], ["zoom"], 10, 11, 16, 17],
+  /** Ihbar dairesi - varliklardan bir tik kucuk kalir. */
+  ihbarYaricap: ["interpolate", ["linear"], ["zoom"], 10, 9.5, 16, 15],
+  /** "Bakim lazim" amber uyari halkasi - ana dairenin disinda kalmali. */
+  uyariYaricap: ["interpolate", ["linear"], ["zoom"], 10, 14, 16, 20],
+  /** Secim halkalari - uyari halkasinin da disinda. */
+  varlikSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 16, 16, 22],
+  ihbarSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 14, 16, 20],
+  beyazHalka: 2.5,
+} as const;
+
+/** Isaretcinin altina yumusak golge - dairenin hafif buyugu, asagi kaydirilmis
+ *  ve bulaniklastirilmis siyah bir daire (altliktan bagimsiz derinlik hissi). */
+function golgeBoyasi(yaricap: unknown): Record<string, unknown> {
+  return {
+    "circle-radius": yaricap,
+    "circle-color": "#0f172a",
+    "circle-opacity": 0.22,
+    "circle-blur": 0.5,
+    "circle-translate": [0, 2],
+  };
+}
 
 /** Haritayi belirli bir bolgeye/noktaya ucurmak icin komut. `anahtar` her
  *  degistiginde yeniden tetiklenir (ayni hedefe tekrar ucmak istenirse bile
@@ -661,6 +698,14 @@ export default function MapView({
     if (!map.getSource(SOURCE_ID)) {
       map.addSource(SOURCE_ID, { type: "geojson", data: BOS_KOLEKSIYON });
 
+      // En altta yumusak golge - isaretcileri altliktan ayirip kabartir.
+      map.addLayer({
+        id: "assets-golge",
+        type: "circle",
+        source: SOURCE_ID,
+        paint: golgeBoyasi(ISARETCI.varlikYaricap) as never,
+      });
+
       // Bakim gereken varliklar icin amber uyari halkasi (dairenin altinda,
       // tur renginden bagimsiz olarak "dikkat" sinyali verir).
       map.addLayer({
@@ -669,7 +714,7 @@ export default function MapView({
         source: SOURCE_ID,
         filter: ["==", ["get", "status"], "bakim_lazim"],
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 9, 16, 15],
+          "circle-radius": ISARETCI.uyariYaricap as never,
           "circle-color": "#f59e0b",
           "circle-opacity": 0.28,
           "circle-stroke-width": 2,
@@ -677,15 +722,15 @@ export default function MapView({
         },
       });
 
-      // Ana isaretci: dolgu TUR rengine gore (agac/bank/direk), beyaz cerceve.
+      // Ana isaretci: dolgu TUR rengine gore (agac/direk/sulama), beyaz cerceve.
       map.addLayer({
         id: "assets-circle",
         type: "circle",
         source: SOURCE_ID,
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 7, 16, 13],
+          "circle-radius": ISARETCI.varlikYaricap as never,
           "circle-color": TIP_RENGI_IFADESI,
-          "circle-stroke-width": 2,
+          "circle-stroke-width": ISARETCI.beyazHalka,
           "circle-stroke-color": "#ffffff",
         },
       });
@@ -696,7 +741,7 @@ export default function MapView({
         source: SOURCE_ID,
         filter: ["==", ["get", "id"], ""],
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 12, 16, 19],
+          "circle-radius": ISARETCI.varlikSecimYaricap as never,
           "circle-color": "transparent",
           "circle-stroke-width": 3,
           "circle-stroke-color": "#0f766e",
@@ -707,15 +752,22 @@ export default function MapView({
     if (!map.getSource(REPORTS_SOURCE_ID)) {
       map.addSource(REPORTS_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
 
+      map.addLayer({
+        id: "reports-golge",
+        type: "circle",
+        source: REPORTS_SOURCE_ID,
+        paint: golgeBoyasi(ISARETCI.ihbarYaricap) as never,
+      });
+
       // Ihbar noktalari - varliklardan (yesil/amber) acikca ayrilsin diye mor.
       map.addLayer({
         id: "reports-circle",
         type: "circle",
         source: REPORTS_SOURCE_ID,
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 5, 16, 10],
-          "circle-color": IHBAR_RENK,
-          "circle-stroke-width": 2,
+          "circle-radius": ISARETCI.ihbarYaricap as never,
+          "circle-color": IHBAR_DURUM_RENGI_IFADESI,
+          "circle-stroke-width": ISARETCI.beyazHalka,
           "circle-stroke-color": "#ffffff",
         },
       });
@@ -725,7 +777,7 @@ export default function MapView({
         source: REPORTS_SOURCE_ID,
         filter: ["==", ["get", "id"], ""],
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 11, 16, 18],
+          "circle-radius": ISARETCI.ihbarSecimYaricap as never,
           "circle-color": "transparent",
           "circle-stroke-width": 3,
           "circle-stroke-color": "#6b21a8",
@@ -1178,7 +1230,6 @@ function popupIcerigi(asset: AssetFeature): string {
 
   const turRenkleri: Record<string, string> = {
     agac: "#059669",
-    bank: "#d97706",
     direk: "#0284c7",
     sulama: "#0891b2",
   };

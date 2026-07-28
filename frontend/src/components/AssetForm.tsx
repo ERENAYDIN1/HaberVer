@@ -61,9 +61,9 @@ const errorClass = "mt-1 text-xs text-red-600";
 export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) {
   const duzenlemeModu = asset !== undefined;
 
-  // Kayitli varlik olarak yalnizca KAYITLI_ASSET_TYPES eklenebilir (bank haric).
-  // Duzenleme modunda mevcut varligin tipi (orn. ihbar kaynakli bir bank) listede
-  // yoksa basa eklenir ki secim bozulmasin.
+  // Kayitli varlik olarak yalnizca KAYITLI_ASSET_TYPES eklenebilir.
+  // Duzenleme modunda mevcut varligin tipi listede yoksa basa eklenir ki
+  // secim bozulmasin.
   const tipSecenekleri: AssetType[] = [...KAYITLI_ASSET_TYPES];
   if (asset && !tipSecenekleri.includes(asset.properties.type)) {
     tipSecenekleri.unshift(asset.properties.type);

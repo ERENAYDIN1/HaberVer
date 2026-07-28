@@ -17,7 +17,6 @@ import {
   type HavuzVarlik,
 } from "../types/saha";
 import {
-  IconBench,
   IconDrop,
   IconInbox,
   IconLamp,
@@ -42,7 +41,6 @@ const TIP_STILI: Record<
   { ikon: (p: { className?: string }) => React.ReactElement; rozet: string }
 > = {
   agac: { ikon: IconTree, rozet: "bg-emerald-100 text-emerald-700" },
-  bank: { ikon: IconBench, rozet: "bg-amber-100 text-amber-700" },
   direk: { ikon: IconLamp, rozet: "bg-sky-100 text-sky-700" },
   sulama: { ikon: IconDrop, rozet: "bg-cyan-100 text-cyan-700" },
 };

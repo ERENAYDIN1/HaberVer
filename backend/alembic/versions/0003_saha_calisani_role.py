@@ -16,7 +16,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'saha_calisani'")
+    # env.py tum migration'lari TEK transaction'da calistirdigi icin, bu degeri
+    # duz op.execute ile eklemek yetmez: Postgres yeni enum degerini ekleyen
+    # transaction kapanmadan kullandirmaz ve sonraki migration'lardaki seed
+    # (0007) "unsafe use of new value" ile patlar. autocommit_block ile ALTER
+    # hemen commit edilir. (Ayni desen 0009'da da kullaniliyor.)
+    with op.get_context().autocommit_block():
+        op.execute("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'saha_calisani'")
 
 
 def downgrade() -> None:
