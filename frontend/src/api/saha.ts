@@ -1,48 +1,15 @@
-import { authHeader } from "../auth/token";
-import type {
+﻿import type {
   EkipGorevleri,
   EkipOzet,
   GorevDurumu,
   GorevFeatureCollection,
   HavuzVarlik,
 } from "../types/saha";
-
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
-
-async function hataMesaji(response: Response): Promise<string> {
-  try {
-    const body = await response.json();
-    if (typeof body.detail === "string") return body.detail;
-    if (Array.isArray(body.detail)) {
-      return body.detail.map((d: { msg: string }) => d.msg).join(" · ");
-    }
-  } catch {
-    // yoksay
-  }
-  return `İstek başarısız oldu (HTTP ${response.status})`;
-}
-
-async function istekJson<T>(yol: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE_URL}${yol}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...authHeader(), ...init?.headers },
-  });
-  if (!response.ok) throw new Error(await hataMesaji(response));
-  return response.json() as Promise<T>;
-}
-
-/** Yalniz durum kodu doner (204 gibi); govde beklenmez. */
-async function istekBos(yol: string, init?: RequestInit): Promise<void> {
-  const response = await fetch(`${BASE_URL}${yol}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...authHeader(), ...init?.headers },
-  });
-  if (!response.ok) throw new Error(await hataMesaji(response));
-}
+import { istek } from "./http";
 
 /** Saha calisani son konumunu bildirir. */
 export function konumGuncelle(longitude: number, latitude: number) {
-  return istekBos("/saha/konum", {
+  return istek<void>("/saha/konum", {
     method: "POST",
     body: JSON.stringify({ longitude, latitude }),
   });
@@ -50,17 +17,17 @@ export function konumGuncelle(longitude: number, latitude: number) {
 
 /** Giris yapan saha ekibinin aktif gorevleri. */
 export function gorevlerim() {
-  return istekJson<GorevFeatureCollection>("/saha/gorevlerim");
+  return istek<GorevFeatureCollection>("/saha/gorevlerim");
 }
 
-/** Giris yapan saha ekibinin yakinda tamamladigi gorevler ('Tamamlanan İşler'). */
+/** Giris yapan saha ekibinin yakinda tamamladigi gorevler ('Tamamlanan Ä°ÅŸler'). */
 export function tamamlananlarim() {
-  return istekJson<GorevFeatureCollection>("/saha/tamamlananlarim");
+  return istek<GorevFeatureCollection>("/saha/tamamlananlarim");
 }
 
 /** Saha ekibi yanlislikla tamamladigi bir gorevi geri alir (yeniden bakim). */
 export function tamamlananiGeriAl(assignment_id: string) {
-  return istekBos("/saha/tamamlanan-geri-al", {
+  return istek<void>("/saha/tamamlanan-geri-al", {
     method: "POST",
     body: JSON.stringify({ assignment_id }),
   });
@@ -68,22 +35,22 @@ export function tamamlananiGeriAl(assignment_id: string) {
 
 /** Personel: tum saha ekiplerinin konum + yuk ozeti. */
 export function ekipler() {
-  return istekJson<EkipOzet[]>("/saha/ekipler");
+  return istek<EkipOzet[]>("/saha/ekipler");
 }
 
 /** Personel yonetim panosu: her ekip + kendine dusen aktif gorevler. */
 export function ekipGorevleri() {
-  return istekJson<EkipGorevleri[]>("/saha/ekip-gorevleri");
+  return istek<EkipGorevleri[]>("/saha/ekip-gorevleri");
 }
 
 /** Personel: havuzda bekleyen (atanmamis) bakim varliklari. */
 export function havuz() {
-  return istekJson<HavuzVarlik[]>("/saha/havuz");
+  return istek<HavuzVarlik[]>("/saha/havuz");
 }
 
 /** Personel: bir bakim varligini elle bir ekibe (yeniden) yonlendirir. */
 export function ekibeAta(asset_id: string, worker_id: string) {
-  return istekBos("/saha/ata", {
+  return istek<void>("/saha/ata", {
     method: "POST",
     body: JSON.stringify({ asset_id, worker_id }),
   });
@@ -92,12 +59,12 @@ export function ekibeAta(asset_id: string, worker_id: string) {
 /** Personel: bir varligin o an atali oldugu ekip (havuzdaysa null) + varligin
  *  yakasi (elle atamada 'secilen ekip karsi yakada' uyarisi icin). */
 export function gorevDurumu(asset_id: string) {
-  return istekJson<GorevDurumu>(`/saha/gorev/${asset_id}`);
+  return istek<GorevDurumu>(`/saha/gorev/${asset_id}`);
 }
 
 /** Personel: bir varligin aktif gorevini iptal edip havuza geri alir. */
 export function gorevGeriAl(asset_id: string) {
-  return istekBos("/saha/geri-al", {
+  return istek<void>("/saha/geri-al", {
     method: "POST",
     body: JSON.stringify({ asset_id }),
   });

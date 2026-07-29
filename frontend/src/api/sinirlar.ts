@@ -1,6 +1,4 @@
-import { authHeader } from "../auth/token";
-
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
+import { istek } from "./http";
 
 export interface IlceOzet {
   kod: string;
@@ -21,12 +19,6 @@ export interface SinirGeometri {
    *  sinirlari veya tamamen adalardan olusan ilceler icin birden fazla halka
    *  olabilir. Tek parcali sinirlarda tek elemanli bir liste olur. */
   noktalar: [number, number][][];
-}
-
-async function istek<T>(yol: string): Promise<T> {
-  const response = await fetch(`${BASE_URL}${yol}`, { headers: authHeader() });
-  if (!response.ok) throw new Error(`İstek başarısız oldu (HTTP ${response.status})`);
-  return response.json() as Promise<T>;
 }
 
 export function ilceler(ilKodu: string) {
@@ -65,14 +57,9 @@ export function konumCozumle(lat: number, lon: number) {
 }
 
 /** Birden fazla koordinati tek istekte cozumler; sonuc girisle ayni sirada. */
-export async function konumCozumleToplu(
-  noktalar: [number, number][]
-): Promise<KonumCozumu[]> {
-  const response = await fetch(`${BASE_URL}/sinirlar/konum/toplu`, {
+export function konumCozumleToplu(noktalar: [number, number][]) {
+  return istek<KonumCozumu[]>("/sinirlar/konum/toplu", {
     method: "POST",
-    headers: { ...authHeader(), "Content-Type": "application/json" },
     body: JSON.stringify({ noktalar }),
   });
-  if (!response.ok) throw new Error(`İstek başarısız oldu (HTTP ${response.status})`);
-  return response.json() as Promise<KonumCozumu[]>;
 }

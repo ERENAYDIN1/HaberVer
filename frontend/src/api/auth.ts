@@ -1,36 +1,15 @@
-import { authHeader } from "../auth/token";
 import type { TokenResponse, User, UserRole } from "../types/auth";
 import type { Yaka } from "../types/saha";
+import { istek } from "./http";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
-
-/** Backend'in hata govdesini okunabilir tek bir mesaja cevirir. */
-async function hataMesaji(response: Response): Promise<string> {
-  try {
-    const body = await response.json();
-    if (typeof body.detail === "string") return body.detail;
-    if (Array.isArray(body.detail)) {
-      return body.detail.map((d: { msg: string }) => d.msg).join(" · ");
-    }
-  } catch {
-    // JSON degilse asagidaki genel mesaj
-  }
-  return `İstek başarısız oldu (HTTP ${response.status})`;
-}
-
-async function istek<T>(yol: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE_URL}${yol}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...authHeader(), ...init?.headers },
-  });
-  if (!response.ok) throw new Error(await hataMesaji(response));
-  return response.json() as Promise<T>;
-}
-
+/** Kimlik uclarinda `oturumKontrolu: false`: buradaki 401 "e-posta veya parola
+ *  hatali" demektir, oturum sonlanmasi degil - kullanici zaten giris
+ *  sayfasinda, hata mesajini formda gormeli. */
 export function login(email: string, password: string) {
   return istek<TokenResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
+    oturumKontrolu: false,
   });
 }
 
@@ -38,11 +17,16 @@ export function register(email: string, password: string, full_name?: string) {
   return istek<TokenResponse>("/auth/register", {
     method: "POST",
     body: JSON.stringify({ email, password, full_name: full_name || null }),
+    oturumKontrolu: false,
   });
 }
 
+/** Acilista token'i dogrulamak icin cagrilir. Burada da `oturumKontrolu: false`:
+ *  gecersiz token'da AuthContext zaten token'i silip RequireRole uygun giris
+ *  sayfasina yonlendiriyor - buradan ayrica tam sayfa yonlendirmesi yapmak
+ *  acilisi gereksizce yeniden yuklerdi. */
 export function me() {
-  return istek<User>("/auth/me");
+  return istek<User>("/auth/me", { oturumKontrolu: false });
 }
 
 // --- Admin: kullanici yonetimi ---
