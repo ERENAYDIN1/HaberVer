@@ -33,6 +33,95 @@
   text-rendering: optimizeLegibility;
 }
 
+/* --- Haritadaki canli saha ekibi isaretcileri (MapView, DOM marker) ---
+   Ekip adi etiketi yerlesimden CIKARILDI: mutlak konumlandirilmis ve
+   varsayilan gizli, yani isaretci yalnizca damla pin kadar yer kaplar ve
+   uzaklasinca komsu ekipler birbirine girmez; ad uzerine gelince belirir,
+   ayrintilar tiklaninca acilan popup'tadir.
+
+   DIKKAT: kok elemana (MapLibre'nin `maplibregl-marker`'i) `position` VERME.
+   MapLibre marker'i `position:absolute` + `transform` ile konumlandirir;
+   buraya `position:relative` yazilinca isaretciler harita kaydirilirken
+   yerinden kayiyordu. Bu yuzden mutlak konumlu parcalarin (rozet/ad)
+   referansi ic sarmalayici `.ekip-marker__govde`'dir. */
+.ekip-marker {
+  cursor: pointer;
+  line-height: 0;
+  filter: drop-shadow(0 3px 4px rgba(15, 23, 42, 0.3));
+}
+.ekip-marker:hover {
+  z-index: 4;
+}
+.ekip-marker__govde {
+  position: relative;
+}
+/* Klasik damla pin: kare kosesi (border-radius'un 0'i) -45 derece donunce tam
+   alt-ortaya gelir ve koordinati gosterir. Donme layout kutusunu buyutmedigi
+   icin uc, kutunun ~7px altina taser -> `margin-bottom` o bosluğu birakir ki
+   marker'in anchor'i ("bottom") tam ucun oldugu yere denk gelsin. */
+.ekip-marker__pin {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 7px;
+  border-radius: 50% 50% 50% 0;
+  border: 2.5px solid #fff;
+  background: linear-gradient(145deg, #818cf8, #4338ca);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+/* Ikon pin ile birlikte donmesin diye ters cevrilir. */
+.ekip-marker__pin svg {
+  transform: rotate(45deg);
+}
+.ekip-marker:hover .ekip-marker__pin {
+  transform: rotate(-45deg) scale(1.1);
+}
+.ekip-marker__rozet {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 9999px;
+  border: 1.5px solid #fff;
+  background: #059669;
+  color: #fff;
+  font: 700 10px/13px system-ui, sans-serif;
+  text-align: center;
+}
+.ekip-marker__ad {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-top: 3px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #fff;
+  font: 600 10px/1.35 system-ui, sans-serif;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -2px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.ekip-marker:hover .ekip-marker__ad {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+/* Kapasitesi dolu ekip: rozet + pin kirmiziya doner, uzaktan da secilir. */
+.ekip-marker--dolu .ekip-marker__pin {
+  background: linear-gradient(145deg, #fb7185, #dc2626);
+}
+.ekip-marker--dolu .ekip-marker__rozet {
+  background: #dc2626;
+}
+
 /* Ozet ekraninda seviye (genel -> ilce -> mahalle) degisince icerigin
    yeniden geldigi belli olsun diye kisa bir giris animasyonu. */
 @keyframes ozet-giris {

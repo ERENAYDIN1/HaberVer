@@ -4,13 +4,11 @@ import { createReport, fotoUrl, myReports } from "../api/reports";
 import { useAuth } from "../auth/AuthContext";
 import IhbarDurumRozeti from "../components/IhbarDurumRozeti";
 import KonumSecMap from "../components/KonumSecMap";
+import { inputClass, labelClass } from "../utils/formSiniflari";
 import { IconCamera, IconLogout, IconPin, IconTree } from "../components/icons";
 import { ASSET_TYPES, ASSET_TYPE_LABELS, type AssetType } from "../types/asset";
 import type { ReportFeature } from "../types/report";
 
-const inputClass =
-  "w-full border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500";
-const labelClass = "block text-sm font-medium text-slate-700 mb-1";
 
 export default function VatandasEkran() {
   const { user, cikisYap } = useAuth();

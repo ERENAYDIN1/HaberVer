@@ -22,6 +22,7 @@ import {
   IconWarning,
 } from "../components/icons";
 import { ASSET_TYPE_LABELS, type AssetType } from "../types/asset";
+import { kacis } from "../utils/html";
 
 const TIP_IKON: Record<AssetType, (p: { className?: string }) => React.ReactElement> = {
   agac: IconTree,
@@ -37,15 +38,6 @@ function yolTarifiAc(lng: number, lat: number) {
     `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
     "_blank",
     "noopener"
-  );
-}
-
-/** Popup HTML'ine gomulen metinleri kacisla (basit XSS korumasi). */
-function kacis(s: string): string {
-  return s.replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!
   );
 }
 

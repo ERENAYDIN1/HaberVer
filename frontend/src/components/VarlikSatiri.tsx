@@ -1,28 +1,16 @@
-import { forwardRef, useState, type ReactElement } from "react";
+import { forwardRef, useState } from "react";
 
 import { fotoUrl } from "../api/reports";
 import {
   ASSET_TYPE_LABELS,
+  TIP_ROZET_SINIFI,
+  TIP_ROZET_SINIFI_VARSAYILAN,
   durumEtiketi,
   kalanSilmeGunu,
   type AssetFeature,
 } from "../types/asset";
 import FotoBuyutucu from "./FotoBuyutucu";
-import { IconDrop, IconLamp, IconPin, IconTree } from "./icons";
-
-const TIP_IKONU: Record<string, (props: { className?: string }) => ReactElement> = {
-  agac: IconTree,
-  direk: IconLamp,
-  sulama: IconDrop,
-};
-
-/** Tip basina rozet rengi - liste ve haritada varlik turleri tek bakista
- *  ayirt edilebilsin diye (onceden hepsi ayni gri tondaydi). */
-const TIP_RENGI: Record<string, string> = {
-  agac: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  direk: "border-sky-200 bg-sky-50 text-sky-700",
-  sulama: "border-cyan-200 bg-cyan-50 text-cyan-700",
-};
+import { IconPin, TIP_IKONU } from "./icons";
 
 interface VarlikSatiriProps {
   asset: AssetFeature;
@@ -99,7 +87,7 @@ const VarlikSatiri = forwardRef<HTMLLIElement, VarlikSatiriProps>(function Varli
           ) : (
             <span
               className={`flex h-6 w-6 shrink-0 items-center justify-center border ${
-                TIP_RENGI[type] ?? "border-slate-200 bg-slate-50 text-slate-500"
+                TIP_ROZET_SINIFI[type] ?? TIP_ROZET_SINIFI_VARSAYILAN
               }`}
             >
               <TipIkonu className="h-3.5 w-3.5" />

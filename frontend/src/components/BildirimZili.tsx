@@ -1,26 +1,7 @@
-import { useEffect, useRef, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import type { AssetType } from "../types/asset";
-import {
-  IconBell,
-  IconDrop,
-  IconInbox,
-  IconLamp,
-  IconTree,
-  IconWarning,
-} from "./icons";
-
-const TIP_RENGI: Record<AssetType, string> = {
-  agac: "#059669",
-  direk: "#0284c7",
-  sulama: "#0891b2",
-};
-
-const TIP_IKONU: Record<AssetType, (p: { className?: string }) => ReactElement> = {
-  agac: IconTree,
-  direk: IconLamp,
-  sulama: IconDrop,
-};
+import { TIP_RENGI, TIP_RENGI_VARSAYILAN, type AssetType } from "../types/asset";
+import { IconBell, IconInbox, IconWarning, TIP_IKONU } from "./icons";
 
 export interface Bildirim {
   id: string;
@@ -107,7 +88,7 @@ export default function BildirimZili({ bildirimler }: BildirimZiliProps) {
             <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
               {bildirimler.map((b) => {
                 const Ikon = TIP_IKONU[b.tip] ?? IconInbox;
-                const renk = TIP_RENGI[b.tip] ?? "#64748b";
+                const renk = TIP_RENGI[b.tip] ?? TIP_RENGI_VARSAYILAN;
                 return (
                   <li key={`${b.kategori}-${b.id}`}>
                     <button

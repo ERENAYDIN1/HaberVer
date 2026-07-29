@@ -28,7 +28,10 @@ import {
 } from "./components/icons";
 import HaritaLejant from "./components/HaritaLejant";
 import IhbarPaneli from "./components/IhbarPaneli";
-import KatmanKontrolu, { type KatmanAnahtari } from "./components/KatmanKontrolu";
+import KatmanKontrolu, {
+  type AltGrup,
+  type KatmanAnahtari,
+} from "./components/KatmanKontrolu";
 import Kenarcubugu, { type KenarOgesi } from "./components/Kenarcubugu";
 import { LogoAmblem } from "./components/icons";
 import KonumArama from "./components/KonumArama";
@@ -41,12 +44,19 @@ import ReportDetayModal from "./components/ReportDetayModal";
 import SahaEkipleri from "./components/SahaEkipleri";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
-import { ASSET_TYPE_LABELS, ASSET_TYPES } from "./types/asset";
+import {
+  ASSET_STATUS_LABELS,
+  ASSET_STATUSES,
+  ASSET_TYPE_LABELS,
+  ASSET_TYPES,
+  TIP_RENGI,
+} from "./types/asset";
 import { USER_ROLE_LABELS } from "./types/auth";
 import type {
   AssetFeature,
   AssetFeatureCollection,
   AssetFilters,
+  AssetStatus,
   AssetType,
   MultiPolygonGeometry,
   PolygonGeometry,
@@ -74,12 +84,13 @@ import { ISTANBUL_MERKEZI } from "./utils/istanbulMaskesi";
 const IDARI_ALAN_ID = "idari-sinir";
 const IDARI_ALAN_RENK = "#0891b2";
 
-/** Katman filtresindeki tur/durum rozet renkleri - haritadaki isaretci
- *  renkleriyle birebir ayni (MapView TIP_RENGI_IFADESI / IHBAR_DURUM_RENGI_IFADESI). */
-const TIP_RENGI: Record<AssetType, string> = {
-  agac: "#059669",
-  direk: "#0284c7",
-  sulama: "#0891b2",
+/** Katman filtresindeki tur rengi icin ortak palet kullanilir (bkz.
+ *  components/tipGorunumu); durum renkleri asagida.
+ *  Varlik durum rozetleri: bakim lazim, haritada amber uyari halkasiyla
+ *  (MapView "assets-durum") isaretlenir; "iyi" icin notr bir yesil kullanilir. */
+const VARLIK_DURUM_RENGI: Record<AssetStatus, string> = {
+  iyi: "#10b981",
+  bakim_lazim: "#f59e0b",
 };
 const IHBAR_DURUM_RENGI: Record<ReportStatus, string> = {
   beklemede: "#9333ea",
@@ -169,6 +180,14 @@ export default function App() {
   });
   const katmanTuruDegistir = useCallback((anahtar: string) => {
     setKatmanTurleri((t) => ({ ...t, [anahtar]: !t[anahtar as AssetType] }));
+  }, []);
+  // Varlik katmaninin durum alt-filtresi (iyi / bakim lazim) - tumu acik. Tur
+  // filtresiyle birlikte VE olarak uygulanir: "bakima muhtac agaclar" gibi.
+  const [katmanVarlikDurumlari, setKatmanVarlikDurumlari] = useState<
+    Record<AssetStatus, boolean>
+  >({ iyi: true, bakim_lazim: true });
+  const katmanVarlikDurumuDegistir = useCallback((anahtar: string) => {
+    setKatmanVarlikDurumlari((d) => ({ ...d, [anahtar]: !d[anahtar as AssetStatus] }));
   }, []);
   // Ihbar katmaninin durum alt-filtresi - varsayilan yalniz bekleyen ihbarlar
   // (onaylanan/reddedilen genel bakisi kalabalik yapmasin, istenirse acilir).
@@ -554,19 +573,31 @@ export default function App() {
   // Varlik katmani (taban): "Onaylandi" gorunumunde ihbar kaynagi varliklar, aksi
   // halde mevcut (alan/filtre suzulmus) liste. Uzerine tur alt-filtresi uygulanir.
   const varlikKatmanTaban = ihbarOnayliGorunumu ? ihbarVarlikSorgu.data : gosterilen;
-  const varlikTurSayilari = useMemo(() => {
-    const s: Record<AssetType, number> = { agac: 0, direk: 0, sulama: 0 };
-    for (const f of varlikKatmanTaban?.features ?? []) s[f.properties.type] += 1;
-    return s;
-  }, [varlikKatmanTaban]);
+  // Alt-filtre sayaclari: her kirilim, DIGER kirilimin secimi uygulanmis taban
+  // uzerinden sayilir - yani "Bakım Lazım" secili iken tur sayilari yalnizca
+  // bakim bekleyenleri gosterir (rakamlar haritadakiyle tutarli kalir).
+  const { varlikTurSayilari, varlikDurumSayilari } = useMemo(() => {
+    const turSayilari: Record<AssetType, number> = { agac: 0, direk: 0, sulama: 0 };
+    const durumSayilari: Record<AssetStatus, number> = { iyi: 0, bakim_lazim: 0 };
+    for (const f of varlikKatmanTaban?.features ?? []) {
+      const { type, status } = f.properties;
+      if (katmanVarlikDurumlari[status]) turSayilari[type] += 1;
+      if (katmanTurleri[type]) durumSayilari[status] += 1;
+    }
+    return { varlikTurSayilari: turSayilari, varlikDurumSayilari: durumSayilari };
+  }, [varlikKatmanTaban, katmanTurleri, katmanVarlikDurumlari]);
   const varlikKatmanVeri = useMemo<AssetFeatureCollection | undefined>(() => {
     if (!varlikKatmanTaban) return undefined;
-    if (ASSET_TYPES.every((t) => katmanTurleri[t])) return varlikKatmanTaban;
+    const tumTurler = ASSET_TYPES.every((t) => katmanTurleri[t]);
+    const tumDurumlar = ASSET_STATUSES.every((s) => katmanVarlikDurumlari[s]);
+    if (tumTurler && tumDurumlar) return varlikKatmanTaban;
     return {
       type: "FeatureCollection",
-      features: varlikKatmanTaban.features.filter((f) => katmanTurleri[f.properties.type]),
+      features: varlikKatmanTaban.features.filter(
+        (f) => katmanTurleri[f.properties.type] && katmanVarlikDurumlari[f.properties.status]
+      ),
     };
-  }, [varlikKatmanTaban, katmanTurleri]);
+  }, [varlikKatmanTaban, katmanTurleri, katmanVarlikDurumlari]);
 
   // Ihbar katmani: secili durumlarin (beklemede/onaylandi/reddedildi) ihbarlari
   // birlestirilir (id'ye gore tekillestirilir). Panel secim vurgusu, sekmedeki
@@ -595,26 +626,53 @@ export default function App() {
   };
 
   // Sag-ustteki katman kontrolune gecen alt-filtre tanimlari (etiket/renk/sayi).
-  const varlikAltFiltre = useMemo(
-    () =>
-      ASSET_TYPES.map((t) => ({
-        anahtar: t,
-        etiket: ASSET_TYPE_LABELS[t],
-        renk: TIP_RENGI[t],
-        secili: katmanTurleri[t],
-        sayi: varlikTurSayilari[t],
-      })),
-    [katmanTurleri, varlikTurSayilari]
+  const varlikAltFiltre = useMemo<AltGrup[]>(
+    () => [
+      {
+        baslik: "Tür",
+        onSec: katmanTuruDegistir,
+        secenekler: ASSET_TYPES.map((t) => ({
+          anahtar: t,
+          etiket: ASSET_TYPE_LABELS[t],
+          renk: TIP_RENGI[t],
+          secili: katmanTurleri[t],
+          sayi: varlikTurSayilari[t],
+        })),
+      },
+      {
+        baslik: "Durum",
+        onSec: katmanVarlikDurumuDegistir,
+        secenekler: ASSET_STATUSES.map((s) => ({
+          anahtar: s,
+          etiket: ASSET_STATUS_LABELS[s],
+          renk: VARLIK_DURUM_RENGI[s],
+          secili: katmanVarlikDurumlari[s],
+          sayi: varlikDurumSayilari[s],
+        })),
+      },
+    ],
+    [
+      katmanTurleri,
+      varlikTurSayilari,
+      katmanVarlikDurumlari,
+      varlikDurumSayilari,
+      katmanTuruDegistir,
+      katmanVarlikDurumuDegistir,
+    ]
   );
-  const ihbarAltFiltre = useMemo(
-    () =>
-      REPORT_STATUSES.map((d) => ({
-        anahtar: d,
-        etiket: REPORT_STATUS_LABELS[d],
-        renk: IHBAR_DURUM_RENGI[d],
-        secili: katmanDurumlari[d],
-        sayi: ihbarDurumSorgusu[d].data?.features.length ?? 0,
-      })),
+  const ihbarAltFiltre = useMemo<AltGrup[]>(
+    () => [
+      {
+        onSec: katmanDurumuDegistir,
+        secenekler: REPORT_STATUSES.map((d) => ({
+          anahtar: d,
+          etiket: REPORT_STATUS_LABELS[d],
+          renk: IHBAR_DURUM_RENGI[d],
+          secili: katmanDurumlari[d],
+          sayi: ihbarDurumSorgusu[d].data?.features.length ?? 0,
+        })),
+      },
+    ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       katmanDurumlari,
@@ -975,9 +1033,7 @@ export default function App() {
           onDegistir={katmanDegistir}
           sayilar={katmanSayilari}
           varlikAlt={varlikAltFiltre}
-          onVarlikAlt={katmanTuruDegistir}
           ihbarAlt={ihbarAltFiltre}
-          onIhbarAlt={katmanDurumuDegistir}
         />
 
         <MapStilKontrolu aktifId={aktifStilId} onSec={setAktifStilId} />

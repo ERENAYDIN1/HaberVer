@@ -1,6 +1,12 @@
+import type { ReactElement } from "react";
+
+import type { AssetType } from "../types/asset";
+
 interface IconProps {
   className?: string;
 }
+
+export type TipIkonu = (props: IconProps) => ReactElement;
 
 const temelOzellikler = {
   viewBox: "0 0 24 24",
@@ -106,6 +112,20 @@ export function IconLayers({ className }: IconProps) {
   );
 }
 
+/** Harita lejanti: renk noktalari + karsilarinda aciklama satirlari. Katman
+ *  kartinin basliginda kullanilir - IconLayers sag-alttaki harita cesidi
+ *  seciciye ait oldugundan ikisi kasitli olarak farklidir. */
+export function IconLegend({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} className={className}>
+      <circle cx="5" cy="6.5" r="1.75" />
+      <circle cx="5" cy="12" r="1.75" />
+      <circle cx="5" cy="17.5" r="1.75" />
+      <path d="M10 6.5h10M10 12h8M10 17.5h9" />
+    </svg>
+  );
+}
+
 export function IconLasso({ className }: IconProps) {
   return (
     <svg {...temelOzellikler} className={className}>
@@ -119,14 +139,6 @@ export function IconRuler({ className }: IconProps) {
     <svg {...temelOzellikler} className={className}>
       <path d="M4 15 15 4l5 5-11 11-5-5z" />
       <path d="M8 11l1.5 1.5M11 8l1.5 1.5M14 5l1.5 1.5" />
-    </svg>
-  );
-}
-
-export function IconChevronLeft({ className }: IconProps) {
-  return (
-    <svg {...temelOzellikler} strokeWidth={2} className={className}>
-      <path d="M14 6l-6 6 6 6" />
     </svg>
   );
 }
@@ -374,3 +386,12 @@ export function IconMenu({ className }: IconProps) {
     </svg>
   );
 }
+
+/** Varlik turunun ikon karsiligi - liste satirlari, lejant ve bildirimler ayni
+ *  esleme icin kendi kopyalarini tutuyordu. Turun rengi icin bkz.
+ *  types/asset.ts `TIP_RENGI`. */
+export const TIP_IKONU: Record<AssetType, TipIkonu> = {
+  agac: IconTree,
+  direk: IconLamp,
+  sulama: IconDrop,
+};

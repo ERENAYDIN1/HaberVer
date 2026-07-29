@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from "react";
 
-import { IconCheck, IconChevronRight, IconInbox, IconLayers, IconPin, IconUsers } from "./icons";
+import { IconCheck, IconChevronRight, IconInbox, IconLegend, IconPin, IconUsers } from "./icons";
 
 /** Haritada bagimsiz olarak acilip kapatilabilen uc genel-bakis katmani. */
 export type KatmanAnahtari = "varliklar" | "ihbarlar" | "ekipler";
@@ -15,6 +15,15 @@ export interface AltFiltre {
   renk: string;
   secili: boolean;
   sayi: number;
+}
+
+/** Bir katmanin alt-filtrelerinin bir kirilimi. Varliklar katmaninda iki grup
+ *  vardir (Tur / Durum), ihbarlarda tek grup (durum) - tek grupta baslik
+ *  gereksiz kalabalik olacagindan `baslik` opsiyoneldir. */
+export interface AltGrup {
+  baslik?: string;
+  secenekler: AltFiltre[];
+  onSec: (anahtar: string) => void;
 }
 
 interface KatmanTanimi {
@@ -38,18 +47,17 @@ interface KatmanKontroluProps {
   onDegistir: (anahtar: KatmanAnahtari) => void;
   /** Her katmanin o an haritadaki adedi (rozet). */
   sayilar: Record<KatmanAnahtari, number>;
-  /** Varliklar katmaninin tur alt-filtreleri (agac/direk/sulama). */
-  varlikAlt: AltFiltre[];
-  onVarlikAlt: (anahtar: string) => void;
+  /** Varliklar katmaninin alt-filtreleri: tur (agac/direk/sulama) + durum
+   *  (iyi/bakim lazim) olmak uzere iki grup. */
+  varlikAlt: AltGrup[];
   /** Ihbarlar katmaninin durum alt-filtreleri (beklemede/onaylandi/reddedildi). */
-  ihbarAlt: AltFiltre[];
-  onIhbarAlt: (anahtar: string) => void;
+  ihbarAlt: AltGrup[];
 }
 
 /**
  * Haritanin sag-ust kosesindeki lejant + katman filtresi. Kullanici varlik,
  * ihbar ve saha ekibi katmanlarini "tik atarak" bagimsizca acip kapatabilir;
- * ayrica Varliklar (tur) ve Ihbarlar (durum) katmanlarini kendi icinde ince
+ * ayrica Varliklar (tur + durum) ve Ihbarlar (durum) katmanlarini kendi icinde ince
  * filtreleyebilir. Kart dar tutulur, alt-filtreler dikey olarak acilir - yazi
  * sikismaz/kaymaz. Baslik satirindan tumu kucuk bir dugmeye indirilebilir.
  */
@@ -58,9 +66,7 @@ export default function KatmanKontrolu({
   onDegistir,
   sayilar,
   varlikAlt,
-  onVarlikAlt,
   ihbarAlt,
-  onIhbarAlt,
 }: KatmanKontroluProps) {
   const [acik, setAcik] = useState(true);
   // Hangi ana katmanlarin alt-filtresi genisletilmis (varsayilan: kapali).
@@ -78,7 +84,7 @@ export default function KatmanKontrolu({
           title="Katmanlar"
           className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white/90 text-slate-600 shadow-lg shadow-slate-900/5 backdrop-blur-md transition hover:text-slate-900"
         >
-          <IconLayers className="h-5 w-5" />
+          <IconLegend className="h-5 w-5" />
           <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-600 px-1 text-[10px] font-bold text-white ring-2 ring-white">
             {acikSayisi}
           </span>
@@ -94,7 +100,7 @@ export default function KatmanKontrolu({
         className="flex w-full items-center gap-2 border-b border-slate-200/70 px-3 py-2.5 text-left transition hover:bg-slate-50/70"
       >
         <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
-          <IconLayers className="h-3.5 w-3.5" />
+          <IconLegend className="h-3.5 w-3.5" />
         </span>
         <span className="flex-1 text-sm font-semibold text-slate-800">Katmanlar</span>
         <IconChevronRight className="h-4 w-4 -rotate-90 text-slate-400" />
@@ -110,7 +116,6 @@ export default function KatmanKontrolu({
               : katman.anahtar === "ihbarlar"
                 ? ihbarAlt
                 : null;
-          const onAlt = katman.anahtar === "varliklar" ? onVarlikAlt : onIhbarAlt;
           const genisletilmis = altlar ? genis[katman.anahtar] : false;
 
           return (
@@ -172,36 +177,45 @@ export default function KatmanKontrolu({
               {/* Alt-filtreler: dikey liste, sola girintili, hafif ayrac cizgisiyle. */}
               {altlar && genisletilmis && (
                 <div className="mb-1 ml-4 border-l border-slate-200 pl-1.5">
-                  {altlar.map((alt) => (
-                    <button
-                      key={alt.anahtar}
-                      onClick={() => onAlt(alt.anahtar)}
-                      aria-pressed={alt.secili}
-                      disabled={!secili}
-                      className={`flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition ${
-                        secili ? "hover:bg-slate-50" : "cursor-not-allowed opacity-50"
-                      }`}
-                    >
-                      <span
-                        className="flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-[4px] border transition"
-                        style={{
-                          borderColor: alt.secili ? alt.renk : "#cbd5e1",
-                          backgroundColor: alt.secili ? alt.renk : "transparent",
-                        }}
-                      >
-                        {alt.secili && <IconCheck className="h-2.5 w-2.5 text-white" />}
-                      </span>
-                      <span
-                        className={`flex-1 whitespace-nowrap text-[12px] font-medium leading-tight ${
-                          alt.secili ? "text-slate-700" : "text-slate-400"
-                        }`}
-                      >
-                        {alt.etiket}
-                      </span>
-                      <span className="shrink-0 text-[11px] font-semibold tabular-nums text-slate-400">
-                        {alt.sayi.toLocaleString("tr-TR")}
-                      </span>
-                    </button>
+                  {altlar.map((grup, i) => (
+                    <div key={grup.baslik ?? i} className={i > 0 ? "mt-1" : undefined}>
+                      {grup.baslik && (
+                        <p className="px-1.5 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                          {grup.baslik}
+                        </p>
+                      )}
+                      {grup.secenekler.map((alt) => (
+                        <button
+                          key={alt.anahtar}
+                          onClick={() => grup.onSec(alt.anahtar)}
+                          aria-pressed={alt.secili}
+                          disabled={!secili}
+                          className={`flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition ${
+                            secili ? "hover:bg-slate-50" : "cursor-not-allowed opacity-50"
+                          }`}
+                        >
+                          <span
+                            className="flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-[4px] border transition"
+                            style={{
+                              borderColor: alt.secili ? alt.renk : "#cbd5e1",
+                              backgroundColor: alt.secili ? alt.renk : "transparent",
+                            }}
+                          >
+                            {alt.secili && <IconCheck className="h-2.5 w-2.5 text-white" />}
+                          </span>
+                          <span
+                            className={`flex-1 whitespace-nowrap text-[12px] font-medium leading-tight ${
+                              alt.secili ? "text-slate-700" : "text-slate-400"
+                            }`}
+                          >
+                            {alt.etiket}
+                          </span>
+                          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-slate-400">
+                            {alt.sayi.toLocaleString("tr-TR")}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}

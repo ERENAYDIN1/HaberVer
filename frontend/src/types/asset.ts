@@ -22,6 +22,28 @@ export const ASSET_STATUS_LABELS: Record<AssetStatus, string> = {
   bakim_lazim: "Bakım Lazım",
 };
 
+/** Tur -> hex renk. Harita isaretcileri (MapView), lejant ve bildirim noktalari
+ *  bu tek kaynaktan beslenir - palet daha once bes ayri dosyada kopyalanmisti.
+ *  Turun ikon karsiligi icin bkz. components/icons.tsx `TIP_IKONU`. */
+export const TIP_RENGI: Record<AssetType, string> = {
+  agac: "#059669",
+  direk: "#0284c7",
+  sulama: "#0891b2",
+};
+
+/** Bilinmeyen/eski bir tur icin notr gri (veri beklenmedik bir tur donerse). */
+export const TIP_RENGI_VARSAYILAN = "#64748b";
+
+/** Tur -> Tailwind rozet sinifi (liste satirlarindaki kucuk ikon kutusu). */
+export const TIP_ROZET_SINIFI: Record<AssetType, string> = {
+  agac: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  direk: "border-sky-200 bg-sky-50 text-sky-700",
+  sulama: "border-cyan-200 bg-cyan-50 text-cyan-700",
+};
+
+export const TIP_ROZET_SINIFI_VARSAYILAN =
+  "border-slate-200 bg-slate-50 text-slate-500";
+
 /** Ihbar kaynakli bir varligin tamir edildikten kac gun sonra otomatik
  *  silinecegi (backend'deki TAMIR_SAKLAMA_GUN ile ayni olmali). */
 export const TAMIR_SAKLAMA_GUN = 5;

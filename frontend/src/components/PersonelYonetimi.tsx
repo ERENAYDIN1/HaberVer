@@ -7,10 +7,8 @@ import {
   type UserRole,
 } from "../types/auth";
 import { YAKALAR, YAKA_ETIKETLERI, type Yaka } from "../types/saha";
+import { inputClass, labelClass } from "../utils/formSiniflari";
 
-const inputClass =
-  "w-full border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500";
-const labelClass = "block text-sm font-medium text-slate-700 mb-1";
 
 // Admin bu ekrandan personel (calisan), saha calisani veya baska admin olusturabilir.
 const OLUSTURULABILIR_ROLLER: UserRole[] = ["calisan", "saha_calisani", "admin"];

@@ -15,15 +15,12 @@ import type {
   AssetFilters,
 } from "../types/asset";
 import AssetDetayModal from "./AssetDetayModal";
+import { ISTANBUL_IL_KODU } from "../utils/istanbulMaskesi";
 import VarlikSatiri from "./VarlikSatiri";
 import { IconX } from "./icons";
 
 const selectClass =
   "flex-1 border border-slate-300 bg-white px-2 py-1.5 text-xs focus:border-emerald-500 focus:outline-none";
-
-/** Proje kapsami tek il (Istanbul) ile sinirli, bu yuzden il secimi yok -
- *  ilce listesi dogrudan bu koda gore getirilir. */
-const ISTANBUL_IL_KODU = "34";
 
 interface AssetListProps {
   data?: AssetFeatureCollection;

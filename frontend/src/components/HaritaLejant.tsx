@@ -1,21 +1,8 @@
-import { useMemo, type ReactElement } from "react";
+import { useMemo } from "react";
 
-import { ASSET_TYPE_LABELS, ASSET_TYPES } from "../types/asset";
-import type { AssetFeatureCollection, AssetType } from "../types/asset";
-import { IconDrop, IconLamp, IconTree, IconWarning } from "./icons";
-
-/** Haritadaki isaretci renkleriyle birebir ayni palet (MapView TIP_RENGI_IFADESI). */
-const TIP_RENGI: Record<AssetType, string> = {
-  agac: "#059669",
-  direk: "#0284c7",
-  sulama: "#0891b2",
-};
-
-const TIP_IKONU: Record<AssetType, (p: { className?: string }) => ReactElement> = {
-  agac: IconTree,
-  direk: IconLamp,
-  sulama: IconDrop,
-};
+import { ASSET_TYPE_LABELS, ASSET_TYPES, TIP_RENGI } from "../types/asset";
+import type { AssetFeatureCollection } from "../types/asset";
+import { IconWarning, TIP_IKONU } from "./icons";
 
 interface HaritaLejantProps {
   /** O an haritada gosterilen varliklar; sayaclar bundan hesaplanir. */

@@ -9,6 +9,8 @@ import type { TamamlananAlan } from "../types/alan";
 import {
   ASSET_SOURCE_LABELS,
   ASSET_TYPE_LABELS,
+  TIP_RENGI,
+  TIP_RENGI_VARSAYILAN,
   durumEtiketi,
 } from "../types/asset";
 import type { AssetFeature, AssetFeatureCollection } from "../types/asset";
@@ -23,7 +25,9 @@ import {
   poligonAlaniM2,
   poligonMerkezi,
 } from "../utils/geo";
+import { BOS_GEOJSON } from "../utils/geojson";
 import { haritayaKapaliAttributionEkle } from "../utils/haritaAttribution";
+import { kacis } from "../utils/html";
 import {
   ISTANBUL_IL_KODU,
   ISTANBUL_MERKEZI,
@@ -61,24 +65,15 @@ const BOS_KOLEKSIYON: AssetFeatureCollection = {
   features: [],
 };
 
-const BOS_GEOJSON = {
-  type: "FeatureCollection",
-  features: [],
-} as unknown as GeoJSON.FeatureCollection;
-
 /** Varlik tipine gore isaretci rengi - liste rozetleriyle ayni palet
- *  (agac=yesil, direk=mavi, sulama=camgobegi). Harita uzerinde tur tek bakista
- *  ayirt edilsin diye kullanilir; bilinmeyen tip icin notr gri. */
+ *  (agac=yesil, direk=mavi, sulama=camgobegi). Ortak paletten (tipGorunumu)
+ *  turetilir ki liste ve harita renkleri hicbir zaman ayrisamasin; bilinmeyen
+ *  tip icin notr gri. */
 const TIP_RENGI_IFADESI = [
   "match",
   ["get", "type"],
-  "agac",
-  "#059669",
-  "direk",
-  "#0284c7",
-  "sulama",
-  "#0891b2",
-  "#64748b",
+  ...Object.entries(TIP_RENGI).flat(),
+  TIP_RENGI_VARSAYILAN,
 ] as unknown as maplibregl.ExpressionSpecification;
 
 /** Her tur icin beyaz cizgi glifi (marker dairesinin ortasina bindirilir).
@@ -126,24 +121,25 @@ const SECIM_UCUS_LISTEDEN = { zoom: 12.5, duration: 2000 };
 const UCUS_SURESI_VARSAYILAN = 1600;
 
 const IKON_KATMAN_YERLESIMI: Record<string, unknown> = {
-  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.7, 16, 1.05],
+  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.55, 16, 0.95],
   "icon-allow-overlap": true,
   "icon-ignore-placement": true,
 };
 
-/** Isaretci olculeri tek yerde: tur glifi sehir olceginde (z10-12) de okunabilsin
- *  diye daireler buyuk, beyaz halka kalin ve altlarinda yumusak bir golge var. */
+/** Isaretci olculeri tek yerde: tur glifi okunabilir kalsin diye daireler
+ *  belirgin (kalin beyaz halka + yumusak golge), ama uzaklasinca (z10-12)
+ *  birbirine girmesin diye o uctaki yaricaplar belirgin sekilde kucuk. */
 const ISARETCI = {
   /** Varlik dairesi yaricapi (zoom 10 -> 16 arasi interpolasyon). */
-  varlikYaricap: ["interpolate", ["linear"], ["zoom"], 10, 11, 16, 17],
+  varlikYaricap: ["interpolate", ["linear"], ["zoom"], 10, 8, 16, 14.5],
   /** Ihbar dairesi - varliklardan bir tik kucuk kalir. */
-  ihbarYaricap: ["interpolate", ["linear"], ["zoom"], 10, 9.5, 16, 15],
+  ihbarYaricap: ["interpolate", ["linear"], ["zoom"], 10, 7, 16, 12.5],
   /** "Bakim lazim" amber uyari halkasi - ana dairenin disinda kalmali. */
-  uyariYaricap: ["interpolate", ["linear"], ["zoom"], 10, 14, 16, 20],
+  uyariYaricap: ["interpolate", ["linear"], ["zoom"], 10, 10.5, 16, 17],
   /** Secim halkalari - uyari halkasinin da disinda. */
-  varlikSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 16, 16, 22],
-  ihbarSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 14, 16, 20],
-  beyazHalka: 2.5,
+  varlikSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 12.5, 16, 19],
+  ihbarSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 10.5, 16, 17],
+  beyazHalka: 2.2,
 } as const;
 
 /** Isaretcinin altina yumusak golge - dairenin hafif buyugu, asagi kaydirilmis
@@ -1125,7 +1121,9 @@ export default function MapView({
           .setLngLat([e.longitude, e.latitude])
           .setPopup(
             new maplibregl.Popup({
-              offset: 30,
+              // Pin (30px) + ucu (7px) kadar yukaridan acilsin ki isaretciyi
+              // ortmesin.
+              offset: 42,
               closeButton: true,
               anchor: "bottom",
             }).setHTML(ekipPopupHtml(e))
@@ -1326,26 +1324,35 @@ function ihbarPopupIcerigi(report: ReportFeature): string {
   `;
 }
 
-/** Bir saha ekibi DOM marker'inin icerigini (avatar + yuk rozeti + kisa ad
+/** Saha ekibi simgesi: servis araci silueti - hem pin'in icinde hem ekip
+ *  popup'inin basliginda ayni cizim kullanilir. Varlik glifleri (agac/direk/
+ *  sulama) cizgisel dogal formlar oldugundan arac silueti onlarla karismaz. */
+const EKIP_IKONU =
+  `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">` +
+  `<path d="M13.5 17.5V7.2a1.7 1.7 0 0 0-1.7-1.7H4.2A1.7 1.7 0 0 0 2.5 7.2v9.4a.9.9 0 0 0 .9.9h1.3"/>` +
+  `<path d="M9.2 17.5h2.6"/>` +
+  `<path d="M18.4 17.5h2a.9.9 0 0 0 .9-.9v-3.3a.9.9 0 0 0-.2-.56l-3.1-3.9a.9.9 0 0 0-.7-.34h-3.8"/>` +
+  `<circle cx="7" cy="17.6" r="1.9"/><circle cx="16.5" cy="17.6" r="1.9"/></svg>`;
+
+/** Bir saha ekibi DOM marker'inin icerigini (damla pin + yuk rozeti + gizli ad
  *  etiketi) kurar/gunceller. Ayni element hem olusturmada hem guncellemede
- *  kullanilir. Etiket kisa tutulur (parantez ici, orn. "(Kadikoy)" atilir) -
- *  tam ad + gorevler markera tiklaninca acilan popup'ta gosterilir. */
+ *  kullanilir; stiller `index.css`'teki `.ekip-marker*` siniflarinda (etiket
+ *  mutlak konumlu -> isaretcinin kapladigi yer sabit). Tam ad uzerine gelince
+ *  belirir, gorevler markera tiklaninca acilir. */
 function ekipMarkerGuncelle(el: HTMLElement, e: EkipGorevleri): void {
   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
-  const rozetRenk = dolu ? "#dc2626" : "#059669";
   const kisaAd = (e.full_name || e.email).replace(/\s*\(.*\)\s*$/, "");
-  el.style.cursor = "pointer";
+  // classList: MapLibre'nin element'e ekledigi `maplibregl-marker` sinifi
+  // korunmali (className atamasi onu silerdi).
+  el.classList.add("ekip-marker");
+  el.classList.toggle("ekip-marker--dolu", dolu);
   el.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;font-family:system-ui,sans-serif">
-      <div style="position:relative">
-        <div style="width:28px;height:28px;border-radius:9999px;background:#4f46e5;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        </div>
-        <div style="position:absolute;top:-6px;right:-8px;min-width:16px;height:16px;padding:0 3px;border-radius:9999px;background:${rozetRenk};color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center;border:1.5px solid #fff">${e.aktif_gorev}</div>
-      </div>
-      <div style="margin-top:2px;max-width:84px;padding:1px 5px;border-radius:4px;background:rgba(15,23,42,.82);color:#fff;font-size:9px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${kacis(kisaAd)}</div>
+    <div class="ekip-marker__govde">
+      <div class="ekip-marker__pin">${EKIP_IKONU}</div>
+      <div class="ekip-marker__rozet">${e.aktif_gorev}</div>
+      <div class="ekip-marker__ad">${kacis(kisaAd)} · ${e.aktif_gorev}/${MAKS_AKTIF_GOREV}</div>
     </div>`;
-  el.title = "Detay için tıklayın";
+  el.title = `${kisaAd} - detay için tıklayın`;
 }
 
 /** Bir saha ekibi marker'ina tiklaninca acilan popup: tam ad + yuk + son
@@ -1353,36 +1360,67 @@ function ekipMarkerGuncelle(el: HTMLElement, e: EkipGorevleri): void {
  *  basinca hangi gorevler onda, kac tane gorunsun). */
 function ekipPopupHtml(e: EkipGorevleri): string {
   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
-  const rozetRenk = dolu ? "#dc2626" : "#059669";
+  const vurgu = dolu ? "#dc2626" : "#4f46e5";
+  const tamAd = e.full_name || e.email;
   const sonGorulme = e.last_seen_at
-    ? `Son görülme: ${new Date(e.last_seen_at).toLocaleString("tr-TR")}`
-    : "Konum bilgisi yok";
+    ? new Date(e.last_seen_at).toLocaleString("tr-TR", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  // Kapasite, sayidan once gorulsun diye 3 segmentli bir cubukla anlatilir.
+  const segmentler = Array.from({ length: MAKS_AKTIF_GOREV }, (_, i) => {
+    const doluSegment = i < e.aktif_gorev;
+    return `<span style="flex:1;height:4px;border-radius:9999px;background:${
+      doluSegment ? vurgu : "#e2e8f0"
+    }"></span>`;
+  }).join("");
   const satirlar = e.gorevler.length
     ? e.gorevler
-        .map(
-          (g) =>
-            `<li style="margin-bottom:2px">${kacis(g.name)} <span style="color:#94a3b8">· ${kacis(
+        .map((g) => {
+          const renk = TIP_RENGI[g.type] ?? TIP_RENGI_VARSAYILAN;
+          return (
+            `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:#f8fafc">` +
+            `<span style="width:6px;height:6px;border-radius:9999px;background:${renk};flex:none"></span>` +
+            `<span style="flex:1;min-width:0;font-size:11px;color:#0f172a;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${kacis(
+              g.name
+            )}</span>` +
+            `<span style="font-size:10px;color:#94a3b8;flex:none">${kacis(
               ASSET_TYPE_LABELS[g.type]
-            )}</span></li>`
-        )
+            )}</span>` +
+            `</div>`
+          );
+        })
         .join("")
-    : `<li style="list-style:none;margin-left:-14px;color:#94a3b8">Şu an aktif görev yok</li>`;
+    : `<div style="padding:6px;border-radius:6px;background:#f8fafc;font-size:11px;color:#94a3b8;text-align:center">Şu an aktif görev yok</div>`;
   return (
-    `<div style="font-family:system-ui,sans-serif;min-width:190px;max-width:240px">` +
-    `<div style="font-weight:600;font-size:13px;color:#0f172a">${kacis(e.full_name || e.email)}</div>` +
-    `<div style="display:inline-block;margin:4px 0;padding:1px 8px;border-radius:9999px;background:${rozetRenk};color:#fff;font-size:11px;font-weight:700">${e.aktif_gorev}/${MAKS_AKTIF_GOREV} görev</div>` +
-    `<div style="font-size:10px;color:#94a3b8;margin-bottom:6px">${kacis(sonGorulme)}</div>` +
-    `<div style="font-size:11px;font-weight:600;color:#475569;margin-bottom:2px">Üzerindeki İşler</div>` +
-    `<ul style="margin:0;padding-left:14px;font-size:11px;color:#334155;line-height:1.45">${satirlar}</ul>` +
+    `<div style="font-family:system-ui,sans-serif;min-width:210px;max-width:250px">` +
+    // Baslik: haritadaki pin'in aynisi (kisaltma) + ad + son gorulme
+    `<div style="display:flex;align-items:center;gap:8px">` +
+    `<span style="width:30px;height:30px;flex:none;border-radius:9999px;background:${
+      dolu ? "linear-gradient(145deg,#fb7185,#dc2626)" : "linear-gradient(145deg,#818cf8,#4338ca)"
+    };display:flex;align-items:center;justify-content:center">${EKIP_IKONU}</span>` +
+    `<span style="min-width:0">` +
+    `<span style="display:block;font-weight:600;font-size:13px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${kacis(
+      tamAd
+    )}</span>` +
+    `<span style="display:block;font-size:10px;color:#94a3b8">${
+      sonGorulme ? `Son konum ${kacis(sonGorulme)}` : "Konum bilgisi yok"
+    }</span>` +
+    `</span></div>` +
+    // Kapasite
+    `<div style="display:flex;align-items:center;gap:6px;margin:8px 0 2px">` +
+    `<span style="display:flex;gap:3px;flex:1">${segmentler}</span>` +
+    `<span style="font-size:10px;font-weight:700;color:${vurgu}">${e.aktif_gorev}/${MAKS_AKTIF_GOREV}</span>` +
+    `</div>` +
+    `<div style="font-size:10px;color:#94a3b8;margin-bottom:6px">${
+      dolu ? "Kapasitesi dolu - yeni iş atanmaz" : "Yeni iş alabilir"
+    }</div>` +
+    `<div style="font-size:11px;font-weight:600;color:#475569;margin-bottom:4px">Üzerindeki İşler</div>` +
+    `<div style="display:flex;flex-direction:column;gap:3px">${satirlar}</div>` +
     `</div>`
   );
 }
 
-/** Kullanici verisini HTML'e gomerken kacis uygular. */
-function kacis(metin: string): string {
-  return metin
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}

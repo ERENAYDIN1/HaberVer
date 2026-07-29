@@ -1,23 +1,15 @@
-import { forwardRef, useState, type ReactElement } from "react";
+import { forwardRef, useState } from "react";
 
 import { fotoUrl } from "../api/reports";
-import { ASSET_TYPE_LABELS, type AssetType } from "../types/asset";
+import {
+  ASSET_TYPE_LABELS,
+  TIP_ROZET_SINIFI,
+  TIP_ROZET_SINIFI_VARSAYILAN,
+} from "../types/asset";
 import type { ReportFeature } from "../types/report";
 import FotoBuyutucu from "./FotoBuyutucu";
-import { IconDrop, IconLamp, IconPin, IconTree } from "./icons";
+import { IconPin, TIP_IKONU } from "./icons";
 import IhbarDurumRozeti from "./IhbarDurumRozeti";
-
-const TIP_IKONU: Record<AssetType, (props: { className?: string }) => ReactElement> = {
-  agac: IconTree,
-  direk: IconLamp,
-  sulama: IconDrop,
-};
-
-const TIP_RENGI: Record<AssetType, string> = {
-  agac: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  direk: "border-sky-200 bg-sky-50 text-sky-700",
-  sulama: "border-cyan-200 bg-cyan-50 text-cyan-700",
-};
 
 interface IhbarSatiriProps {
   report: ReportFeature;
@@ -78,7 +70,7 @@ const IhbarSatiri = forwardRef<HTMLLIElement, IhbarSatiriProps>(function IhbarSa
           ) : (
             <span
               className={`flex h-6 w-6 shrink-0 items-center justify-center border ${
-                TIP_RENGI[type] ?? "border-slate-200 bg-slate-50 text-slate-500"
+                TIP_ROZET_SINIFI[type] ?? TIP_ROZET_SINIFI_VARSAYILAN
               }`}
             >
               <TipIkonu className="h-3.5 w-3.5" />

@@ -1,5 +1,7 @@
 import type maplibregl from "maplibre-gl";
 
+import { BOS_GEOJSON } from "./geojson";
+
 /** Proje kapsami en fazla bir il (Istanbul); haritalarin varsayilan merkezi
  *  ve tek "detay alani" budur. */
 export const ISTANBUL_MERKEZI: [number, number] = [28.9784, 41.0082];
@@ -17,10 +19,6 @@ export const MASKE_SOURCE_ID = "istanbul-maskesi";
 export const MASKE_DOLGU_LAYER_ID = "istanbul-maske-dolgu";
 export const MASKE_CIZGI_LAYER_ID = "istanbul-maske-cizgi";
 
-export const BOS_GEOJSON = {
-  type: "FeatureCollection",
-  features: [],
-} as unknown as GeoJSON.FeatureCollection;
 
 /** Genis (400km) gorunum alani icinde, Istanbul il sinirinin DISINDA kalan
  *  her yeri kaplayan bir "maske" poligonu uretir - buyuk bir dis dikdortgen +

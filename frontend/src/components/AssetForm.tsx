@@ -10,6 +10,7 @@ import {
   KAYITLI_ASSET_TYPES,
 } from "../types/asset";
 import type { AssetFeature, AssetStatus, AssetType } from "../types/asset";
+import { inputClass, labelClass } from "../utils/formSiniflari";
 
 interface AssetFormValues {
   name: string;
@@ -53,9 +54,6 @@ function assetToValues(asset: AssetFeature): AssetFormValues {
   };
 }
 
-const inputClass =
-  "w-full border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500";
-const labelClass = "block text-sm font-medium text-slate-700 mb-1";
 const errorClass = "mt-1 text-xs text-red-600";
 
 export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) {

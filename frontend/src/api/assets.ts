@@ -57,10 +57,6 @@ export function listAssets(filters: AssetFilters = {}) {
   return istek<AssetFeatureCollection>(`/assets${query ? `?${query}` : ""}`);
 }
 
-export function getAsset(id: string) {
-  return istek<AssetFeature>(`/assets/${id}`);
-}
-
 export function createAsset(data: AssetCreateInput) {
   return istek<AssetFeature>("/assets", {
     method: "POST",
