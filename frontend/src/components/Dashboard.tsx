@@ -72,7 +72,9 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
   const [ilceFiltre, setIlceFiltre] = useState<string | null>(null);
   const [mahalleFiltre, setMahalleFiltre] = useState<string | null>(null);
 
-  const features = data?.features ?? [];
+  // useMemo: her render'da yeni bir dizi uretilirse asagidaki `idler` memo'su
+  // (ve ona bagli her sey) hicbir zaman onbellege alinamaz.
+  const features = useMemo(() => data?.features ?? [], [data]);
   const { data: konumlar, isFetching: konumYukleniyor } =
     useKonumHaritasi(features);
 

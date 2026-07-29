@@ -105,7 +105,6 @@ export default function IhbarPaneli({
       return;
     }
     yukle(durum);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [durum]);
 
   const onayla = async (id: string) => {

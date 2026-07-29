@@ -970,6 +970,12 @@ export default function MapView({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
+    // Temizlikte kullanilacak marker koleksiyonlari burada yakalanir: ref.current
+    // temizlik calisirken degismis olabilir (lint uyarisi); bu iki ref hicbir
+    // zaman yeniden atanmadigi icin yerel degisken birebir aynisini gosterir.
+    const tamamlananEtiketleri = tamamlananEtiketleriRef.current;
+    const ekipMarkerlari = ekipMarkerlariRef.current;
+
     const ilkStil = HARITA_STILLERI.find(
       (s) => s.id === ilkStilIdRef.current
     )!.stil;
@@ -1014,14 +1020,19 @@ export default function MapView({
       boyutGozlemci.disconnect();
       popupRef.current?.remove();
       cizimEtiketRef.current?.remove();
-      for (const marker of tamamlananEtiketleriRef.current.values()) marker.remove();
-      tamamlananEtiketleriRef.current.clear();
-      for (const marker of ekipMarkerlariRef.current.values()) marker.remove();
-      ekipMarkerlariRef.current.clear();
+      for (const marker of tamamlananEtiketleri.values()) marker.remove();
+      tamamlananEtiketleri.clear();
+      for (const marker of ekipMarkerlari.values()) marker.remove();
+      ekipMarkerlari.clear();
       map.remove();
       mapRef.current = null;
       hazirRef.current = false;
     };
+    // `kaynaklariHazirla` bilerek bagimlilik degil: her render'da yeniden
+    // olusan bir fonksiyon: listeye eklenirse bu effect her render'da yeniden
+    // calisir, yani harita yikilip yeniden kurulur (zoom/secim/cizim sifirlanir).
+    // Harita bir kez kurulur, sonrasi ref'lerle yonetilir.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // --- Harita stili degisince: yeni stili yukle, kaynaklari yeniden kur ---
@@ -1036,6 +1047,9 @@ export default function MapView({
     hazirRef.current = false;
     map.once("style.load", () => kaynaklariHazirla(map));
     map.setStyle(tanim.stil);
+    // Yalnizca stil kimligi degisince calismali; `kaynaklariHazirla` bagimlilik
+    // olsaydi her render'da stil yeniden yuklenirdi (bkz. kurulum effect'i).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aktifStilId]);
 
   // --- Veri degisince kaynagi guncelle ---
@@ -1082,6 +1096,9 @@ export default function MapView({
     const map = mapRef.current;
     if (!map) return;
     if (hazirRef.current) cizimUygula(map);
+    // Cizim yardimcilari her render'da yeniden olusur; bagimlilik yapilirsa
+    // katmanlar her render'da yeniden yazilir (bkz. kurulum effect'i).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cizimNoktalari]);
 
   // --- Cizim rengi degisince mevcut alani/cizgiyi yeniden boya ---
@@ -1089,6 +1106,7 @@ export default function MapView({
     const map = mapRef.current;
     if (!map || !hazirRef.current) return;
     cizimUygula(map);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cizimRengi]);
 
   // --- Tamamlanmis alanlar degisince (yeni eklendi/kaldirildi) haritayi guncelle ---
@@ -1096,6 +1114,7 @@ export default function MapView({
     const map = mapRef.current;
     if (!map) return;
     if (hazirRef.current) tamamlananUygula(map);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tamamlananAlanlar]);
 
   // --- Olcum noktalarini haritada goster ---
@@ -1103,6 +1122,7 @@ export default function MapView({
     const map = mapRef.current;
     if (!map) return;
     if (hazirRef.current) olcumUygula(map);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [olcumNoktalari]);
 
   // --- Canli saha ekibi konumlarini (DOM marker) senkronla ---
@@ -1163,6 +1183,7 @@ export default function MapView({
       sonFareRef.current = null;
       if (hazirRef.current) dinamikUygula(map);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cizimModu, olcumModu]);
 
   // --- Bir ucus hedefi verilince: sinira/noktaya ucar ---
