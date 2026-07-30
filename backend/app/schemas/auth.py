@@ -7,21 +7,12 @@ from ..models.user import UserRole
 from ..models.yaka import Yaka
 
 
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=1)
-
-
-class CitizenRegister(BaseModel):
-    """Vatandas oz-kaydi; rol her zaman 'vatandas' olarak zorlanir."""
-
-    email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
-    full_name: str | None = Field(default=None, max_length=255)
-
-
 class UserCreate(BaseModel):
-    """Admin tarafindan personel/admin hesabi olusturma."""
+    """Admin tarafindan personel/admin hesabi olusturma. Hesap once Keycloak'ta
+    acilir (parola oraya yazilir), sonra yerel satir baglanir.
+
+    Not: Parola ve giris ile ilgili sema kalmadi - giris Keycloak'in kendi
+    ekraninda yapilir, vatandas kaydi da orada (bkz. routers/auth.py)."""
 
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
@@ -38,6 +29,12 @@ class UserUpdate(BaseModel):
     yaka: Yaka | None = None
 
 
+class OturumBilgi(BaseModel):
+    """Cikis yaniti: frontend bu adrese giderek Keycloak oturumunu da kapatir."""
+
+    cikis_url: str
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -50,7 +47,3 @@ class UserOut(BaseModel):
     yaka: Yaka | None = None
 
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserOut

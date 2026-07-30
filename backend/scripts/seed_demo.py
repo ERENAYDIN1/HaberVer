@@ -16,14 +16,15 @@ ve bu verinin ASLA uretime gitmemesi gerektiginin bir baska sebebidir.
 """
 import argparse
 import sys
+import uuid
 from pathlib import Path
 
-import bcrypt
 import sqlalchemy as sa
 
 # scripts/ altindan calistirildiginda app paketini bulabilmek icin.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app import keycloak  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 
 # --- Demo hesaplar: (email, ad, rol, parola, lon, lat) -----------------------
@@ -149,8 +150,15 @@ TUM_IHBAR_ADLARI = [r[0] for r in IHBARLAR]
 TUM_EMAILLER = [k[0] for k in KULLANICILAR]
 
 
-def _hash(parola: str) -> str:
-    return bcrypt.hashpw(parola.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+def _keycloak_hesabi(email: str, ad: str, rol: str, parola: str) -> uuid.UUID:
+    """Demo hesabini Keycloak'ta acar (varsa rolunu dogrular) ve id'sini doner.
+
+    Parolalar artik yerel veritabaninda DEGIL Keycloak'ta; bu yuzden seed'in
+    kullanici kismi da oraya yazmak zorunda. Aksi halde tohumlanan hesaplarla
+    giris yapilamazdi."""
+    return uuid.UUID(
+        keycloak.kullanici_olustur(email=email, parola=parola, full_name=ad, rol=rol)
+    )
 
 
 def sil(db) -> None:
@@ -182,20 +190,21 @@ def ekle(db) -> None:
         # ayri INSERT: tek sorguda CASE ile NULL konum uretmek, ayni parametrenin
         # hem IS NULL kontrolunde hem ST_MakePoint'te gecmesine yol aciyor ve
         # Postgres parametre tipini cikaramiyor (AmbiguousParameter).
+        keycloak_id = _keycloak_hesabi(email, ad, rol, parola)
         if lon is None:
             sorgu = sa.text(
                 """
-                INSERT INTO users (email, hashed_password, full_name, role)
-                SELECT :email, :hash, :ad, CAST(:rol AS user_role)
+                INSERT INTO users (email, keycloak_id, full_name, role)
+                SELECT :email, :kid, :ad, CAST(:rol AS user_role)
                 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = :email)
                 """
             )
         else:
             sorgu = sa.text(
                 """
-                INSERT INTO users (email, hashed_password, full_name, role,
+                INSERT INTO users (email, keycloak_id, full_name, role,
                                    last_location, last_seen_at)
-                SELECT :email, :hash, :ad, CAST(:rol AS user_role),
+                SELECT :email, :kid, :ad, CAST(:rol AS user_role),
                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), now()
                 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = :email)
                 """
@@ -206,9 +215,19 @@ def ekle(db) -> None:
         db.execute(
             sorgu.bindparams(
                 sa.bindparam("email", email, type_=sa.String),
-                sa.bindparam("hash", _hash(parola), type_=sa.String),
+                sa.bindparam("kid", keycloak_id, type_=sa.Uuid),
                 sa.bindparam("ad", ad, type_=sa.String),
                 sa.bindparam("rol", rol, type_=sa.String),
+            )
+        )
+        # Hesap zaten varsa (tekrar calistirma) baglantiyi yine de tazele:
+        # veritabani silinmeden Keycloak sifirlandiysa id degismis olabilir.
+        db.execute(
+            sa.text(
+                "UPDATE users SET keycloak_id = :kid WHERE email = :email"
+            ).bindparams(
+                sa.bindparam("kid", keycloak_id, type_=sa.Uuid),
+                sa.bindparam("email", email, type_=sa.String),
             )
         )
 

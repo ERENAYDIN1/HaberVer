@@ -7,48 +7,59 @@ import {
 } from "react";
 
 import * as authApi from "../api/auth";
-import type { TokenResponse, User } from "../types/auth";
-import { tokenAl, tokenKaydet, tokenSil } from "./token";
+import type { User } from "../types/auth";
+import { girisBaslat, kayitBaslat } from "./token";
 
 interface AuthContextTipi {
   user: User | null;
   yukleniyor: boolean;
-  oturumAyarla: (yanit: TokenResponse) => void;
-  cikisYap: () => void;
+  /** Keycloak giris ekranina gider (tam sayfa yonlendirme). */
+  girisYap: (donus?: string) => void;
+  /** Keycloak kayit ekranina gider (vatandas oz-kaydi). */
+  kayitOl: (donus?: string) => void;
+  /** Yerel oturumu VE Keycloak oturumunu kapatir. */
+  cikisYap: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextTipi | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  // Ilk yuklemede token varsa /auth/me ile oturumu geri yukleriz.
+  // Oturum tarayicida okunabilir bir yerde durmuyor (httpOnly cookie), bu
+  // yuzden acilista tek yol sunucuya sormak: cookie gecerliyse /auth/me
+  // kullaniciyi doner.
   const [yukleniyor, setYukleniyor] = useState(true);
 
   useEffect(() => {
-    if (!tokenAl()) {
-      setYukleniyor(false);
-      return;
-    }
     authApi
       .me()
       .then(setUser)
-      .catch(() => tokenSil())
+      .catch(() => setUser(null))
       .finally(() => setYukleniyor(false));
   }, []);
 
-  const oturumAyarla = (yanit: TokenResponse) => {
-    tokenKaydet(yanit.access_token);
-    setUser(yanit.user);
-  };
-
-  const cikisYap = () => {
-    tokenSil();
+  const cikisYap = async () => {
+    let cikisUrl: string | null = null;
+    try {
+      cikisUrl = (await authApi.logout()).cikis_url;
+    } catch {
+      // Sunucuya ulasilamasa bile yerel durumu temizle.
+    }
     setUser(null);
+    // Keycloak oturumu da kapansin diye kimlik saglayiciya gidilir; o da
+    // kullaniciyi uygulamaya geri dondurur.
+    window.location.href = cikisUrl ?? "/";
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, yukleniyor, oturumAyarla: oturumAyarla, cikisYap }}
+      value={{
+        user,
+        yukleniyor,
+        girisYap: girisBaslat,
+        kayitOl: kayitBaslat,
+        cikisYap,
+      }}
     >
       {children}
     </AuthContext.Provider>

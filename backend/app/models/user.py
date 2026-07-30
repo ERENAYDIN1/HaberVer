@@ -26,7 +26,12 @@ class User(Base):
         server_default=text("gen_random_uuid()"),
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Keycloak kullanicisinin id'si (`sub`). Parola/kimlik orada yasar; burasi
+    # yalnizca baglantiyi tutar. NULL ise satir henuz eslenmemistir - kullanici
+    # ilk giriste e-posta uzerinden eslenir (bkz. crud/user.py::keycloak_eslestir).
+    keycloak_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, unique=True
+    )
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="user_role"), nullable=False

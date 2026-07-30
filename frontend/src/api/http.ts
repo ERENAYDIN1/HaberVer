@@ -1,15 +1,21 @@
-import { authHeader, tokenSil } from "../auth/token";
+import { girisBaslat } from "../auth/token";
 
 /** Tum API modullerinin ortak fetch katmani. Daha once her modul (assets,
  *  reports, saha, sinirlar, auth, logs) kendi BASE_URL + hata okuma + istek
  *  sarmalayicisini tasiyordu; kopyalar zamanla ayristi ve 401 davranisi
  *  moduller arasinda tutarsiz kaldi (bazisi oturumu kapatiyor, bazisi
- *  kullaniciyi calismayan bir ekranda birakiyordu). Tek yer = tek davranis. */
+ *  kullaniciyi calismayan bir ekranda birakiyordu). Tek yer = tek davranis.
+ *
+ *  Kimlik: her istege `credentials: "include"` ile httpOnly oturum cookie'si
+ *  eklenir; Authorization basligi YOKTUR (token tarayiciya hic gelmez, bkz.
+ *  auth/token.ts). Bunun sarti API'nin uygulamayla AYNI ORIGIN'de olmasidir -
+ *  VITE_API_BASE_URL bu yuzden goreli bir yoldur ("/api") ve Vite/reverse
+ *  proxy istegi backend'e iletir. */
 
-export const BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
-/** Backend origin'i (foto gibi statik dosyalar icin; /api eki cikarilir). */
+/** Yuklenen dosyalarin (foto) origin'i. Ayni origin uzerinden servis edildigi
+ *  icin bos kalir; /api eki atilir. */
 export const MEDIA_ORIGIN = BASE_URL.replace(/\/api\/?$/, "");
 
 /** Backend'in hata govdesini (422 dogrulama listeleri dahil) okunabilir tek
@@ -27,15 +33,12 @@ export async function hataMesaji(response: Response): Promise<string> {
   return `İstek başarısız oldu (HTTP ${response.status})`;
 }
 
-/** Oturumu sonlandirip kullaniciyi KENDI giris sayfasina yollar: iki ayri
- *  giris var (personel /giris, vatandas /vatandas/giris) ve vatandas personel
- *  ekraninda bulmamali kendini. Ayrim RequireRole'un `girisYolu` mantigiyla
- *  ayni (bkz. main.tsx). */
+/** Oturum sona erdi (cookie yok / oturum sunucuda silinmis): kullaniciyi
+ *  dogrudan Keycloak giris akisina sokar ve giris bitince ayni sayfaya geri
+ *  dondurur. Artik "iki ayri giris sayfasi" yok - tek kimlik saglayici var,
+ *  rol ayrimini giristen SONRA RequireRole yapiyor. */
 function oturumuKapat(): never {
-  tokenSil();
-  window.location.href = window.location.pathname.startsWith("/vatandas")
-    ? "/vatandas/giris"
-    : "/giris";
+  girisBaslat(window.location.pathname);
   throw new Error("Oturum sona erdi, lütfen tekrar giriş yapın");
 }
 
@@ -68,9 +71,9 @@ export async function istek<T>(
   const { oturumKontrolu = true, ...init } = secenek;
   const response = await fetch(`${BASE_URL}${yol}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...authHeader(),
       ...init.headers,
     },
   });
@@ -88,7 +91,8 @@ export async function istekForm<T>(
   const response = await fetch(`${BASE_URL}${yol}`, {
     method: "POST",
     ...init,
-    headers: { ...authHeader(), ...init.headers },
+    credentials: "include",
+    headers: { ...init.headers },
     body: form,
   });
   return yanitiCoz<T>(response, oturumKontrolu);

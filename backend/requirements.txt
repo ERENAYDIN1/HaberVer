@@ -7,6 +7,13 @@ alembic==1.14.0
 pydantic==2.10.4
 pydantic-settings==2.7.0
 email-validator==2.2.0
+# Parolalar artik Keycloak'ta; bcrypt YALNIZCA dondurulmus 0001 baseline
+# migration'i icin duruyor (o dosya ilk admini hash'li parolayla ekliyor,
+# kolonu 0006 dusuruyor). Uygulama kodunda kullanilmaz.
 bcrypt==4.2.1
 pyjwt==2.10.1
+# pyjwt'nin RS256 (Keycloak JWKS) dogrulamasi icin gerekli
+cryptography==44.0.0
+# Keycloak'a sunucu-sunucu cagrilari (token degisimi, Admin API)
+httpx==0.28.1
 python-multipart==0.0.20

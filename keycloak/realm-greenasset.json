@@ -1,0 +1,84 @@
+{
+  "realm": "greenasset",
+  "enabled": true,
+  "displayName": "GreenAsset",
+  "loginTheme": "keycloak",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "verifyEmail": false,
+  "sslRequired": "external",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 10,
+  "waitIncrementSeconds": 60,
+  "roles": {
+    "realm": [
+      { "name": "admin", "description": "Tum sisteme tam yetki" },
+      { "name": "calisan", "description": "Varlik yonetimi + ihbar onayi" },
+      { "name": "saha_calisani", "description": "Saha ekibi: gorev ve tamir" },
+      { "name": "vatandas", "description": "Yalnizca ihbar gonderme" }
+    ]
+  },
+  "defaultRoles": ["vatandas"],
+  "clients": [
+    {
+      "clientId": "greenasset-bff",
+      "name": "GreenAsset backend (BFF)",
+      "description": "Token'lari backend tutar; tarayiciya yalnizca oturum cookie'si gider.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "secret": "gelistirme-icin-degistir-bu-secreti",
+      "redirectUris": ["http://localhost:5173/api/auth/callback"],
+      "webOrigins": ["http://localhost:5173"],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:5173/*",
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles -> roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-greenasset-bff",
+      "enabled": true,
+      "serviceAccountClientId": "greenasset-bff",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users",
+          "query-groups",
+          "view-realm"
+        ]
+      }
+    }
+  ]
+}

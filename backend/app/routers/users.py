@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from .. import keycloak
 from ..crud import user as crud
 from ..database import get_db
 from ..models.user import User, UserRole
@@ -26,18 +27,28 @@ def create_user(
     admin_user: User = Depends(require_role(UserRole.admin)),
     db: Session = Depends(get_db),
 ):
-    """Admin, personel (calisan) veya baska bir admin hesabi olusturur."""
+    """Admin, personel (calisan) veya baska bir admin hesabi olusturur.
+
+    Hesap once Keycloak'ta acilir, sonra yerel satir baglanir (bkz.
+    crud/user.py::create_user). Keycloak'ta ayni e-postali bir kullanici varsa
+    o kullanici kullanilir ve rolu guncellenir - Keycloak'tan kendi kaydolmus
+    bir vatandasi personele terfi ettirmenin yolu budur."""
     if crud.get_by_email(db, data.email.lower()) is not None:
         raise HTTPException(status_code=409, detail="Bu e-posta zaten kayitli")
-    user = crud.create_user(
-        db,
-        email=data.email,
-        password=data.password,
-        role=data.role,
-        full_name=data.full_name,
-        actor=admin_user,
-        yaka=data.yaka.value if data.yaka else None,
-    )
+    try:
+        user = crud.create_user(
+            db,
+            email=data.email,
+            password=data.password,
+            role=data.role,
+            full_name=data.full_name,
+            actor=admin_user,
+            yaka=data.yaka.value if data.yaka else None,
+        )
+    except keycloak.KeycloakHatasi as e:
+        # Yerel satir acilmadi: Keycloak'a yazamadigimizda giris yapamayacak
+        # bir "hayalet hesap" birakmayiz.
+        raise HTTPException(status_code=502, detail=f"Keycloak: {e}")
     return UserOut.model_validate(user)
 
 

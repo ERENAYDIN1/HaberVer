@@ -17,6 +17,31 @@ services:
       timeout: 5s
       retries: 10
 
+  # Kimlik saglayici. Kullanici/parola/rol burada yasar; uygulama yalnizca
+  # dogrulanmis kimligi ogrenir (bkz. backend/app/keycloak.py).
+  #   - `start-dev`: gomulu H2 veritabani + HTTP (yalnizca gelistirme icindir).
+  #   - `--import-realm`: keycloak/realm-greenasset.json yalnizca ILK acilista
+  #     (realm henuz yokken) alinir; sonraki degisiklikler konsoldan yapilir.
+  #   - KC_HOSTNAME tarayicinin gordugu adrestir ve token'daki `iss` degerini
+  #     belirler; backend Keycloak'a ag icinden (keycloak:8080) gider ama
+  #     token'i bu ISSUER'a gore dogrular (bkz. KEYCLOAK_PUBLIC_URL/INTERNAL_URL).
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: greenasset_keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL}
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "${KEYCLOAK_PORT}:8080"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+      - kcdata:/opt/keycloak/data
+
   backend:
     build: ./backend
     container_name: greenasset_backend
@@ -24,6 +49,13 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+      APP_BASE_URL: ${APP_BASE_URL}
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL}
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE}
     ports:
       - "${BACKEND_PORT}:8000"
     volumes:
@@ -33,6 +65,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      keycloak:
+        condition: service_started
 
   frontend:
     build: ./frontend
@@ -40,6 +74,9 @@ services:
     restart: unless-stopped
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+      # Vite dev sunucusu /api ve /media'yi backend'e proxy'ler; boylece
+      # tarayici icin her sey tek origin'dedir (oturum cookie'sinin sarti).
+      VITE_PROXY_TARGET: http://backend:8000
     ports:
       - "${FRONTEND_PORT}:5173"
     volumes:
@@ -52,3 +89,4 @@ services:
 volumes:
   pgdata:
   media:
+  kcdata:

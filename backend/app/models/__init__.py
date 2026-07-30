@@ -3,6 +3,7 @@ from .assignment import Assignment, AssignmentStatus
 from .bolge import Bolge, BolgeTipi
 from .log import ActivityLog, LogAction
 from .report import Report, ReportStatus
+from .session import Session
 from .user import User, UserRole
 from .yaka import Yaka, YakaAlani
 
@@ -18,6 +19,7 @@ __all__ = [
     "LogAction",
     "Report",
     "ReportStatus",
+    "Session",
     "User",
     "UserRole",
     "Yaka",

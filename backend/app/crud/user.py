@@ -3,14 +3,60 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import keycloak
 from ..models.log import LogAction
 from ..models.user import User, UserRole
-from ..security import hash_password
 from .log import add_log
 
 
 def get_by_email(db: Session, email: str) -> User | None:
     return db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+
+
+def get_by_keycloak_id(db: Session, keycloak_id: uuid.UUID) -> User | None:
+    return db.execute(
+        select(User).where(User.keycloak_id == keycloak_id)
+    ).scalar_one_or_none()
+
+
+def keycloak_eslestir(
+    db: Session,
+    *,
+    keycloak_id: uuid.UUID,
+    email: str,
+    full_name: str | None,
+    role: UserRole,
+) -> User:
+    """Keycloak'tan gelen kimligi yerel satirla eslestirir ("provisioning").
+
+    Uc durum:
+      1. `keycloak_id` zaten baglanmis  -> satiri tazele (rol/ad/e-posta aynasi).
+      2. Ayni e-postali yerel satir var -> baglantiyi kur (Keycloak'a gecmeden
+         once olusmus tum hesaplar - ilk admin, seed'lenen ekipler - bu yolla
+         kimliklerini korur: id'leri degismedigi icin gorevleri/bolgeleri durur).
+      3. Hicbiri yok                    -> yeni satir (Keycloak'ta kendi kaydolan
+         vatandaslar ilk API isteginde burada olusur).
+
+    Rol Keycloak'ta yasar; buradaki kolon SORGU icin tutulan bir aynadir
+    (bkz. security.py) ve her istekte token'daki rolle guncellenir.
+    """
+    email = email.lower()
+    user = get_by_keycloak_id(db, keycloak_id) or get_by_email(db, email)
+
+    if user is None:
+        user = User(keycloak_id=keycloak_id, email=email, full_name=full_name, role=role)
+        db.add(user)
+    else:
+        user.keycloak_id = keycloak_id
+        user.email = email
+        user.role = role
+        # Ad Keycloak'ta duzenlenir; yerelde bos kalmasin diye kopyalanir.
+        if full_name:
+            user.full_name = full_name
+
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def get(db: Session, user_id: uuid.UUID) -> User | None:
@@ -30,14 +76,24 @@ def create_user(
     actor: User | None = None,
     yaka: str | None = None,
 ) -> User:
-    """actor verildiginde (admin panelinden personel/admin hesabi acilirken) bir
-    log kaydi olusur; vatandas oz-kaydinda actor None kalir, loglanmaz.
+    """Personel/admin hesabini ONCE Keycloak'ta acar, sonra yerel satiri baglar.
 
-    yaka yalnizca saha_calisani icin anlamlidir (bkz. models/yaka.py); diger
-    rollerde yok sayilir."""
+    Sira bilincli: Keycloak yazamazsak yerelde oksuz bir satir kalmaz. Tersi
+    olsaydi (once yerel) giris yapamayan bir "hayalet ekip" iş atamalarina
+    girerdi.
+
+    Yerel satir eager olarak acilir (JIT provisioning'e birakilmaz): yeni bir
+    saha ekibi, daha ilk girisini yapmadan `GET /api/saha/ekipler` listesinde
+    gorunup is alabilmelidir.
+
+    actor verildiginde bir log kaydi olusur. yaka yalnizca saha_calisani icin
+    anlamlidir (bkz. models/yaka.py); diger rollerde yok sayilir."""
+    keycloak_id = keycloak.kullanici_olustur(
+        email=email.lower(), parola=password, full_name=full_name, rol=role.value
+    )
     user = User(
         email=email.lower(),
-        hashed_password=hash_password(password),
+        keycloak_id=uuid.UUID(keycloak_id),
         full_name=full_name,
         role=role,
         yaka=yaka if role == UserRole.saha_calisani else None,

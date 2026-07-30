@@ -1,32 +1,27 @@
-import type { TokenResponse, User, UserRole } from "../types/auth";
+import type { User, UserRole } from "../types/auth";
 import type { Yaka } from "../types/saha";
 import { istek } from "./http";
 
-/** Kimlik uclarinda `oturumKontrolu: false`: buradaki 401 "e-posta veya parola
- *  hatali" demektir, oturum sonlanmasi degil - kullanici zaten giris
- *  sayfasinda, hata mesajini formda gormeli. */
-export function login(email: string, password: string) {
-  return istek<TokenResponse>("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-    oturumKontrolu: false,
-  });
-}
+/** Parola ile giris/kayit ucu KALMADI: ikisi de Keycloak'in kendi ekraninda
+ *  yapiliyor (bkz. auth/token.ts::girisBaslat / kayitBaslat). Backend'de kalan
+ *  kimlik uclari yalnizca oturumu okumak ve kapatmak icin. */
 
-export function register(email: string, password: string, full_name?: string) {
-  return istek<TokenResponse>("/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ email, password, full_name: full_name || null }),
-    oturumKontrolu: false,
-  });
-}
-
-/** Acilista token'i dogrulamak icin cagrilir. Burada da `oturumKontrolu: false`:
- *  gecersiz token'da AuthContext zaten token'i silip RequireRole uygun giris
- *  sayfasina yonlendiriyor - buradan ayrica tam sayfa yonlendirmesi yapmak
- *  acilisi gereksizce yeniden yuklerdi. */
+/** Acilista oturumu geri yuklemek icin cagrilir. `oturumKontrolu: false`:
+ *  oturum yoksa 401 beklenen durumdur - AuthContext kullaniciyi null birakir,
+ *  RequireRole giris akisini baslatir; buradan yonlendirme yapmak acilista
+ *  gereksiz bir tam sayfa gecisi olurdu. */
 export function me() {
   return istek<User>("/auth/me", { oturumKontrolu: false });
+}
+
+/** Yerel oturumu kapatir ve Keycloak'in cikis adresini doner: tarayici oraya
+ *  gitmezse kimlik saglayicidaki oturum acik kalir ve "Giris"e basinca
+ *  kullanici sorusuz iceri girer. */
+export function logout() {
+  return istek<{ cikis_url: string }>("/auth/logout", {
+    method: "POST",
+    oturumKontrolu: false,
+  });
 }
 
 // --- Admin: kullanici yonetimi ---
