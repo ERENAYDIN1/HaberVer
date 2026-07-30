@@ -52,6 +52,31 @@ export function poligonMerkezi(noktalar: [number, number][]): [number, number] {
   return [lon, lat];
 }
 
+/** Bir cizginin UZUNLUGUNUN ortasindaki nokta (etiket yerlesimi icin).
+ *  Cizgilerde `poligonMerkezi` KULLANILMAZ: nokta ortalamasi, L seklindeki ya
+ *  da kavisli bir guzergahta hattin hic gecmedigi bir yere duser - yakinlastikca
+ *  etiket cizgiden gorunur sekilde kopar. Buradaki nokta hattin uzunlugu boyunca
+ *  yuruyerek bulundugu icin her zaman cizginin UZERINDEDIR. */
+export function cizgiOrtaNoktasi(noktalar: [number, number][]): [number, number] {
+  if (noktalar.length === 0) return [0, 0];
+  if (noktalar.length === 1) return noktalar[0];
+
+  let kalan = toplamMesafeMetre(noktalar) / 2;
+  for (let i = 1; i < noktalar.length; i++) {
+    const [lon1, lat1] = noktalar[i - 1];
+    const [lon2, lat2] = noktalar[i];
+    const segment = mesafeMetre(noktalar[i - 1], noktalar[i]);
+    if (segment === 0) continue;
+    if (kalan <= segment) {
+      // Tek segmentin icinde dogrusal ara deger yeterli (segment olcegi kucuk).
+      const t = kalan / segment;
+      return [lon1 + (lon2 - lon1) * t, lat1 + (lat2 - lat1) * t];
+    }
+    kalan -= segment;
+  }
+  return noktalar[noktalar.length - 1];
+}
+
 /** Birden fazla halkanin (ayri kara parcalari - orn. Istanbul'un Bogaz'la
  *  ayrilmis Avrupa/Anadolu yakalari, ya da tamamen adalardan olusan bir ilce)
  *  toplam alani. Kullanici tek bir alan cizdiginde bu tek elemanli bir

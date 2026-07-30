@@ -13,6 +13,7 @@ import type { ReportFeatureCollection } from "../types/report";
 import type { EkipGorevleri } from "../types/saha";
 import {
   alanEtiketi,
+  cizgiOrtaNoktasi,
   cokHalkaliAlanM2,
   enBuyukHalkaMerkezi,
   mesafeEtiketi,
@@ -324,6 +325,11 @@ interface MapViewProps {
   onBolgeSec?: (id: string) => void;
   /** Popup'taki "Şekli Düzenle" - haritada kose duzenleme modunu baslatir. */
   onSekilDuzenle?: (id: string) => void;
+  /** Bir bolge/guzergahin adinin HARITADAKI etiket uzerinden degistirilmesi:
+   *  etikette kalem dugmesi cikar, cift tiklamak da duzenlemeyi acar. Verilmezse
+   *  etiketler salt okunurdur (yetkisiz gorunumler icin). Donen soz reddedilirse
+   *  etiket eski ada geri doner ve hatayi kendi uzerinde gosterir. */
+  onBolgeAdDegis?: (id: string, ad: string) => void | Promise<void>;
   /** Sekli duzenlenmekte olan bolge (taslak geometri). Verildiginde bu kayit
    *  kalici bolge katmanindan cikarilir ve koseleri suruklenebilir hale gelir. */
   sekilDuzenleme?: SekilDuzenleme | null;
@@ -365,6 +371,7 @@ export default function MapView({
   seciliBolgeId,
   onBolgeSec,
   onSekilDuzenle,
+  onBolgeAdDegis,
   sekilDuzenleme,
   onSekilDegis,
   bolgeTiklanabilir = true,
@@ -383,6 +390,10 @@ export default function MapView({
   const tamamlananEtiketleriRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   /** Kaydedilmis bolgelerin ad/olcu etiketleri (DOM marker). */
   const bolgeEtiketleriRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  /** Adi o an etiket uzerinde duzenlenen bolgenin id'si: bu kayit icin etiket
+   *  metni yeniden yazilmaz, yoksa `bolgeler` prop'unun her tazelenmesi acik
+   *  girdiyi silip yazilani kaybettirirdi. */
+  const etiketDuzenlenenRef = useRef<string | null>(null);
   /** Sekil duzenlemedeki kose ve kenar-ortasi tutamaklari (DOM marker).
    *  Suruklenebilir olmalari gerektigi icin katman degil marker'dirlar. */
   const sekilTutamaklariRef = useRef<Map<string, maplibregl.Marker>>(new Map());
@@ -414,6 +425,7 @@ export default function MapView({
   const seciliBolgeIdRef = useRef(seciliBolgeId);
   const onBolgeSecRef = useRef(onBolgeSec);
   const onSekilDuzenleRef = useRef(onSekilDuzenle);
+  const onBolgeAdDegisRef = useRef(onBolgeAdDegis);
   const sekilDuzenlemeRef = useRef(sekilDuzenleme);
   const onSekilDegisRef = useRef(onSekilDegis);
   const bolgeTiklanabilirRef = useRef(bolgeTiklanabilir);
@@ -450,6 +462,7 @@ export default function MapView({
     seciliBolgeIdRef.current = seciliBolgeId;
     onBolgeSecRef.current = onBolgeSec;
     onSekilDuzenleRef.current = onSekilDuzenle;
+    onBolgeAdDegisRef.current = onBolgeAdDegis;
     sekilDuzenlemeRef.current = sekilDuzenleme;
     onSekilDegisRef.current = onSekilDegis;
     bolgeTiklanabilirRef.current = bolgeTiklanabilir;
@@ -523,7 +536,13 @@ export default function MapView({
     onBolgeSecRef.current?.(bolge.id);
 
     popupRef.current?.remove();
-    const popup = new maplibregl.Popup({ offset: 8, closeButton: true })
+    const popup = new maplibregl.Popup({
+      offset: 8,
+      closeButton: true,
+      // Kapatma carpisi varsayilan haliyle cok kucuk kaliyordu; olcusu
+      // `index.css`'teki `.bolge-popup` kuralinda biraz buyutuluyor.
+      className: "bolge-popup",
+    })
       .setLngLat(e.lngLat)
       .setHTML(bolgePopupIcerigi(bolge))
       .addTo(map);
@@ -730,7 +749,9 @@ export default function MapView({
     bolgeEtiketleriUygula(map, liste);
   }
 
-  /** Her kayitli bolgenin adi + olcusu (+ atanan ekip) icin kalici etiket. */
+  /** Her kayitli bolgenin adi + olcusu (+ atanan ekip) icin kalici etiket.
+   *  Etiketin ad kismi (yetkiliye) YERINDE duzenlenebilir: paneli acmadan,
+   *  haritada gordugu yerden adi degistirebilsin. */
   function bolgeEtiketleriUygula(map: maplibregl.Map, liste: Bolge[]) {
     const guncelIdler = new Set<string>();
 
@@ -742,36 +763,177 @@ export default function MapView({
           ? mesafeEtiketi(bolge.uzunluk_m)
           : null
         : alanEtiketi(bolge.alan_m2 ?? cokHalkaliAlanM2(bolge.noktalar));
-      const metin =
-        `${bolge.ad}${olcu ? ` · ${olcu}` : ""}` +
+      const ekMetin =
+        (olcu ? ` · ${olcu}` : "") +
         (bolge.worker_ad ? ` · ${bolge.worker_ad}` : "") +
         // Ekip isi kapattiysa etikette de gorunsun - personel haritaya bakip
         // hangi bolgenin bittigini anlayabilsin.
         (bolge.tamamlandi_at ? " · ✓" : "");
+      // Cizgide etiket, hattin UZUNLUGUNUN ortasina konur (nokta ortalamasi
+      // degil): kavisli/L seklindeki bir guzergahta ortalama cizginin hic
+      // gecmedigi bir yere duser ve yakinlastikca etiket hattan koparmis gibi
+      // gorunur. Alanda etiket en buyuk halkanin ortasinda kalir.
       const merkez = cizgi
-        ? poligonMerkezi(bolge.noktalar[0])
+        ? cizgiOrtaNoktasi(bolge.noktalar[0])
         : enBuyukHalkaMerkezi(bolge.noktalar);
 
       let marker = bolgeEtiketleriRef.current.get(bolge.id);
       if (!marker) {
-        marker = new maplibregl.Marker({ element: etiketElemaniOlustur() })
+        marker = new maplibregl.Marker({
+          element: bolgeEtiketiElemani(bolge.id),
+          // Guzergah etiketi hattin hemen USTUNDE durur, uzerini kapatmaz;
+          // alan etiketi (eskiden oldugu gibi) noktasinda ortalanir.
+          anchor: cizgi ? "bottom" : "center",
+          offset: cizgi ? [0, -5] : [0, 0],
+        })
           .setLngLat(merkez)
           .addTo(map);
         bolgeEtiketleriRef.current.set(bolge.id, marker);
       } else {
         marker.setLngLat(merkez);
       }
+      const el = marker.getElement();
       // Kayitli bolge etiketi, anlik secim etiketinden renk seridiyle ayrilir.
-      marker.getElement().style.borderLeft = `3px solid ${bolge.renk}`;
-      marker.getElement().textContent = metin;
+      el.style.borderLeft = `3px solid ${bolge.renk}`;
+      const adEl = el.querySelector<HTMLElement>("[data-rol=ad]");
+      const ekEl = el.querySelector<HTMLElement>("[data-rol=ek]");
+      // Ad o an duzenleniyorsa metne dokunulmaz (acik girdinin yaninda duran
+      // eski ad, kaydedilene kadar oldugu gibi kalir).
+      if (adEl && etiketDuzenlenenRef.current !== bolge.id) adEl.textContent = bolge.ad;
+      if (ekEl) ekEl.textContent = ekMetin;
     }
 
     for (const [id, marker] of bolgeEtiketleriRef.current) {
       if (!guncelIdler.has(id)) {
+        if (etiketDuzenlenenRef.current === id) etiketDuzenlenenRef.current = null;
         marker.remove();
         bolgeEtiketleriRef.current.delete(id);
       }
     }
+  }
+
+  /** Kayitli bolge etiketi: ad / olcu-ekip / kalem dugmesi. Kapsayici bilincli
+   *  olarak `pointer-events:none` kalir (etiket haritaya/alana yapilan tiklamayi
+   *  yutmasin); yalnizca ad metni ve kalem dugmesi olay alir. Tek tiklama gene
+   *  haritaya gecer (alan popup'i acilir), duzenlemeyi CIFT tiklama ya da kalem
+   *  acar. */
+  function bolgeEtiketiElemani(id: string): HTMLDivElement {
+    const el = etiketElemaniOlustur();
+    el.style.display = "flex";
+    el.style.alignItems = "center";
+    el.style.gap = "4px";
+
+    const ad = document.createElement("span");
+    ad.dataset.rol = "ad";
+    ad.style.pointerEvents = "auto";
+
+    const ek = document.createElement("span");
+    ek.dataset.rol = "ek";
+    ek.style.opacity = "0.8";
+
+    el.append(ad, ek);
+
+    if (onBolgeAdDegisRef.current) {
+      ad.style.cursor = "text";
+      ad.title = "Adı değiştirmek için çift tıkla";
+      ad.addEventListener("dblclick", (e) => {
+        // Haritanin cift-tik yakinlastirmasi devreye girmesin.
+        e.preventDefault();
+        e.stopPropagation();
+        bolgeAdiDuzenle(el, id);
+      });
+
+      const kalem = document.createElement("button");
+      kalem.type = "button";
+      kalem.dataset.rol = "kalem";
+      kalem.textContent = "✎";
+      kalem.title = "Adı değiştir";
+      kalem.setAttribute("aria-label", "Adı değiştir");
+      kalem.style.cssText =
+        "pointer-events:auto; cursor:pointer; border:0; background:transparent; " +
+        "color:#fff; opacity:0.6; padding:0 1px; font-size:11px; line-height:1;";
+      kalem.addEventListener("mouseenter", () => (kalem.style.opacity = "1"));
+      kalem.addEventListener("mouseleave", () => (kalem.style.opacity = "0.6"));
+      // Kalem, altindaki alanin popup'ini acmasin / haritayi kaydirmasin.
+      kalem.addEventListener("mousedown", (e) => e.stopPropagation());
+      kalem.addEventListener("click", (e) => {
+        e.stopPropagation();
+        bolgeAdiDuzenle(el, id);
+      });
+      el.append(kalem);
+    }
+
+    return el;
+  }
+
+  /** Etiketin ad kismini bir metin girdisiyle degistirir: Enter/odak kaybi
+   *  kaydeder, Esc vazgecer. Kaydetmede ad IYIMSER olarak etikete yazilir -
+   *  sunucu yaniti (ve `bolgeler` prop'unun tazelenmesi) gecikse de etiket
+   *  aninda yeni adi gosterir. */
+  function bolgeAdiDuzenle(el: HTMLElement, id: string) {
+    const degistir = onBolgeAdDegisRef.current;
+    const adEl = el.querySelector<HTMLElement>("[data-rol=ad]");
+    const kalemEl = el.querySelector<HTMLElement>("[data-rol=kalem]");
+    const bolge = (bolgelerRef.current ?? []).find((b) => b.id === id);
+    if (!degistir || !adEl || !bolge) return;
+    // Ayni anda tek etiket duzenlenir; acik girdiye tekrar basmak onu bozmasin.
+    if (etiketDuzenlenenRef.current) return;
+    etiketDuzenlenenRef.current = id;
+
+    const girdi = document.createElement("input");
+    girdi.value = bolge.ad;
+    girdi.maxLength = 120;
+    girdi.style.cssText =
+      "pointer-events:auto; border:1px solid rgba(255,255,255,0.6); border-radius:3px; " +
+      "background:rgba(15,23,42,0.9); color:#fff; font:600 11px system-ui,sans-serif; " +
+      "padding:0 3px; outline:none;";
+    const genisligiAyarla = () => {
+      girdi.style.width = `${Math.min(28, Math.max(8, girdi.value.length + 1))}ch`;
+    };
+    genisligiAyarla();
+
+    adEl.style.display = "none";
+    if (kalemEl) kalemEl.style.display = "none";
+    adEl.before(girdi);
+    girdi.focus();
+    girdi.select();
+
+    let bitti = false;
+    const kapat = (kaydet: boolean) => {
+      // Enter'dan sonra gelen blur ikinci kez tetiklemesin.
+      if (bitti) return;
+      bitti = true;
+      const yeniAd = girdi.value.trim();
+      girdi.remove();
+      adEl.style.display = "";
+      if (kalemEl) kalemEl.style.display = "";
+      etiketDuzenlenenRef.current = null;
+      if (kaydet && yeniAd && yeniAd !== bolge.ad) {
+        adEl.textContent = yeniAd;
+        adEl.title = "Adı değiştirmek için çift tıkla";
+        Promise.resolve(degistir(id, yeniAd)).catch((hata: Error) => {
+          // Kaydedilemedi: iyimser yazi geri alinir ve etiket kisa sure
+          // kirmizi yanar - haritada toast/uyari seridi yok, geri bildirim
+          // etiketin kendi uzerinde verilir.
+          adEl.textContent = bolge.ad;
+          adEl.title = `Ad kaydedilemedi: ${hata.message}`;
+          const eskiZemin = el.style.background;
+          el.style.background = "rgba(153,27,27,0.9)";
+          window.setTimeout(() => (el.style.background = eskiZemin), 2000);
+        });
+      }
+    };
+
+    girdi.addEventListener("input", genisligiAyarla);
+    // Girdideki tuslar/tiklamalar haritaya (kisayollar, pan) gitmesin.
+    girdi.addEventListener("mousedown", (e) => e.stopPropagation());
+    girdi.addEventListener("dblclick", (e) => e.stopPropagation());
+    girdi.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") kapat(true);
+      else if (e.key === "Escape") kapat(false);
+    });
+    girdi.addEventListener("blur", () => kapat(true));
   }
 
   /** Taslagin derin kopyasi: yukari bildirilen deger ile ref'teki canli kopya

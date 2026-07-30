@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { ilSiniri } from "../api/sinirlar";
 import { HARITA_STILLERI, VARSAYILAN_STIL } from "../data/mapStyles";
-import { enBuyukHalkaMerkezi, poligonMerkezi } from "../utils/geo";
+import { cizgiOrtaNoktasi, enBuyukHalkaMerkezi } from "../utils/geo";
 import { BOS_GEOJSON } from "../utils/geojson";
 import { haritayaKapaliAttributionEkle } from "../utils/haritaAttribution";
 import {
@@ -112,8 +112,11 @@ export default function KonumSecMap({
     for (const a of liste) {
       if (!a.etiket) continue;
       guncel.add(a.id);
+      // Guzergah etiketi hattin uzunlugunun ortasina (yani her zaman cizginin
+      // UZERINE) konur ve hemen ustunde durur; nokta ortalamasi kavisli bir
+      // guzergahta hattin hic gecmedigi bir yere duserdi (bkz. geo.ts).
       const merkez = a.cizgi
-        ? poligonMerkezi(a.noktalar[0])
+        ? cizgiOrtaNoktasi(a.noktalar[0])
         : enBuyukHalkaMerkezi(a.noktalar);
       let marker = alanEtiketleriRef.current.get(a.id);
       if (!marker) {
@@ -122,7 +125,13 @@ export default function KonumSecMap({
           "pointer-events:none; background:rgba(15,23,42,0.85); color:#fff; " +
           "font:600 11px system-ui,-apple-system,sans-serif; padding:2px 7px; " +
           "border-radius:4px; white-space:nowrap;";
-        marker = new maplibregl.Marker({ element: el }).setLngLat(merkez).addTo(map);
+        marker = new maplibregl.Marker({
+          element: el,
+          anchor: a.cizgi ? "bottom" : "center",
+          offset: a.cizgi ? [0, -5] : [0, 0],
+        })
+          .setLngLat(merkez)
+          .addTo(map);
         alanEtiketleriRef.current.set(a.id, marker);
       } else {
         marker.setLngLat(merkez);

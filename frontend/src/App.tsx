@@ -877,6 +877,16 @@ export default function App() {
     });
   }, []);
 
+  /** Haritadaki etiket uzerinden yeniden adlandirma (paneldeki "Düzenle" ile
+   *  ayni ucu kullanir). Hata MapView'de yakalanir: etiket eski ada doner. */
+  const bolgeAdiDegistir = useCallback(
+    async (id: string, ad: string) => {
+      await bolgeGuncelle(id, { ad });
+      queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
+    },
+    [queryClient]
+  );
+
   // --- Sekil (geometri) duzenleme ----------------------------------------
   // Kayit YERINDE guncellenir: id'si, atamasi ve gecmisi korunur - bir sinirin
   // birkac metre kaydirilmasi yeni bir bolge acmayi gerektirmesin.
@@ -1655,6 +1665,9 @@ export default function App() {
             const bolge = bolgeSorgu.data?.find((b) => b.id === id);
             if (bolge) sekilDuzenlemeBaslat(bolge);
           }}
+          // Ad, panele girmeye gerek kalmadan haritadaki etiket uzerinden de
+          // degistirilebilir (kalem / cift tiklama) - yalniz personel.
+          onBolgeAdDegis={personel ? bolgeAdiDegistir : undefined}
           sekilDuzenleme={sekilDuzenleme}
           onSekilDegis={sekilDegisti}
           bolgeTiklanabilir={!(panelAcik && sekme === "ekle")}

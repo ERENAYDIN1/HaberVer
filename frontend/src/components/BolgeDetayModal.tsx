@@ -7,7 +7,7 @@ import {
   alanEtiketi,
   cokHalkaliAlanM2,
   mesafeEtiketi,
-  poligonMerkezi,
+  cizgiOrtaNoktasi,
   enBuyukHalkaMerkezi,
 } from "../utils/geo";
 import { AksiyonButonu, AksiyonSeridi, SilOnayi } from "./Aksiyonlar";
@@ -97,8 +97,10 @@ export default function BolgeDetayModal({
       : null
     : alanEtiketi(bolge.alan_m2 ?? cokHalkaliAlanM2(bolge.noktalar));
   const noktaSayisi = bolge.noktalar.reduce((t, h) => t + h.length, 0);
+  // Cizgide "merkez" hattin ortasidir (uzunluk boyunca) - haritadaki etiketle
+  // ayni nokta; nokta ortalamasi hattin disina duserdi.
   const merkez = cizgi
-    ? poligonMerkezi(bolge.noktalar[0] ?? [])
+    ? cizgiOrtaNoktasi(bolge.noktalar[0] ?? [])
     : enBuyukHalkaMerkezi(bolge.noktalar);
 
   const satirlar: [string, string | null][] = [

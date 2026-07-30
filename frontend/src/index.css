@@ -33,6 +33,19 @@
   text-rendering: optimizeLegibility;
 }
 
+/* Bolge/guzergah popup'inin sag ustteki kapatma carpisi varsayilan olcusuyle
+   (tarayici buton yazi tipi, ~13px) tutturulmasi zor kaliyordu; hedefi biraz
+   buyutmek icin yazi tipi ve dolgusu olculu sekilde artirildi. */
+.bolge-popup .maplibregl-popup-close-button {
+  font-size: 18px;
+  line-height: 18px;
+  padding: 2px 6px;
+  color: #64748b;
+}
+.bolge-popup .maplibregl-popup-close-button:hover {
+  color: #0f172a;
+}
+
 /* --- Haritadaki canli saha ekibi isaretcileri (MapView, DOM marker) ---
    Ekip adi etiketi yerlesimden CIKARILDI: mutlak konumlandirilmis ve
    varsayilan gizli, yani isaretci yalnizca damla pin kadar yer kaplar ve
