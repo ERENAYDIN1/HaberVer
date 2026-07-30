@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { assetsWithin } from "./api/assets";
@@ -1616,8 +1617,18 @@ export default function App() {
       />
       )}
 
-      {/* Govde: sol kenar cubugu + tam ekran harita ve uzerindeki yuzen paneller */}
-      <div className="flex min-h-0 flex-1">
+      {/* Govde: tam ekran harita + uzerine binen sol kenar cubugu ve yuzen paneller.
+          Kenar cubugu akisin disindadir (bkz. Kenarcubugu): akista olsaydi
+          acilip kapanmasi harita kapsayicisini yeniden boyutlandirip goruntuyu
+          yana kaydiriyordu. Genisligi `--kenar` olarak yayilir; harita
+          uzerindeki sol hizali her sey (yuzen panel, MapLibre olcek kontrolu)
+          bu degiskene gore kaydirilir. */}
+      <div
+        className="relative min-h-0 flex-1"
+        style={
+          { "--kenar": kenarAcik ? "15rem" : "68px" } as CSSProperties
+        }
+      >
         <Kenarcubugu
           genis={kenarAcik}
           ogeler={kenarAnaOgeler}
@@ -1625,7 +1636,7 @@ export default function App() {
           altOgeler={kenarAltOgeler}
         />
 
-        <div className="relative min-h-0 flex-1">
+        <div className="relative h-full w-full">
           <MapView
           assets={katmanlar.varliklar ? varlikKatmanVeri : undefined}
           reports={katmanlar.ihbarlar ? ihbarKatmanVeri : undefined}
@@ -1686,9 +1697,11 @@ export default function App() {
 
         <MapStilKontrolu aktifId={aktifStilId} onSec={setAktifStilId} />
 
-        {/* Aktif sekmenin yuzen paneli - sol kenar cubugunun hemen sagindan acilir. */}
+        {/* Aktif sekmenin yuzen paneli - sol kenar cubugunun hemen sagindan
+            acilir. Cubuk artik haritanin uzerine bindigi icin sol bosluk
+            `--kenar` uzerinden verilir ve cubukla ayni surede kayar. */}
         {panelAcik && (
-          <div className="absolute bottom-4 left-4 top-4 z-20 flex w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur-sm">
+          <div className="absolute bottom-4 top-4 z-20 flex w-[360px] max-w-[calc(100vw_-_var(--kenar)_-_2rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur-sm transition-[left] duration-200 ease-out" style={{ left: "calc(var(--kenar) + 1rem)" }}>
             <div
               className={`flex shrink-0 items-center justify-between border-b px-3.5 py-2.5 ${SEKME_RENK_SINIFLARI[SEKME_TANIMLARI[sekme].renk].aktif}`}
             >

@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Sol-alttaki olcek kontrolu: harita kapsayicisi artik sol kenar cubugunun
+   ALTINA kadar uzaniyor (cubuk haritanin uzerine biniyor, bkz. Kenarcubugu),
+   bu yuzden olcek cubugun arkasinda kalmasin diye `--kenar` kadar saga alinir.
+   Degisken App'teki govde kutusunda tanimli; cubukla ayni surede gecis yapar. */
+.greenasset-harita .maplibregl-ctrl-bottom-left {
+  left: var(--kenar, 0px);
+  transition: left 200ms ease-out;
+}
+
 /* Ana harita: yakinlastirma/pusula kontrolu sag-alt yerine sagin ortasinda. */
 .greenasset-harita .maplibregl-ctrl-bottom-right {
   top: 50%;

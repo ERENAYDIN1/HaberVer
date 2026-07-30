@@ -27,7 +27,14 @@ interface KenarcubuguProps {
 
 /** Referanstaki dashboard gibi, uygulamanin tum bolumlerine tek yerden erisilen
  *  acilir/kapanir sol kenar cubugu. Genis modda etiketler + tesvik karti gorunur;
- *  dar modda yalnizca ikonlar (uzerine gelince tooltip) kalir. */
+ *  dar modda yalnizca ikonlar (uzerine gelince tooltip) kalir.
+ *
+ *  Cubuk bilincli olarak akisin DISINDA (absolute) durur ve haritanin UZERINE
+ *  biner: akista olsaydi acilip kapanmasi harita kapsayicisinin genisligini
+ *  degistirir, MapView'daki ResizeObserver her karede `map.resize()` cagirir ve
+ *  MapLibre merkezi sabit tuttugu icin goruntu her basista ~86px yana kayardi.
+ *  Genislik `--kenar` degiskeni olarak App'te ayrica tanimlidir (harita
+ *  uzerindeki sol yuzen panel ve olcek kontrolu ona gore kaydirilir). */
 export default function Kenarcubugu({
   genis,
   ogeler,
@@ -36,7 +43,7 @@ export default function Kenarcubugu({
 }: KenarcubuguProps) {
   return (
     <aside
-      className={`z-10 flex shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200 ease-out ${
+      className={`absolute inset-y-0 left-0 z-30 flex flex-col border-r border-slate-200 bg-white transition-[width] duration-200 ease-out ${
         genis ? "w-60" : "w-[68px]"
       }`}
     >
