@@ -70,6 +70,21 @@ export function enBuyukHalkaMerkezi(halkalar: [number, number][][]): [number, nu
   return poligonMerkezi(enBuyuk);
 }
 
+/** Kapali bir halkanin (son nokta ilk noktayla ayni) sondaki tekrarini atar.
+ *  Backend poligonlari GeoJSON kuralinca KAPALI dondurur; sekil duzenlemede bu
+ *  tekrar iki tutamagin ust uste binmesi (ve birini surukleyince digerinin
+ *  yerinde kalmasi) demek olurdu. Cizim tarafi halkalari zaten kendisi kapatir. */
+export function halkayiAc(halka: [number, number][]): [number, number][] {
+  if (halka.length < 2) return halka;
+  const ilk = halka[0];
+  const son = halka[halka.length - 1];
+  return ilk[0] === son[0] && ilk[1] === son[1] ? halka.slice(0, -1) : halka;
+}
+
+export function halkalariAc(halkalar: [number, number][][]): [number, number][][] {
+  return halkalar.map(halkayiAc);
+}
+
 /** Nokta dizisinin sinirlayici kutusu ([[minLon,minLat],[maxLon,maxLat]]),
  *  haritayi bir bolgeye ucururken (fitBounds) kullanilir. */
 export function poligonSinirKutusu(

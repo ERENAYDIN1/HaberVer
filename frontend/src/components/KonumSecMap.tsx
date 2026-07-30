@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react";
 
 import { ilSiniri } from "../api/sinirlar";
 import { HARITA_STILLERI, VARSAYILAN_STIL } from "../data/mapStyles";
+import { enBuyukHalkaMerkezi, poligonMerkezi } from "../utils/geo";
+import { BOS_GEOJSON } from "../utils/geojson";
 import { haritayaKapaliAttributionEkle } from "../utils/haritaAttribution";
 import {
   ISTANBUL_IL_KODU,
@@ -25,6 +27,19 @@ export interface HaritaIsaret {
   popupHtml?: string;
 }
 
+/** Haritada gosterilecek salt-okunur bir alan/cizgi (orn. saha ekibine atanmis
+ *  gorev bolgesi). `noktalar` halka listesidir; cizgide tek elemanli. */
+export interface HaritaAlani {
+  id: string;
+  noktalar: [number, number][][];
+  renk: string;
+  /** Alanin ustunde gosterilecek etiket (orn. bolge adi). */
+  etiket?: string;
+  cizgi?: boolean;
+}
+
+const ALAN_SOURCE_ID = "salt-okunur-alanlar";
+
 interface KonumSecMapProps {
   /** Secili konum ([lon, lat]) veya henuz secilmediyse null. */
   secili: [number, number] | null;
@@ -34,6 +49,8 @@ interface KonumSecMapProps {
   ucus?: { anahtar: string; merkez: [number, number]; zoom?: number } | null;
   /** Salt-okunur isaretler (orn. saha calisaninin gorev pinleri). */
   isaretler?: HaritaIsaret[];
+  /** Salt-okunur alanlar/cizgiler (orn. ekibe atanmis gorev bolgesi). */
+  alanlar?: HaritaAlani[];
   /** Kullanicinin kendi (canli) konumu - ayirt edici mavi nokta. */
   benimKonumum?: [number, number] | null;
   /** false ise haritaya tiklayarak konum secme kapatilir (salt goruntuleme). */
@@ -48,6 +65,7 @@ export default function KonumSecMap({
   onSec,
   ucus,
   isaretler,
+  alanlar,
   benimKonumum,
   tiklanabilir = true,
 }: KonumSecMapProps) {
@@ -56,12 +74,69 @@ export default function KonumSecMap({
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const isaretMarkerRef = useRef<maplibregl.Marker[]>([]);
   const benimMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const alanEtiketleriRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const alanlarRef = useRef(alanlar);
   const onSecRef = useRef(onSec);
   const tiklanabilirRef = useRef(tiklanabilir);
   useEffect(() => {
     onSecRef.current = onSec;
     tiklanabilirRef.current = tiklanabilir;
+    alanlarRef.current = alanlar;
   });
+
+  /** Salt-okunur alanlari/cizgileri haritaya uygular (kaynak hazirsa). */
+  function alanlariUygula(map: maplibregl.Map) {
+    const source = map.getSource(ALAN_SOURCE_ID) as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+
+    const liste = alanlarRef.current ?? [];
+    source.setData({
+      type: "FeatureCollection",
+      features: liste.map((a) => ({
+        type: "Feature",
+        geometry: a.cizgi
+          ? { type: "LineString", coordinates: a.noktalar[0] }
+          : a.noktalar.length === 1
+            ? { type: "Polygon", coordinates: [[...a.noktalar[0], a.noktalar[0][0]]] }
+            : {
+                type: "MultiPolygon",
+                coordinates: a.noktalar.map((h) => [[...h, h[0]]]),
+              },
+        properties: { renk: a.renk },
+      })),
+    });
+
+    const guncel = new Set<string>();
+    for (const a of liste) {
+      if (!a.etiket) continue;
+      guncel.add(a.id);
+      const merkez = a.cizgi
+        ? poligonMerkezi(a.noktalar[0])
+        : enBuyukHalkaMerkezi(a.noktalar);
+      let marker = alanEtiketleriRef.current.get(a.id);
+      if (!marker) {
+        const el = document.createElement("div");
+        el.style.cssText =
+          "pointer-events:none; background:rgba(15,23,42,0.85); color:#fff; " +
+          "font:600 11px system-ui,-apple-system,sans-serif; padding:2px 7px; " +
+          "border-radius:4px; white-space:nowrap;";
+        marker = new maplibregl.Marker({ element: el }).setLngLat(merkez).addTo(map);
+        alanEtiketleriRef.current.set(a.id, marker);
+      } else {
+        marker.setLngLat(merkez);
+      }
+      marker.getElement().style.borderLeft = `3px solid ${a.renk}`;
+      marker.getElement().textContent = a.etiket;
+    }
+    for (const [id, marker] of alanEtiketleriRef.current) {
+      if (!guncel.has(id)) {
+        marker.remove();
+        alanEtiketleriRef.current.delete(id);
+      }
+    }
+  }
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -93,6 +168,30 @@ export default function KonumSecMap({
       maskeKaynagiHazirla(map);
       stilYuklendi = true;
       maskeUygula();
+
+      // Salt-okunur alan/cizgi katmani (gorev bolgesi vb.) - maskeden sonra
+      // eklenir ki maske onu ortmesin.
+      if (!map.getSource(ALAN_SOURCE_ID)) {
+        map.addSource(ALAN_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
+        map.addLayer({
+          id: "salt-alan-fill",
+          type: "fill",
+          source: ALAN_SOURCE_ID,
+          filter: ["!=", ["geometry-type"], "LineString"],
+          paint: { "fill-color": ["get", "renk"], "fill-opacity": 0.14 },
+        });
+        map.addLayer({
+          id: "salt-alan-yol",
+          type: "line",
+          source: ALAN_SOURCE_ID,
+          paint: {
+            "line-color": ["get", "renk"],
+            "line-width": 2.5,
+            "line-dasharray": [3, 2],
+          },
+        });
+      }
+      alanlariUygula(map);
     });
     ilSiniri(ISTANBUL_IL_KODU)
       .then((sinir) => {
@@ -139,14 +238,26 @@ export default function KonumSecMap({
       ]);
     });
 
+    // Temizlikte kullanilacak koleksiyon burada yakalanir (ref hicbir zaman
+    // yeniden atanmadigindan yerel degisken birebir aynisini gosterir).
+    const alanEtiketleri = alanEtiketleriRef.current;
     return () => {
       markerRef.current?.remove();
       isaretMarkerRef.current.forEach((m) => m.remove());
       benimMarkerRef.current?.remove();
+      for (const m of alanEtiketleri.values()) m.remove();
+      alanEtiketleri.clear();
       map.remove();
       mapRef.current = null;
     };
+    // Harita bir kez kurulur; degisen degerler ref'lerle yonetilir.
   }, []);
+
+  // Salt-okunur alanlar degisince katmani guncelle.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map) alanlariUygula(map);
+  }, [alanlar]);
 
   // Salt-okunur isaretler (gorev pinleri) - degisince yeniden kur.
   useEffect(() => {

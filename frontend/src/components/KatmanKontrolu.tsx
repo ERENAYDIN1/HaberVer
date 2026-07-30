@@ -1,9 +1,23 @@
 import { useState, type ReactElement } from "react";
 
-import { IconCheck, IconChevronRight, IconInbox, IconLegend, IconPin, IconUsers } from "./icons";
+import {
+  IconCheck,
+  IconChevronRight,
+  IconInbox,
+  IconLayers,
+  IconLegend,
+  IconPin,
+  IconRoute,
+  IconUsers,
+} from "./icons";
 
-/** Haritada bagimsiz olarak acilip kapatilabilen uc genel-bakis katmani. */
-export type KatmanAnahtari = "varliklar" | "ihbarlar" | "ekipler";
+/** Haritada bagimsiz olarak acilip kapatilabilen genel-bakis katmanlari. */
+export type KatmanAnahtari =
+  | "varliklar"
+  | "ihbarlar"
+  | "bolgeler"
+  | "guzergahlar"
+  | "ekipler";
 
 export type KatmanGorunurluk = Record<KatmanAnahtari, boolean>;
 
@@ -35,10 +49,16 @@ interface KatmanTanimi {
 }
 
 /** Katman sirasi/etiketleri tek yerde; harita marker renkleriyle eslesir:
- *  varlik yesili, ihbar moru (MapView IHBAR_RENK), saha ekibi indigosu. */
+ *  varlik yesili, ihbar moru (MapView IHBAR_RENK), bolge menekse, guzergah
+ *  mavisi, saha ekibi indigosu. Bolgeler/guzergahlar bilincli olarak ihbarlarla
+ *  saha ekipleri ARASINDA durur: ustteki ikisi "is", alttaki "kim" - ikisi de
+ *  bunlari baglayan gorev alani. Gorev bolgeleri (alan) ve guzergahlar (cizgi)
+ *  ayri ayri acilip kapatilir; sol paneldeki iki ayri sekmeyle birebir eslesir. */
 const KATMANLAR: KatmanTanimi[] = [
   { anahtar: "varliklar", etiket: "Varlıklar", renk: "#059669", ikon: IconPin },
   { anahtar: "ihbarlar", etiket: "İhbarlar", renk: "#9333ea", ikon: IconInbox },
+  { anahtar: "bolgeler", etiket: "Bölgeler", renk: "#7c3aed", ikon: IconLayers },
+  { anahtar: "guzergahlar", etiket: "Güzergâhlar", renk: "#2563eb", ikon: IconRoute },
   { anahtar: "ekipler", etiket: "Saha Ekipleri", renk: "#4f46e5", ikon: IconUsers },
 ];
 

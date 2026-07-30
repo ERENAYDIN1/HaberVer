@@ -10,10 +10,13 @@ import {
   durumEtiketi,
 } from "../types/asset";
 import type { AssetFeature } from "../types/asset";
+import { BOLGE_TIP_ETIKETLERI } from "../types/bolge";
+import type { Bolge } from "../types/bolge";
 import { REPORT_STATUS_LABELS } from "../types/report";
 import type { ReportFeature } from "../types/report";
 import { MAKS_AKTIF_GOREV } from "../types/saha";
 import type { EkipGorevleri } from "../types/saha";
+import { alanEtiketi, cokHalkaliAlanM2, mesafeEtiketi } from "./geo";
 import { kacis } from "./html";
 
 /** MapLibre popup'lari ve saha ekibi DOM marker'i React degil, duz HTML string
@@ -135,15 +138,95 @@ export function ihbarPopupIcerigi(report: ReportFeature): string {
   `;
 }
 
-/** Saha ekibi simgesi: servis araci silueti - hem pin'in icinde hem ekip
- *  popup'inin basliginda ayni cizim kullanilir. Varlik glifleri (agac/direk/
- *  sulama) cizgisel dogal formlar oldugundan arac silueti onlarla karismaz. */
+/** Kaydedilmis bir gorev bolgesi / guzergah popup'i: haritada alanin ya da
+ *  cizginin uzerine tiklaninca acilir (alan ve cizgiler de birer isaretci gibi
+ *  secilebilir). Icerigi paneldeki kartla ayni bilgiyi verir; alttaki iki
+ *  dugmeden biri detay modalini, digeri harita uzerinde sekil duzenlemeyi acar. */
+export function bolgePopupIcerigi(bolge: Bolge): string {
+  const cizgi = bolge.tip === "cizgi";
+  const olcu = cizgi
+    ? bolge.uzunluk_m != null
+      ? mesafeEtiketi(bolge.uzunluk_m)
+      : null
+    : alanEtiketi(bolge.alan_m2 ?? cokHalkaliAlanM2(bolge.noktalar));
+
+  const rozet = (metin: string, bg: string, fg: string) =>
+    `<span style="display:inline-block; padding:2px 8px; border-radius:9999px;
+      font-size:11px; font-weight:500; background:${bg}; color:${fg}">${kacis(metin)}</span>`;
+
+  return `
+    <div style="font-family: system-ui, sans-serif; width: ${POPUP_GENISLIK}">
+      <div style="font-weight:600; margin-bottom:4px">${kacis(bolge.ad)}</div>
+      <div style="color:#475569; font-size:12px; display:flex; align-items:center; gap:5px">
+        <span style="display:inline-block; width:9px; height:9px; border-radius:9999px; background:${bolge.renk}"></span>
+        ${BOLGE_TIP_ETIKETLERI[bolge.tip]}${olcu ? ` · ${kacis(olcu)}` : ""}
+      </div>
+      <div style="margin-top:6px; display:flex; gap:4px; flex-wrap:wrap">
+        ${
+          bolge.worker_ad
+            ? rozet(bolge.worker_ad, "#e0e7ff", "#3730a3")
+            : rozet("Atanmamış", "#f1f5f9", "#64748b")
+        }
+        ${bolge.tamamlandi_at ? rozet("Tamamlandı", "#d1fae5", "#065f46") : ""}
+      </div>
+      ${
+        bolge.aciklama
+          ? `<div style="color:#64748b; font-size:11px; margin-top:6px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden">${kacis(
+              bolge.aciklama
+            )}</div>`
+          : ""
+      }
+      <div style="display:flex; gap:6px; margin-top:8px">
+        <button type="button" class="popup-detay-btn" style="
+          flex:1; padding:5px 0; border:1px solid #7c3aed; border-radius:6px;
+          background:#fff; color:#7c3aed; font-size:11px; font-weight:600;
+          cursor:pointer;">Detay</button>
+        <button type="button" class="popup-sekil-btn" style="
+          flex:1; padding:5px 0; border:1px solid #7c3aed; border-radius:6px;
+          background:#7c3aed; color:#fff; font-size:11px; font-weight:600;
+          cursor:pointer;">Şekli Düzenle</button>
+      </div>
+    </div>
+  `;
+}
+
+/** Saha ekibi simgesi: kasasinda anahtar tasiyan servis araci - hem pin'in
+ *  icinde hem ekip popup'inin basliginda ayni cizim kullanilir. Varlik
+ *  glifleri (agac/direk/sulama) cizgisel dogal formlar oldugundan arac
+ *  silueti onlarla karismaz.
+ *
+ *  Olcek notu: ikon pin icinde ~18px cizilir. Referans gorseldeki kabin cami /
+ *  kapi kolu / capraz IKI anahtar bu boyutta okunmadigi icin detay bilincli
+ *  olarak seyreltildi: sade kasa + tek anahtar. Iki renkli okunurluk anahtarin
+ *  amber olmasiyla korunur (hem indigo hem "kapasitesi dolu" kirmizi pin
+ *  uzerinde kontrasti yeterli). */
 const EKIP_IKONU =
-  `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">` +
-  `<path d="M13.5 17.5V7.2a1.7 1.7 0 0 0-1.7-1.7H4.2A1.7 1.7 0 0 0 2.5 7.2v9.4a.9.9 0 0 0 .9.9h1.3"/>` +
-  `<path d="M9.2 17.5h2.6"/>` +
-  `<path d="M18.4 17.5h2a.9.9 0 0 0 .9-.9v-3.3a.9.9 0 0 0-.2-.56l-3.1-3.9a.9.9 0 0 0-.7-.34h-3.8"/>` +
-  `<circle cx="7" cy="17.6" r="1.9"/><circle cx="16.5" cy="17.6" r="1.9"/></svg>`;
+  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">` +
+  // kasa + kabin
+  `<path d="M13.4 15.7V7.1a1 1 0 0 0-1-1H3.2a1 1 0 0 0-1 1v8.6"/>` +
+  `<path d="M13.4 9.5h3.9l3.5 3.7v2.5"/>` +
+  // zemin cizgisi (tekerleklerin arasinda kesilir)
+  `<path d="M2.2 15.7h2.3M9 15.7h5.6M19.2 15.7h1.6"/>` +
+  `<circle cx="6.7" cy="16.9" r="1.9"/><circle cx="16.9" cy="16.9" r="1.9"/>` +
+  // Kasadaki capraz iki anahtar (referans gorseldeki gibi). Her anahtar = sap
+  // cizgisi + iki ucta agzi acik C. Hazir/kapali konturlu bir anahtar ikonu
+  // kucultulerek KULLANILMAZ: bu olcekte ici dolup lekeye doner.
+  //   TASMA HESABI - kasa ic yuzleri: x 3.05-12.55, y 6.95-15.7 (duvar
+  //   cizgisinin yarisi 0.85 dusulmus hali). Anahtar cizgisi 1.1 kalinlikta,
+  //   agiz yaricapi 1.0 -> bir agzin dis yaricapi 1.55. Agiz merkezleri
+  //   (5.1,12.8) (10.5,9.0) (5.1,9.0) (10.5,12.8) secildi; en uc noktalar
+  //   x 3.55-12.05, y 7.45-14.35 yani her kenarda >=0.5 birim bosluk kalir.
+  //   Merkezleri oynatirken bu 1.55'lik payi hesaba kat.
+  `<g stroke="#fcd34d" stroke-width="1.1">` +
+  // sol alt <-> sag ust
+  `<path d="M5.92 12.22 9.68 9.58"/>` +
+  `<path d="M4.76 13.74A1 1 0 1 0 4.1 12.8"/>` +
+  `<path d="M10.84 8.06A1 1 0 1 0 11.5 9"/>` +
+  // sol ust <-> sag alt
+  `<path d="M5.92 9.58 9.68 12.22"/>` +
+  `<path d="M4.1 9A1 1 0 1 0 4.76 8.06"/>` +
+  `<path d="M11.5 12.8A1 1 0 1 0 10.84 13.74"/>` +
+  `</g></svg>`;
 
 /** Bir saha ekibi DOM marker'inin icerigini (damla pin + yuk rozeti + gizli ad
  *  etiketi) kurar/gunceller. Ayni element hem olusturmada hem guncellemede

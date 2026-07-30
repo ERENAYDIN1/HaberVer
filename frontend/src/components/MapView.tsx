@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { ilSiniri } from "../api/sinirlar";
 import { HARITA_STILLERI, type HaritaStilId } from "../data/mapStyles";
 import type { TamamlananAlan } from "../types/alan";
+import type { Bolge, SekilDuzenleme } from "../types/bolge";
 import { TIP_RENGI, TIP_RENGI_VARSAYILAN } from "../types/asset";
 import type { AssetFeatureCollection } from "../types/asset";
 import type { ReportFeatureCollection } from "../types/report";
@@ -13,6 +14,7 @@ import {
   alanEtiketi,
   cokHalkaliAlanM2,
   enBuyukHalkaMerkezi,
+  mesafeEtiketi,
   poligonAlaniM2,
   poligonMerkezi,
 } from "../utils/geo";
@@ -21,6 +23,7 @@ import { haritayaKapaliAttributionEkle } from "../utils/haritaAttribution";
 // Popup/marker HTML uretimi ayri modulde: bu dosya haritanin yasam dongusune
 // (kaynak/katman/effect) odakli kalsin diye.
 import {
+  bolgePopupIcerigi,
   ekipMarkerGuncelle,
   ekipPopupHtml,
   ihbarPopupIcerigi,
@@ -39,6 +42,14 @@ const SOURCE_ID = "assets";
 const REPORTS_SOURCE_ID = "reports";
 const CIZIM_SOURCE_ID = "cizim";
 const TAMAMLANAN_SOURCE_ID = "tamamlanan-alanlar";
+/** Kaydedilmis gorev bolgeleri / guzergahlar - anlik secimlerden (yukaridaki
+ *  TAMAMLANAN) ayri bir kaynakta durur: kalicidir, secimler temizlenince
+ *  haritadan kalkmaz ve kesik cizgiyle cizilerek gorsel olarak da ayrilir. */
+const BOLGE_SOURCE_ID = "bolgeler";
+/** Sekli duzenlenmekte olan bolge/guzergah - kendi kaynaginda cizilir ki
+ *  koseleri suruklenirken kalici katmanla (ve digerlerinin tiklama alanlariyla)
+ *  karismasin; duzenlenen kayit BOLGE_SOURCE_ID'den bu sirada cikarilir. */
+const SEKIL_SOURCE_ID = "sekil-duzenleme";
 const OLCUM_SOURCE_ID = "olcum";
 const DINAMIK_SOURCE_ID = "dinamik-onizleme";
 const OLCUM_RENK = "#2563eb";
@@ -153,6 +164,22 @@ function golgeBoyasi(yaricap: unknown): Record<string, unknown> {
   };
 }
 
+/** Sekil duzenlemedeki bir tutamagin DOM elemani. `orta=true` kenar ortasindaki
+ *  "yeni kose ekle" tutamagidir: koselerden ayirt edilsin diye daha kucuk,
+ *  yari saydam ve icinde "+" isareti tasir. */
+function tutamakElemani(renk: string, orta: boolean): HTMLDivElement {
+  const el = document.createElement("div");
+  const boy = orta ? 12 : 15;
+  el.style.cssText =
+    `width:${boy}px; height:${boy}px; border-radius:9999px; box-sizing:border-box; ` +
+    `border:2px solid #ffffff; background:${renk}; cursor:${orta ? "copy" : "move"}; ` +
+    `box-shadow:0 1px 3px rgba(15,23,42,0.45); display:flex; align-items:center; ` +
+    `justify-content:center; color:#fff; font:700 9px/1 system-ui,sans-serif; ` +
+    (orta ? "opacity:0.65;" : "");
+  if (orta) el.textContent = "+";
+  return el;
+}
+
 /** Haritayi belirli bir bolgeye/noktaya ucurmak icin komut. `anahtar` her
  *  degistiginde yeniden tetiklenir (ayni hedefe tekrar ucmak istenirse bile
  *  benzersiz uretilmelidir, orn. crypto.randomUUID()). */
@@ -203,6 +230,23 @@ interface MapViewProps {
   /** Personel gorunumunde canli saha ekibi konumlari (DOM marker olarak cizilir);
    *  verilmezse hicbir sey gosterilmez. */
   ekipler?: EkipGorevleri[];
+  /** Haritada gosterilecek kaydedilmis bolgeler/guzergahlar (Bölgeler paneli
+   *  hangilerinin gorunur oldugunu belirler). */
+  bolgeler?: Bolge[];
+  /** Haritadaki bir bolge/guzergah popup'indaki "Detay" dugmesi - alanlar ve
+   *  cizgiler de varlik isaretcileri gibi tiklanip detayi gorulebilir. */
+  onBolgeDetay?: (id: string) => void;
+  /** Popup'taki "Şekli Düzenle" - haritada kose duzenleme modunu baslatir. */
+  onSekilDuzenle?: (id: string) => void;
+  /** Sekli duzenlenmekte olan bolge (taslak geometri). Verildiginde bu kayit
+   *  kalici bolge katmanindan cikarilir ve koseleri suruklenebilir hale gelir. */
+  sekilDuzenleme?: SekilDuzenleme | null;
+  /** Taslak geometri degisince (kose suruklendi/eklendi/silindi). */
+  onSekilDegis?: (noktalar: [number, number][][]) => void;
+  /** Bolge dolgusu/cizgisi tiklamayi yakalasin mi (varsayilan: evet). Kapaliyken
+   *  tiklama altliga gecer - "Ekle" formu acikken kullanici genis bir gorev
+   *  bolgesinin uzerine varlik koyabilsin diye kapatilir. */
+  bolgeTiklanabilir?: boolean;
 }
 
 export default function MapView({
@@ -227,6 +271,12 @@ export default function MapView({
   onVarlikDetay,
   onIhbarDetay,
   ekipler,
+  bolgeler,
+  onBolgeDetay,
+  onSekilDuzenle,
+  sekilDuzenleme,
+  onSekilDegis,
+  bolgeTiklanabilir = true,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -235,6 +285,15 @@ export default function MapView({
   /** Aktif cizimin alan etiketi (m2/ha) ve tamamlanan alanlarin kalici etiketleri. */
   const cizimEtiketRef = useRef<maplibregl.Marker | null>(null);
   const tamamlananEtiketleriRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  /** Kaydedilmis bolgelerin ad/olcu etiketleri (DOM marker). */
+  const bolgeEtiketleriRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  /** Sekil duzenlemedeki kose ve kenar-ortasi tutamaklari (DOM marker).
+   *  Suruklenebilir olmalari gerektigi icin katman degil marker'dirlar. */
+  const sekilTutamaklariRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  /** Suruklerken canli guncellenen taslak geometri: her fare hareketinde React
+   *  state'i guncellemek (ve marker'lari yeniden kurmak) yerine burada tutulur;
+   *  surukleme bitince tek seferde yukari bildirilir. */
+  const sekilTaslakRef = useRef<[number, number][][]>([]);
   /** Canli saha ekibi konumlari - DOM marker olarak; stil degisiminden
    *  etkilenmez (style katmani degil), ekipler prop'u degisince senkronlanir. */
   const ekipMarkerlariRef = useRef<Map<string, maplibregl.Marker>>(new Map());
@@ -254,6 +313,12 @@ export default function MapView({
   const cizimModuRef = useRef(cizimModu);
   const cizimRengiRef = useRef(cizimRengi);
   const tamamlananAlanlarRef = useRef(tamamlananAlanlar);
+  const bolgelerRef = useRef(bolgeler);
+  const onBolgeDetayRef = useRef(onBolgeDetay);
+  const onSekilDuzenleRef = useRef(onSekilDuzenle);
+  const sekilDuzenlemeRef = useRef(sekilDuzenleme);
+  const onSekilDegisRef = useRef(onSekilDegis);
+  const bolgeTiklanabilirRef = useRef(bolgeTiklanabilir);
   const onOlcumNoktaRef = useRef(onOlcumNokta);
   const onGorunumDegistiRef = useRef(onGorunumDegisti);
   const olcumModuRef = useRef(olcumModu);
@@ -279,6 +344,12 @@ export default function MapView({
     cizimModuRef.current = cizimModu;
     cizimRengiRef.current = cizimRengi;
     tamamlananAlanlarRef.current = tamamlananAlanlar;
+    bolgelerRef.current = bolgeler;
+    onBolgeDetayRef.current = onBolgeDetay;
+    onSekilDuzenleRef.current = onSekilDuzenle;
+    sekilDuzenlemeRef.current = sekilDuzenleme;
+    onSekilDegisRef.current = onSekilDegis;
+    bolgeTiklanabilirRef.current = bolgeTiklanabilir;
     onOlcumNoktaRef.current = onOlcumNokta;
     onGorunumDegistiRef.current = onGorunumDegisti;
     olcumModuRef.current = olcumModu;
@@ -322,6 +393,41 @@ export default function MapView({
       onIhbarSecRef.current?.(id);
     }
   });
+  /** Haritadaki bir bolgeye/guzergaha tiklaninca popup acar: alanlar ve
+   *  cizgiler de tikladiginda detayini gosteren birer isaretci gibi davranir.
+   *  Ayni tiklama hem dolgu hem cizgi katmanini tetikleyebildiginden (varlik
+   *  isaretcilerindeki gibi) son islenen DOM olayi tutulur. */
+  const sonIslenenBolgeOlayiRef = useRef<MouseEvent | null>(null);
+  const bolgeTiklandiRef = useRef((e: maplibregl.MapLayerMouseEvent) => {
+    if (cizimModuRef.current || olcumModuRef.current) return;
+    if (!bolgeTiklanabilirRef.current) return;
+    // Sekil duzenlenirken tiklamalar tutamaklara aittir; baska bir bolgeye
+    // gecis kazara yapilmasin.
+    if (sekilDuzenlemeRef.current) return;
+    if (sonIslenenBolgeOlayiRef.current === e.originalEvent) return;
+    sonIslenenBolgeOlayiRef.current = e.originalEvent;
+
+    const id = e.features?.[0]?.properties?.id;
+    const bolge = (bolgelerRef.current ?? []).find((b) => b.id === id);
+    const map = mapRef.current;
+    if (!bolge || !map) return;
+
+    popupRef.current?.remove();
+    const popup = new maplibregl.Popup({ offset: 8, closeButton: true })
+      .setLngLat(e.lngLat)
+      .setHTML(bolgePopupIcerigi(bolge))
+      .addTo(map);
+    popupRef.current = popup;
+    const el = popup.getElement();
+    el?.querySelector(".popup-detay-btn")?.addEventListener("click", () => {
+      onBolgeDetayRef.current?.(bolge.id);
+    });
+    el?.querySelector(".popup-sekil-btn")?.addEventListener("click", () => {
+      popup.remove();
+      onSekilDuzenleRef.current?.(bolge.id);
+    });
+  });
+
   // Popup metnini keskin tutar: MapLibre popup'u tam CSS pikseline yuvarlar,
   // ama Windows'ta kesirli olceklemede (%125/%150) bu kesirli bir CIHAZ
   // pikseline denk gelip yaziyi bulaniklastirir. Her render'da popup'un toplam
@@ -368,11 +474,22 @@ export default function MapView({
       onOlcumNoktaRef.current(koordinat);
       return;
     }
+    // Sekil duzenlenirken bos haritaya tiklamak "Ekle" formunu acmasin -
+    // kullanici o an bir bolgenin siniriyla ugrasiyor.
+    if (sekilDuzenlemeRef.current) return;
 
     const katmanlar = ["assets-circle"];
     if (map.getLayer("assets-icon")) katmanlar.push("assets-icon");
     if (map.getLayer("reports-circle")) katmanlar.push("reports-circle");
     if (map.getLayer("reports-icon")) katmanlar.push("reports-icon");
+    // Bolge dolgusu/cizgisi de "dolu" sayilir: uzerine tiklamak kendi
+    // popup'ini acar, bos harita tiklamasi olarak islenmemeli. Tiklama kapaliyken
+    // ("Ekle" formu acikken) bu katmanlar sayilmaz, koordinat secimi calisir.
+    if (bolgeTiklanabilirRef.current) {
+      for (const k of ["bolge-fill", "bolge-vurus"]) {
+        if (map.getLayer(k)) katmanlar.push(k);
+      }
+    }
     const uzerinde = map.queryRenderedFeatures(e.point, { layers: katmanlar });
     if (uzerinde.length === 0) {
       onHaritaTiklaRef.current({ longitude: koordinat[0], latitude: koordinat[1] });
@@ -464,6 +581,211 @@ export default function MapView({
         tamamlananEtiketleriRef.current.delete(id);
       }
     }
+  }
+
+  /** Kaydedilmis bolgeleri/guzergahlari haritada gosterir. Anlik alan
+   *  secimlerinden ayri bir kaynak/katman kullanir: kesik cizgili kenarlik ve
+   *  ad etiketiyle "bu kayitli bir bolge" oldugu bakisla anlasilir. */
+  function bolgeleriUygula(map: maplibregl.Map) {
+    const source = map.getSource(BOLGE_SOURCE_ID) as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+
+    // Sekli duzenlenen kayit burada cizilmez: kendi (suruklenebilir) kaynaginda
+    // gosterilir, yoksa eski hali altta hayalet gibi durur.
+    const duzenlenenId = sekilDuzenlemeRef.current?.id;
+    const liste = (bolgelerRef.current ?? []).filter((b) => b.id !== duzenlenenId);
+    const features: GeoJSON.Feature[] = liste.map((bolge) => ({
+      type: "Feature",
+      geometry:
+        bolge.tip === "cizgi"
+          ? { type: "LineString", coordinates: bolge.noktalar[0] }
+          : bolge.noktalar.length === 1
+            ? {
+                type: "Polygon",
+                coordinates: [[...bolge.noktalar[0], bolge.noktalar[0][0]]],
+              }
+            : {
+                type: "MultiPolygon",
+                coordinates: bolge.noktalar.map((halka) => [[...halka, halka[0]]]),
+              },
+      // id: tiklama olayinda hangi bolgenin popup'i acilacagini belirler.
+      properties: { id: bolge.id, renk: bolge.renk },
+    }));
+
+    source.setData({ type: "FeatureCollection", features });
+    bolgeEtiketleriUygula(map, liste);
+  }
+
+  /** Her kayitli bolgenin adi + olcusu (+ atanan ekip) icin kalici etiket. */
+  function bolgeEtiketleriUygula(map: maplibregl.Map, liste: Bolge[]) {
+    const guncelIdler = new Set<string>();
+
+    for (const bolge of liste) {
+      guncelIdler.add(bolge.id);
+      const cizgi = bolge.tip === "cizgi";
+      const olcu = cizgi
+        ? bolge.uzunluk_m != null
+          ? mesafeEtiketi(bolge.uzunluk_m)
+          : null
+        : alanEtiketi(bolge.alan_m2 ?? cokHalkaliAlanM2(bolge.noktalar));
+      const metin =
+        `${bolge.ad}${olcu ? ` · ${olcu}` : ""}` +
+        (bolge.worker_ad ? ` · ${bolge.worker_ad}` : "") +
+        // Ekip isi kapattiysa etikette de gorunsun - personel haritaya bakip
+        // hangi bolgenin bittigini anlayabilsin.
+        (bolge.tamamlandi_at ? " · ✓" : "");
+      const merkez = cizgi
+        ? poligonMerkezi(bolge.noktalar[0])
+        : enBuyukHalkaMerkezi(bolge.noktalar);
+
+      let marker = bolgeEtiketleriRef.current.get(bolge.id);
+      if (!marker) {
+        marker = new maplibregl.Marker({ element: etiketElemaniOlustur() })
+          .setLngLat(merkez)
+          .addTo(map);
+        bolgeEtiketleriRef.current.set(bolge.id, marker);
+      } else {
+        marker.setLngLat(merkez);
+      }
+      // Kayitli bolge etiketi, anlik secim etiketinden renk seridiyle ayrilir.
+      marker.getElement().style.borderLeft = `3px solid ${bolge.renk}`;
+      marker.getElement().textContent = metin;
+    }
+
+    for (const [id, marker] of bolgeEtiketleriRef.current) {
+      if (!guncelIdler.has(id)) {
+        marker.remove();
+        bolgeEtiketleriRef.current.delete(id);
+      }
+    }
+  }
+
+  /** Taslagin derin kopyasi: yukari bildirilen deger ile ref'teki canli kopya
+   *  hicbir zaman ayni diziyi paylasmamali (surukleme sirasinda mutasyon var). */
+  function sekilTaslakKopyasi(): [number, number][][] {
+    return sekilTaslakRef.current.map((halka) =>
+      halka.map((n) => [n[0], n[1]] as [number, number])
+    );
+  }
+
+  function sekilBildir() {
+    onSekilDegisRef.current?.(sekilTaslakKopyasi());
+  }
+
+  /** Sekli duzenlenen bolgenin taslak geometrisini haritada gosterir. */
+  function sekilUygula(map: maplibregl.Map) {
+    const source = map.getSource(SEKIL_SOURCE_ID) as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+
+    const duzenleme = sekilDuzenlemeRef.current;
+    const halkalar = sekilTaslakRef.current;
+    if (!duzenleme || halkalar.length === 0) {
+      source.setData(BOS_GEOJSON as unknown as GeoJSON.FeatureCollection);
+      return;
+    }
+
+    const geometry: GeoJSON.Geometry =
+      duzenleme.tip === "cizgi"
+        ? { type: "LineString", coordinates: halkalar[0] }
+        : {
+            type: "MultiPolygon",
+            coordinates: halkalar.map((halka) => [[...halka, halka[0]]]),
+          };
+
+    source.setData({
+      type: "FeatureCollection",
+      features: [{ type: "Feature", geometry, properties: { renk: duzenleme.renk } }],
+    });
+  }
+
+  /** Kenar ortasindaki "+" tutamaklarini taslaga gore yeniden konumlandirir -
+   *  bir kose suruklenirken komsu kenarlarin ortasi da kaymali. */
+  function sekilOrtaTutamaklariTasi() {
+    const cizgi = sekilDuzenlemeRef.current?.tip === "cizgi";
+    sekilTaslakRef.current.forEach((halka, h) => {
+      const kenarSayisi = cizgi ? halka.length - 1 : halka.length;
+      for (let i = 0; i < kenarSayisi; i++) {
+        const marker = sekilTutamaklariRef.current.get(`orta-${h}-${i}`);
+        if (!marker) continue;
+        const a = halka[i];
+        const b = halka[(i + 1) % halka.length];
+        marker.setLngLat([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
+      }
+    });
+  }
+
+  /** Sekil duzenleme tutamaklarini kurar: her kosede suruklenebilir bir nokta,
+   *  her kenarin ortasinda yeni kose ekleyen bir "+". Tutamaklar katman degil
+   *  DOM marker'dir - MapLibre'nin suruklenebilir marker'i hazir olarak
+   *  fare/dokunma isini halleder. Sayilari her eklemede/silmede degistigi icin
+   *  fark tutmak yerine tamami yeniden kurulur (duzenlenebilir sekiller
+   *  SEKIL_MAKS_NOKTA ile sinirli, maliyeti onemsiz). */
+  function sekilTutamaklariUygula(map: maplibregl.Map) {
+    for (const marker of sekilTutamaklariRef.current.values()) marker.remove();
+    sekilTutamaklariRef.current.clear();
+
+    const duzenleme = sekilDuzenlemeRef.current;
+    if (!duzenleme) return;
+
+    const cizgi = duzenleme.tip === "cizgi";
+    const enAzNokta = cizgi ? 2 : 3;
+
+    sekilTaslakRef.current.forEach((halka, h) => {
+      halka.forEach((nokta, i) => {
+        const el = tutamakElemani(duzenleme.renk, false);
+        el.title = "Sürükleyerek taşı · sağ tık ile sil";
+        const marker = new maplibregl.Marker({ element: el, draggable: true })
+          .setLngLat(nokta)
+          .addTo(map);
+        marker.on("drag", () => {
+          const { lng, lat } = marker.getLngLat();
+          sekilTaslakRef.current[h][i] = [
+            Number(lng.toFixed(6)),
+            Number(lat.toFixed(6)),
+          ];
+          sekilUygula(map);
+          sekilOrtaTutamaklariTasi();
+        });
+        marker.on("dragend", sekilBildir);
+        el.addEventListener("contextmenu", (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          // Bir alan en az 3, bir guzergah en az 2 noktayla var olabilir.
+          if (sekilTaslakRef.current[h].length <= enAzNokta) return;
+          sekilTaslakRef.current[h].splice(i, 1);
+          sekilBildir();
+        });
+        sekilTutamaklariRef.current.set(`kose-${h}-${i}`, marker);
+      });
+
+      // Cizgide kapanis kenari yoktur; alanda son nokta ilk noktaya baglanir.
+      const kenarSayisi = cizgi ? halka.length - 1 : halka.length;
+      for (let i = 0; i < kenarSayisi; i++) {
+        const a = halka[i];
+        const b = halka[(i + 1) % halka.length];
+        const el = tutamakElemani(duzenleme.renk, true);
+        el.title = "Buraya yeni köşe ekle";
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2])
+          .addTo(map);
+        el.addEventListener("mousedown", (ev) => ev.stopPropagation());
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          // Konum marker'dan okunur: kose suruklendiyse orta nokta tasinmis olur.
+          const p = marker.getLngLat();
+          sekilTaslakRef.current[h].splice(i + 1, 0, [
+            Number(p.lng.toFixed(6)),
+            Number(p.lat.toFixed(6)),
+          ]);
+          sekilBildir();
+        });
+        sekilTutamaklariRef.current.set(`orta-${h}-${i}`, marker);
+      }
+    });
   }
 
   /** Istanbul il siniri getirilince (ya da stil degisimi sonrasi katman
@@ -797,6 +1119,57 @@ export default function MapView({
       });
     }
 
+    if (!map.getSource(BOLGE_SOURCE_ID)) {
+      map.addSource(BOLGE_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
+
+      map.addLayer({
+        id: "bolge-fill",
+        type: "fill",
+        source: BOLGE_SOURCE_ID,
+        filter: ["!=", ["geometry-type"], "LineString"],
+        paint: { "fill-color": ["get", "renk"], "fill-opacity": 0.12 },
+      });
+      // Kesik kenarlik: kayitli bolgeyi anlik alan seciminden (duz cizgi) ayirir.
+      map.addLayer({
+        id: "bolge-yol",
+        type: "line",
+        source: BOLGE_SOURCE_ID,
+        paint: {
+          "line-color": ["get", "renk"],
+          "line-width": 2.5,
+          "line-dasharray": [3, 2],
+        },
+      });
+      // Gorunmez, kalin vurus alani: 2.5px'lik bir guzergah cizgisini tam
+      // uzerinden tutturmak zor - tiklama/imlec bu genis seride yakalanir.
+      map.addLayer({
+        id: "bolge-vurus",
+        type: "line",
+        source: BOLGE_SOURCE_ID,
+        paint: { "line-color": "#000000", "line-width": 16, "line-opacity": 0 },
+      });
+    }
+
+    if (!map.getSource(SEKIL_SOURCE_ID)) {
+      map.addSource(SEKIL_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
+
+      // Duzenlenen sekil, kalici bolgelerden daha belirgin cizilir (duz ve
+      // kalin kenarlik): o an "uzerinde calisilan" sekil oldugu bakisla belli.
+      map.addLayer({
+        id: "sekil-fill",
+        type: "fill",
+        source: SEKIL_SOURCE_ID,
+        filter: ["!=", ["geometry-type"], "LineString"],
+        paint: { "fill-color": ["get", "renk"], "fill-opacity": 0.22 },
+      });
+      map.addLayer({
+        id: "sekil-yol",
+        type: "line",
+        source: SEKIL_SOURCE_ID,
+        paint: { "line-color": ["get", "renk"], "line-width": 3 },
+      });
+    }
+
     if (!map.getSource(CIZIM_SOURCE_ID)) {
       map.addSource(CIZIM_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
 
@@ -903,6 +1276,17 @@ export default function MapView({
     map.on("mouseenter", "reports-circle", fareGirdiRef.current);
     map.off("mouseleave", "reports-circle", fareCiktiRef.current);
     map.on("mouseleave", "reports-circle", fareCiktiRef.current);
+    // Kaydedilmis bolgeler/guzergahlar da tiklanabilir (dolgu + kalin vurus
+    // seridi); ayni tiklama iki katmani da tetikleyebilir, handler tekrari
+    // originalEvent ile eler.
+    for (const katman of ["bolge-fill", "bolge-vurus"]) {
+      map.off("click", katman, bolgeTiklandiRef.current);
+      map.on("click", katman, bolgeTiklandiRef.current);
+      map.off("mouseenter", katman, fareGirdiRef.current);
+      map.on("mouseenter", katman, fareGirdiRef.current);
+      map.off("mouseleave", katman, fareCiktiRef.current);
+      map.on("mouseleave", katman, fareCiktiRef.current);
+    }
     map.off("click", haritaTiklandiRef.current);
     map.on("click", haritaTiklandiRef.current);
     map.off("mousemove", fareHareketRef.current);
@@ -916,6 +1300,9 @@ export default function MapView({
     reportsUygula(map);
     cizimUygula(map);
     tamamlananUygula(map);
+    bolgeleriUygula(map);
+    sekilUygula(map);
+    sekilTutamaklariUygula(map);
     olcumUygula(map);
     secimUygula(map);
     secimIhbarUygula(map);
@@ -973,6 +1360,8 @@ export default function MapView({
     // temizlik calisirken degismis olabilir (lint uyarisi); bu iki ref hicbir
     // zaman yeniden atanmadigi icin yerel degisken birebir aynisini gosterir.
     const tamamlananEtiketleri = tamamlananEtiketleriRef.current;
+    const bolgeEtiketleri = bolgeEtiketleriRef.current;
+    const sekilTutamaklari = sekilTutamaklariRef.current;
     const ekipMarkerlari = ekipMarkerlariRef.current;
 
     const ilkStil = HARITA_STILLERI.find(
@@ -1021,6 +1410,10 @@ export default function MapView({
       cizimEtiketRef.current?.remove();
       for (const marker of tamamlananEtiketleri.values()) marker.remove();
       tamamlananEtiketleri.clear();
+      for (const marker of bolgeEtiketleri.values()) marker.remove();
+      bolgeEtiketleri.clear();
+      for (const marker of sekilTutamaklari.values()) marker.remove();
+      sekilTutamaklari.clear();
       for (const marker of ekipMarkerlari.values()) marker.remove();
       ekipMarkerlari.clear();
       map.remove();
@@ -1116,6 +1509,29 @@ export default function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tamamlananAlanlar]);
 
+  // --- Kaydedilmis bolgeler degisince (eklendi/silindi/renk-ad guncellendi) ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (hazirRef.current) bolgeleriUygula(map);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bolgeler]);
+
+  // --- Sekil duzenleme: taslak degisince cizimi ve tutamaklari yenile ---
+  // Duzenlenen kayit ayrica kalici bolge katmanindan cikarilir (ve duzenleme
+  // bitince geri konur), yoksa eski hali altta hayalet gibi durur.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !hazirRef.current) return;
+    sekilTaslakRef.current = (sekilDuzenleme?.noktalar ?? []).map((halka) =>
+      halka.map((n) => [n[0], n[1]] as [number, number])
+    );
+    sekilUygula(map);
+    sekilTutamaklariUygula(map);
+    bolgeleriUygula(map);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sekilDuzenleme]);
+
   // --- Olcum noktalarini haritada goster ---
   useEffect(() => {
     const map = mapRef.current;
@@ -1173,15 +1589,16 @@ export default function MapView({
     }
   }, [ekipler]);
 
-  // --- Cizim/olcum modunda imleci artiya cevir, yeni oturumda elastik cizgiyi sifirla ---
+  // --- Cizim/olcum modunda imleci artiya cevir, elastik onizlemeyi sifirla ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     map.getCanvas().style.cursor = cizimModu || olcumModu ? "crosshair" : "";
-    if (cizimModu || olcumModu) {
-      sonFareRef.current = null;
-      if (hazirRef.current) dinamikUygula(map);
-    }
+    // Mod KAPANIRKEN de calisir: "Bitir"/"Tamamla" sonrasi imlece uzanan
+    // elastik cizgi (ve kapanis onizlemesi) haritada asili kalmasin - o cizgi
+    // yalnizca cizim sirasindaki bir yardimcidir, kaydedilen sekle dahil degil.
+    sonFareRef.current = null;
+    if (hazirRef.current) dinamikUygula(map);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cizimModu, olcumModu]);
 

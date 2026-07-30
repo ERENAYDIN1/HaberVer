@@ -5,6 +5,7 @@ import {
   IconCheck,
   IconHistory,
   IconInbox,
+  IconLasso,
   IconPlus,
   IconUsers,
   IconX,
@@ -21,10 +22,19 @@ const ACTION_STIL: Record<
   report_approved: { ikon: IconCheck, rozet: "bg-emerald-100 text-emerald-700" },
   report_rejected: { ikon: IconX, rozet: "bg-red-100 text-red-700" },
   user_created: { ikon: IconUsers, rozet: "bg-indigo-100 text-indigo-700" },
+  user_updated: { ikon: IconUsers, rozet: "bg-blue-100 text-blue-700" },
   assignment_created: { ikon: IconUsers, rozet: "bg-indigo-100 text-indigo-700" },
   assignment_completed: { ikon: IconCheck, rozet: "bg-emerald-100 text-emerald-700" },
   assignment_cancelled: { ikon: IconInbox, rozet: "bg-slate-100 text-slate-600" },
+  bolge_created: { ikon: IconLasso, rozet: "bg-emerald-100 text-emerald-700" },
+  bolge_updated: { ikon: IconLasso, rozet: "bg-blue-100 text-blue-700" },
+  bolge_deleted: { ikon: IconX, rozet: "bg-red-100 text-red-700" },
+  bolge_assigned: { ikon: IconUsers, rozet: "bg-indigo-100 text-indigo-700" },
 };
+
+/** Backend ileride yeni bir islem turu eklerse (frontend guncellenmeden once)
+ *  panel cokmesin: bilinmeyen tur notr bir rozetle, ham adiyla gosterilir. */
+const VARSAYILAN_STIL = { ikon: IconHistory, rozet: "bg-slate-100 text-slate-600" };
 
 /** Sistem genelindeki islem gecmisi: varlik ekleme/guncelleme/silme, durum
  *  degisimi, ihbar onay/ret, personel ekleme - kim, ne zaman, ne yapti. */
@@ -67,7 +77,7 @@ export default function LogPaneli() {
 }
 
 function LogSatiri({ log }: { log: LogEntry }) {
-  const stil = ACTION_STIL[log.action];
+  const stil = ACTION_STIL[log.action] ?? VARSAYILAN_STIL;
   const Ikon = stil.ikon;
   return (
     <li className="flex gap-3 p-3">
@@ -80,7 +90,7 @@ function LogSatiri({ log }: { log: LogEntry }) {
         <p className="text-sm text-slate-800">
           <span className="font-medium">{log.actor_name ?? "Sistem"}</span>{" "}
           <span className="text-slate-500">
-            {LOG_ACTION_LABELS[log.action].toLocaleLowerCase("tr-TR")}
+            {(LOG_ACTION_LABELS[log.action] ?? log.action).toLocaleLowerCase("tr-TR")}
           </span>
           {log.entity_name && (
             <>

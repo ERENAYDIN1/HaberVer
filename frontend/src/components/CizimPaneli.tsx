@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 
+import type { AlanOlcusu } from "../api/geo";
 import type { TamamlananAlan } from "../types/alan";
 import { alanEtiketi, cokHalkaliAlanM2, mesafeEtiketi } from "../utils/geo";
-import { IconLasso, IconRuler } from "./icons";
+import { IconLasso, IconPlus, IconRuler, IconX } from "./icons";
 
 const RENK_PALETI = [
   "#059669",
@@ -14,6 +15,11 @@ const RENK_PALETI = [
 ];
 
 const OZEL_RENK_ANAHTARI = "greenasset-ozel-renkler";
+
+/** Net alan, kendi alanindan bu orandan daha kucukse "cakisiyor" sayilir.
+ *  Tam esitlik aranmaz: PostGIS'in jeodezik olcusunde yuzen nokta gurultusu
+ *  yuzunden hic cakismayan alanlarda bile son hanede fark olabilir. */
+const CAKISMA_ESIGI = 0.999;
 
 interface CizimPaneliProps {
   /** Alan (poligon) secim araci */
@@ -29,6 +35,18 @@ interface CizimPaneliProps {
   tamamlananAlanlar: TamamlananAlan[];
   onAlanKaldir: (id: string) => void;
   onTumAlanlariTemizle: () => void;
+  /** PostGIS'ten gelen olculer (id -> kendi/net m2). Cakisan alanlar iki kez
+   *  sayilmasin diye toplam bunlardan hesaplanir; gelmediyse yerel (shoelace)
+   *  hesaba dusulur. */
+  alanOlculeri?: Record<string, AlanOlcusu>;
+  /** Cakismalar tek kez sayilmis toplam (birlesim alani). */
+  toplamNetM2?: number;
+  /** Cakisma dusulmeden onceki ham toplam - "ne kadari mukerrerdi" bilgisi. */
+  hamToplamM2?: number;
+  /** Kaydedilmis bolge olusturma yetkisi (personel). */
+  kaydedebilir?: boolean;
+  onAlanKaydet?: (alan: TamamlananAlan, sira: number) => void;
+  onOlcumKaydet?: () => void;
 
   /** Mesafe olcum araci */
   olcumModu: boolean;
@@ -54,6 +72,12 @@ export default function CizimPaneli({
   tamamlananAlanlar,
   onAlanKaldir,
   onTumAlanlariTemizle,
+  alanOlculeri,
+  toplamNetM2,
+  hamToplamM2,
+  kaydedebilir,
+  onAlanKaydet,
+  onOlcumKaydet,
   olcumModu,
   olcumNoktalari,
   olcumMesafeM,
@@ -65,6 +89,18 @@ export default function CizimPaneli({
   const olcumBitti = !olcumModu && olcumNoktalari.length >= 2;
 
   if (!cizimModu && !olcumModu && !alanBitti && !olcumBitti) return null;
+
+  // Cakisma varsa toplam, alanlarin basit toplami DEGIL birlesim alanidir:
+  // ayni yerin uzerinden ikinci kez gecmek toplami buyutmez.
+  const cakismaM2 =
+    toplamNetM2 != null && hamToplamM2 != null
+      ? Math.max(0, hamToplamM2 - toplamNetM2)
+      : 0;
+  const cakismaVar = toplamNetM2 != null && cakismaM2 > toplamNetM2 * (1 - CAKISMA_ESIGI);
+  const yerelToplam = tamamlananAlanlar.reduce(
+    (t, a) => t + cokHalkaliAlanM2(a.noktalar),
+    0
+  );
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4">
@@ -119,40 +155,95 @@ export default function CizimPaneli({
                 <IconLasso className="h-3 w-3" />
               </span>
               Seçili Alanlar
-            </div>
-            <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto pr-0.5">
-              {tamamlananAlanlar.map((alan, i) => (
-                <div
-                  key={alan.id}
-                  className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-2.5 py-1.5"
-                >
-                  <span className="flex items-center gap-2 text-sm text-slate-700">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ background: alan.renk }}
-                    />
-                    {alan.etiket ?? `Alan ${i + 1}`}:{" "}
-                    <span className="font-semibold">{alan.sonuc.features.length}</span>{" "}
-                    varlık · {alanEtiketi(cokHalkaliAlanM2(alan.noktalar))}
-                  </span>
-                  <button
-                    onClick={() => onAlanKaldir(alan.id)}
-                    aria-label="Alanı kaldır"
-                    className="shrink-0 text-xs font-medium text-slate-400 hover:text-red-600"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-            {tamamlananAlanlar.length > 1 && (
+              {/* Secimden cikis: alanlar haritadan kalkar ve bu panel kapanir.
+                  Kaydedilmis bolgeleri ETKILEMEZ - onlar kalici, ayri katman. */}
               <button
                 onClick={onTumAlanlariTemizle}
-                className="self-end text-xs font-medium text-emerald-700 hover:underline"
+                title="Alan seçiminden çık"
+                className="ml-auto flex items-center gap-1 rounded-md border border-slate-200 px-1.5 py-0.5 text-[11px] font-medium normal-case tracking-normal text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
               >
-                Tümünü temizle
+                <IconX className="h-3 w-3" />
+                Çıkış
               </button>
+            </div>
+            <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto pr-0.5">
+              {tamamlananAlanlar.map((alan, i) => {
+                const olcu = alanOlculeri?.[alan.id];
+                const kendiM2 = olcu?.kendi_m2 ?? cokHalkaliAlanM2(alan.noktalar);
+                // Alanin toplama net katkisi: kendisinden ONCEKI alanlarla
+                // cakisan kismi dusulmus hali. Ayni yerin uzerine tekrar
+                // cizilirse 0 olur ve toplam degismez.
+                const netM2 = olcu?.net_m2;
+                const cakisiyor = netM2 != null && netM2 < kendiM2 * CAKISMA_ESIGI;
+                return (
+                  <div
+                    key={alan.id}
+                    className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5"
+                  >
+                    <span className="min-w-0 text-sm text-slate-700">
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ background: alan.renk }}
+                        />
+                        <span className="truncate">
+                          {alan.etiket ?? `Alan ${i + 1}`}:{" "}
+                          <span className="font-semibold">
+                            {alan.sonuc.features.length}
+                          </span>{" "}
+                          varlık · {alanEtiketi(kendiM2)}
+                        </span>
+                      </span>
+                      {cakisiyor && (
+                        <span className="mt-0.5 block text-[11px] text-amber-700">
+                          {netM2 < 1
+                            ? "tamamen önceki alanlarla çakışıyor · net katkı yok"
+                            : `çakışma düşülünce net ${alanEtiketi(netM2)}`}
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      {kaydedebilir && onAlanKaydet && (
+                        <button
+                          onClick={() => onAlanKaydet(alan, i)}
+                          title="Bölge olarak kaydet"
+                          aria-label="Bölge olarak kaydet"
+                          className="rounded-md px-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                        >
+                          Kaydet
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onAlanKaldir(alan.id)}
+                        aria-label="Alanı kaldır"
+                        className="text-xs font-medium text-slate-400 hover:text-red-600"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Toplam: cakisan yerler TEK KEZ sayilir (birlesim alani). */}
+            <div className="flex items-baseline justify-between gap-2 border-t border-slate-100 pt-1.5 text-xs">
+              <span className="text-slate-500">
+                Toplam{tamamlananAlanlar.length > 1 ? " (çakışmasız)" : ""}
+              </span>
+              <span className="font-semibold text-slate-800">
+                {alanEtiketi(toplamNetM2 ?? yerelToplam)}
+              </span>
+            </div>
+            {cakismaVar && (
+              <p className="text-[11px] text-amber-700">
+                Üst üste binen {alanEtiketi(cakismaM2)} toplamdan düşüldü.
+              </p>
             )}
+
+            <p className="text-[11px] text-slate-400">
+              Alan seçimi haritada kalır; bitirmek için "Çıkış".
+            </p>
           </div>
         )}
 
@@ -202,12 +293,23 @@ export default function CizimPaneli({
               Toplam mesafe:{" "}
               <span className="font-semibold">{mesafeEtiketi(olcumMesafeM)}</span>
             </span>
-            <button
-              onClick={onOlcumTemizle}
-              className="shrink-0 text-xs font-medium text-blue-700 hover:underline"
-            >
-              Temizle
-            </button>
+            <span className="flex shrink-0 items-center gap-2">
+              {kaydedebilir && onOlcumKaydet && (
+                <button
+                  onClick={onOlcumKaydet}
+                  className="flex items-center gap-1 text-xs font-medium text-blue-700 hover:underline"
+                >
+                  <IconPlus className="h-3 w-3" />
+                  Kaydet
+                </button>
+              )}
+              <button
+                onClick={onOlcumTemizle}
+                className="text-xs font-medium text-slate-500 hover:underline"
+              >
+                Temizle
+              </button>
+            </span>
           </div>
         )}
       </div>
@@ -283,3 +385,7 @@ function RenkSecici({
     </div>
   );
 }
+
+/** Cizim panelindeki renk paleti disaridan da kullanilabilsin (bolge kaydetme
+ *  formu ayni paletle calisir). */
+export { RENK_PALETI };
