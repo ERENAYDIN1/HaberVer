@@ -1,3 +1,4 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { approveReport, listReports, rejectReport } from "../api/reports";
@@ -25,6 +26,11 @@ interface IhbarVarlikSorguSonucu {
 /** Durum sekmelerinde kullanilan kisa etiketler - REPORT_STATUS_LABELS'daki
  *  tam metinler ("Bekleyen İhbar" gibi) sekme genisligini esitsiz yapiyordu;
  *  burada uc sekme de ayni (kisa) uzunlukta olacak sekilde ayrica tanimlanir. */
+/** Sabit bos liste: "Onaylandı" sekmesinde (ve veri gelmeden once) ust bilesene
+ *  bildirilen deger her render'da yeni bir dizi olmasin - aksi halde
+ *  onIhbarlarChange efekti kendini surekli tetikler. */
+const BOS_IHBARLAR: ReportFeature[] = [];
+
 const SEKME_ETIKETLERI: Record<ReportStatus, string> = {
   beklemede: "Bekleyen",
   onaylandi: "Onaylandı",
@@ -73,49 +79,52 @@ export default function IhbarPaneli({
   const [detayAsset, setDetayAsset] = useState<AssetFeature | null>(null);
   const seciliVarlikRef = useRef<HTMLLIElement>(null);
 
-  const [ihbarlar, setIhbarlar] = useState<ReportFeature[]>([]);
-  const [yukleniyor, setYukleniyor] = useState(false);
-  const [hata, setHata] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const [islemHatasi, setIslemHatasi] = useState<string | null>(null);
   const [islemdeki, setIslemdeki] = useState<string | null>(null);
+
+  // Ihbar listesi ARTIK react-query uzerinden: App'teki harita/lejant sorgulari
+  // ("reports" onekli) ile AYNI onbellegi paylasir. Eskiden bu panel kendi
+  // fetch'ini yapiyordu; onay/ret sonrasi yalnizca panel tazeleniyor, harita ve
+  // lejant sayaclari eski veriyle kaliyordu (alt filtreyi kapat-ac etmek de
+  // ise yaramiyordu, cunku onbellekteki veri hala eskiydi).
+  //
+  // "Onaylandı" alt-sekmesinde ham ihbar kaydi degil, olusan varliklar gosterilir
+  // (ihbarVarlikSorgu ust bilesenden gelir) - o sekmede ihbar cekmeye gerek yok.
+  const ihbarSorgu = useQuery({
+    queryKey: ["reports", durum],
+    queryFn: () => listReports(durum),
+    enabled: durum !== "onaylandi",
+  });
+  const ihbarlar = durum === "onaylandi" ? BOS_IHBARLAR : ihbarSorgu.data?.features ?? BOS_IHBARLAR;
+  const yukleniyor = durum !== "onaylandi" && ihbarSorgu.isLoading;
+  const hata = islemHatasi ?? (ihbarSorgu.error as Error | null)?.message ?? null;
 
   const onIhbarlarChangeRef = useRef(onIhbarlarChange);
   useEffect(() => {
     onIhbarlarChangeRef.current = onIhbarlarChange;
   });
 
-  const yukle = (d: ReportStatus) => {
-    setYukleniyor(true);
-    setHata(null);
-    listReports(d)
-      .then((r) => {
-        setIhbarlar(r.features);
-        onIhbarlarChangeRef.current?.(r.features);
-      })
-      .catch((e) => setHata((e as Error).message))
-      .finally(() => setYukleniyor(false));
-  };
-
-  // "Onaylandı" sekmesinde ham ihbar kaydi degil, olusan varliklar gosterilir
-  // (ihbarVarlikSorgu ust bilesenden gelir) - o sekmedeyken ayrica ihbar
-  // cekmeye/haritada ihbar noktasi gostermeye gerek yok.
+  // Yuklenen ihbarlari ust bilesene bildir (haritada gostermek/secmek icin).
   useEffect(() => {
-    if (durum === "onaylandi") {
-      setIhbarlar([]);
-      onIhbarlarChangeRef.current?.([]);
-      return;
-    }
-    yukle(durum);
-  }, [durum]);
+    onIhbarlarChangeRef.current?.(ihbarlar);
+  }, [ihbarlar]);
+
+  /** Onay/ret sonrasi: ihbarin durumu degistigi icin UC durum sorgusu da
+   *  ("beklemede"/"onaylandi"/"reddedildi") gecersiz kilinir - panel, harita
+   *  noktalari, lejant sayaclari ve bildirim zili tek hamlede tazelenir. */
+  const ihbarlariTazele = () =>
+    queryClient.invalidateQueries({ queryKey: ["reports"] });
 
   const onayla = async (id: string) => {
     setIslemdeki(id);
-    setHata(null);
+    setIslemHatasi(null);
     try {
       await approveReport(id);
-      yukle(durum);
+      await ihbarlariTazele();
       onVarlikOlustu?.();
     } catch (e) {
-      setHata((e as Error).message);
+      setIslemHatasi((e as Error).message);
     } finally {
       setIslemdeki(null);
     }
@@ -124,12 +133,12 @@ export default function IhbarPaneli({
   const reddet = async (id: string) => {
     const neden = window.prompt("Ret nedeni (opsiyonel):") ?? undefined;
     setIslemdeki(id);
-    setHata(null);
+    setIslemHatasi(null);
     try {
       await rejectReport(id, neden || undefined);
-      yukle(durum);
+      await ihbarlariTazele();
     } catch (e) {
-      setHata((e as Error).message);
+      setIslemHatasi((e as Error).message);
     } finally {
       setIslemdeki(null);
     }
