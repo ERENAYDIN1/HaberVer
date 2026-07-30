@@ -21,6 +21,14 @@ class LogAction(str, enum.Enum):
     assignment_created = "assignment_created"
     assignment_completed = "assignment_completed"
     assignment_cancelled = "assignment_cancelled"
+    bolge_created = "bolge_created"
+    bolge_updated = "bolge_updated"
+    bolge_deleted = "bolge_deleted"
+    # Gorev bolgesinin bir ekibe atanmasi VE atamanin kaldirilmasi (detayda yazar).
+    bolge_assigned = "bolge_assigned"
+    # Saha ekibinin bolgeyi/guzergahi tamamlamasi ve tamamlamayi geri almasi.
+    bolge_completed = "bolge_completed"
+    bolge_reopened = "bolge_reopened"
 
 
 class ActivityLog(Base):
