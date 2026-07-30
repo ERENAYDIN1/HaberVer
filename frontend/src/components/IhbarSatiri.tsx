@@ -19,6 +19,8 @@ interface IhbarSatiriProps {
   onayReddetYetkisi: boolean;
   onOnayla: (id: string) => void;
   onReddet: (id: string) => void;
+  /** "reddedildi" durumundaki ihbarin reddini geri alir (tekrar "beklemede"). */
+  onGeriAl: (id: string) => void;
   islemPending: boolean;
 }
 
@@ -28,13 +30,23 @@ interface IhbarSatiriProps {
  *  listesi) ve "Varlıklar" sekmesiyle gorsel olarak birebir tutarli olur;
  *  fotograf/not/ret nedeni gibi ek detaylar ReportDetayModal'da gosterilir. */
 const IhbarSatiri = forwardRef<HTMLLIElement, IhbarSatiriProps>(function IhbarSatiri(
-  { report, secili, onSec, onayReddetYetkisi, onOnayla, onReddet, islemPending },
+  {
+    report,
+    secili,
+    onSec,
+    onayReddetYetkisi,
+    onOnayla,
+    onReddet,
+    onGeriAl,
+    islemPending,
+  },
   ref
 ) {
   const { id, name, type, status, photo_url } = report.properties;
   const [lng, lat] = report.geometry.coordinates;
   const TipIkonu = TIP_IKONU[type] ?? IconPin;
   const bekliyor = status === "beklemede";
+  const reddedildi = status === "reddedildi";
   const foto = fotoUrl(photo_url);
   const [fotoAcik, setFotoAcik] = useState(false);
 
@@ -90,9 +102,10 @@ const IhbarSatiri = forwardRef<HTMLLIElement, IhbarSatiriProps>(function IhbarSa
 
         {/* Aksiyon satiri her zaman ayni yuksekligi kaplar (h-4) - secili/degil
             ya da durum (beklemede/reddedildi) fark etmeksizin satirlar ayni
-            boyutta kalsin diye; icerik sadece secili+beklemede+yetkiliyken dolar. */}
+            boyutta kalsin diye; icerik sadece secili+yetkiliyken dolar:
+            beklemede -> Onayla/Reddet, reddedildi -> Reddi Geri Al. */}
         <div className="mt-2 flex h-4 gap-3 pl-[34px]">
-          {secili && bekliyor && onayReddetYetkisi && (
+          {secili && onayReddetYetkisi && bekliyor && (
             <>
               <button
                 onClick={(e) => {
@@ -115,6 +128,18 @@ const IhbarSatiri = forwardRef<HTMLLIElement, IhbarSatiriProps>(function IhbarSa
                 Reddet
               </button>
             </>
+          )}
+          {secili && onayReddetYetkisi && reddedildi && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onGeriAl(id);
+              }}
+              disabled={islemPending}
+              className="text-xs font-medium text-amber-700 hover:underline disabled:opacity-50"
+            >
+              Reddi Geri Al
+            </button>
           )}
         </div>
       </div>

@@ -7,15 +7,16 @@ import {
   ASSET_STATUSES,
   ASSET_STATUS_LABELS,
   ASSET_TYPES,
-  ASSET_TYPE_LABELS,
 } from "../types/asset";
 import type {
   AssetFeature,
   AssetFeatureCollection,
   AssetFilters,
 } from "../types/asset";
-import AssetDetayModal from "./AssetDetayModal";
+import AssetDetayModal, { useVarlikYonetimi } from "./AssetDetayModal";
+import type { EkipOzet } from "../types/saha";
 import { ISTANBUL_IL_KODU } from "../utils/istanbulMaskesi";
+import TipSecenekleri from "./TipSecenekleri";
 import VarlikSatiri from "./VarlikSatiri";
 import { IconX } from "./icons";
 
@@ -39,6 +40,9 @@ interface AssetListProps {
   mahalleKodu: string | null;
   onMahalleSec: (kod: string | null) => void;
   idariHatasi?: string | null;
+  /** Saha ekipleri - bakim bekleyen bir varligin detayindan ekibe yonlendirme
+   *  yapilabilsin diye ("İhbarlar > Onaylandı" panelindeki ayni yetenek). */
+  ekipler?: EkipOzet[];
 }
 
 export default function AssetList({
@@ -56,6 +60,7 @@ export default function AssetList({
   mahalleKodu,
   onMahalleSec,
   idariHatasi,
+  ekipler,
 }: AssetListProps) {
   const { user } = useAuth();
   const tamCrudYetkisi = user?.role !== "saha_calisani";
@@ -66,16 +71,25 @@ export default function AssetList({
   // Mahalleler yalnizca bir ilce secildiginde getirilir (kademeli filtre).
   const mahallelerSorgu = useMahalleler(ilceKodu);
   const [detayAsset, setDetayAsset] = useState<AssetFeature | null>(null);
+  const yonetim = useVarlikYonetimi({
+    ekipler,
+    onDuzenle,
+    detayKapat: () => setDetayAsset(null),
+  });
 
   // Haritadan secim yapildiginda listedeki karti gorunur alana kaydir.
   useEffect(() => {
     seciliRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [seciliId]);
 
+  // Onay artik satirin kendi icinde (SilOnayi) aliniyor - tarayicinin
+  // `window.confirm` kutusu kalkti, silme her yerde ayni iki adimla yapiliyor.
   const sil = (asset: AssetFeature) => {
-    if (window.confirm(`"${asset.properties.name}" silinsin mi?`)) {
-      deleteAsset.mutate(asset.properties.id);
-    }
+    deleteAsset.mutate(asset.properties.id, {
+      onSuccess: () => {
+        if (detayAsset?.properties.id === asset.properties.id) setDetayAsset(null);
+      },
+    });
   };
 
   return (
@@ -92,11 +106,7 @@ export default function AssetList({
           }
         >
           <option value="">Tüm tipler</option>
-          {ASSET_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {ASSET_TYPE_LABELS[t]}
-            </option>
-          ))}
+          <TipSecenekleri turler={ASSET_TYPES} />
         </select>
 
         <select
@@ -245,7 +255,14 @@ export default function AssetList({
         </ul>
       </div>
 
-      <AssetDetayModal asset={detayAsset} onKapat={() => setDetayAsset(null)} />
+      {/* Detay modali "İhbarlar > Onaylandı" listesindekiyle AYNI yetenekleri
+          sunar (ekibe yonlendirme dahil): bakim bekleyen bir varlik, hangi
+          panelden acildigina gore farkli seyler yapabiliyordu. */}
+      <AssetDetayModal
+        asset={detayAsset}
+        onKapat={() => setDetayAsset(null)}
+        {...yonetim}
+      />
     </div>
   );
 }

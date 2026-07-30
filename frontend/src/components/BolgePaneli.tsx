@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 
 import { bolgeAta, bolgeGuncelle, bolgeSil, bolgeler as bolgeleriGetir } from "../api/bolgeler";
 import type { Bolge } from "../types/bolge";
@@ -79,6 +79,12 @@ interface BolgePaneliProps {
   onSekilDuzenle?: (bolge: Bolge) => void;
   /** O an sekli duzenlenen kaydin id'si - karti isaretlemek icin. */
   sekilDuzenlenenId?: string | null;
+  /** Haritada secili olan kaydin id'si: karti vurgular ve gorunur alana
+   *  kaydirir - kullanici haritadan sectigi alani/guzergahi paneli sonradan
+   *  actiginda bulabilsin (varlik listesindeki davranisin aynisi). */
+  seciliId?: string | null;
+  /** Kaydin detay kartini acar (haritadaki popup'taki "Detay" ile ayni modal). */
+  onDetay?: (bolge: Bolge) => void;
 }
 
 /** Kaydedilmis gorev bolgeleri / guzergahlar paneli: listeler, ozellestirir
@@ -98,12 +104,21 @@ export default function BolgePaneli({
   onBolgeyeGit,
   onSekilDuzenle,
   sekilDuzenlenenId,
+  seciliId,
+  onDetay,
 }: BolgePaneliProps) {
   const queryClient = useQueryClient();
   const sorgu = useQuery({ queryKey: ["bolgeler"], queryFn: bolgeleriGetir });
   const [duzenlenen, setDuzenlenen] = useState<string | null>(null);
   const [silinecek, setSilinecek] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
+  const seciliRef = useRef<HTMLLIElement>(null);
+
+  // Haritadan secim yapildiginda (ya da panel secili bir kayitla acildiginda)
+  // ilgili karti gorunur alana kaydir.
+  useEffect(() => {
+    seciliRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [seciliId]);
 
   const tazele = () => queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
 
@@ -193,8 +208,11 @@ export default function BolgePaneli({
             render={(b) => (
               <BolgeKarti
                 key={b.id}
+                ref={seciliId === b.id ? seciliRef : undefined}
                 bolge={b}
                 ekipler={ekipler}
+                secili={seciliId === b.id}
+                onDetay={onDetay && (() => onDetay(b))}
                 gizli={gizliler.has(b.id)}
                 duzenleniyor={duzenlenen === b.id}
                 silinecek={silinecek === b.id}
@@ -293,6 +311,10 @@ function Bolum({
 interface KartProps {
   bolge: Bolge;
   ekipler?: EkipOzet[];
+  /** Haritada secili kayit - kart belirgin bir kenarlikla isaretlenir. */
+  secili?: boolean;
+  /** Detay kartini acar (verilmezse dugme cikmaz). */
+  onDetay?: () => void;
   gizli: boolean;
   duzenleniyor: boolean;
   silinecek: boolean;
@@ -309,24 +331,29 @@ interface KartProps {
   sekilDuzenleniyor?: boolean;
 }
 
-function BolgeKarti({
-  bolge,
-  ekipler,
-  gizli,
-  duzenleniyor,
-  silinecek,
-  siliniyor,
-  atamaBekliyor,
-  onGorunurlukDegis,
-  onGit,
-  onDuzenle,
-  onKaydedildi,
-  onSilIste,
-  onSilOnayla,
-  onAta,
-  onSekilDuzenle,
-  sekilDuzenleniyor,
-}: KartProps) {
+const BolgeKarti = forwardRef<HTMLLIElement, KartProps>(function BolgeKarti(
+  {
+    bolge,
+    ekipler,
+    secili,
+    onDetay,
+    gizli,
+    duzenleniyor,
+    silinecek,
+    siliniyor,
+    atamaBekliyor,
+    onGorunurlukDegis,
+    onGit,
+    onDuzenle,
+    onKaydedildi,
+    onSilIste,
+    onSilOnayla,
+    onAta,
+    onSekilDuzenle,
+    sekilDuzenleniyor,
+  },
+  ref
+) {
   const alan = bolge.tip === "alan";
   const olcu = alan
     ? bolge.alan_m2 != null
@@ -337,7 +364,14 @@ function BolgeKarti({
       : null;
 
   return (
-    <li className="border border-slate-200 bg-white">
+    <li
+      ref={ref}
+      className={`border bg-white transition ${
+        secili
+          ? "border-l-2 border-slate-300 border-l-violet-600 bg-violet-50/60"
+          : "border-slate-200"
+      }`}
+    >
       <div className="flex items-start gap-2 p-2.5">
         <button
           onClick={onGorunurlukDegis}
@@ -382,6 +416,14 @@ function BolgeKarti({
           </p>
         </button>
         <span className="flex shrink-0 flex-col items-end gap-1">
+          {onDetay && (
+            <button
+              onClick={onDetay}
+              className="text-[11px] font-medium text-slate-500 hover:text-violet-700 hover:underline"
+            >
+              Detay
+            </button>
+          )}
           <button
             onClick={onDuzenle}
             className="text-[11px] font-medium text-slate-500 hover:text-slate-800 hover:underline"
@@ -463,7 +505,7 @@ function BolgeKarti({
       )}
     </li>
   );
-}
+});
 
 /** Ad / aciklama / renk ozellestirmesi. Sekil (geometri) burada degil, karttaki
  *  "Şekli düzenle" ile HARITA UZERINDE degistirilir - bir sinir formdan degil,

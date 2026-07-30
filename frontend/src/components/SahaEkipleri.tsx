@@ -6,6 +6,7 @@ import {
   ASSET_SOURCE_LABELS,
   ASSET_TYPES,
   ASSET_TYPE_LABELS,
+  TIP_ROZET_SINIFI,
   type AssetSource,
   type AssetType,
 } from "../types/asset";
@@ -19,15 +20,7 @@ import {
   type HavuzVarlik,
   type Yaka,
 } from "../types/saha";
-import {
-  IconDrop,
-  IconInbox,
-  IconLamp,
-  IconRefresh,
-  IconTree,
-  IconUsers,
-  IconWarning,
-} from "./icons";
+import { IconInbox, IconRefresh, IconUsers, IconWarning, TIP_IKONU } from "./icons";
 
 /** Bir varlik/gorev icin uygulanabilecek islem. */
 type Islem =
@@ -36,17 +29,6 @@ type Islem =
 
 /** Havuz siralamasi: bekleme suresine gore (en eski/en yeni once). */
 type HavuzSira = "eski" | "yeni";
-
-/** Her varlik tipine ayirt edici renk + ikon: ilk bakista tur farki anlasilsin
- *  diye rozet arka plani da tipe gore degisir (issue: renkler aynidir sikayeti). */
-const TIP_STILI: Record<
-  AssetType,
-  { ikon: (p: { className?: string }) => React.ReactElement; rozet: string }
-> = {
-  agac: { ikon: IconTree, rozet: "bg-emerald-100 text-emerald-700" },
-  direk: { ikon: IconLamp, rozet: "bg-sky-100 text-sky-700" },
-  sulama: { ikon: IconDrop, rozet: "bg-cyan-100 text-cyan-700" },
-};
 
 /** Son gorulme tazeligine gore renk + insana okunur metin. */
 function tazelik(iso: string | null): { renk: string; metin: string } {
@@ -74,13 +56,14 @@ function beklemeMetni(iso: string): string {
   return `${Math.floor(farkSn / 86400)} gün önce bakıma alındı`;
 }
 
-/** Tipe gore renkli, ikonlu kare rozet (satirlarin basinda). */
+/** Tur grubuna gore renkli, ikonlu kare rozet (satirlarin basinda). Renk ve
+ *  ikon ortak paletten gelir (types/asset.ts + icons.tsx) - bu dosya kendi
+ *  kopyasini tutuyordu ve 13 ture cikan sozlukte guncel kalamazdi. */
 function TipRozet({ type }: { type: AssetType }) {
-  const s = TIP_STILI[type];
-  const Ikon = s.ikon;
+  const Ikon = TIP_IKONU[type];
   return (
     <span
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${s.rozet}`}
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${TIP_ROZET_SINIFI[type]}`}
       title={ASSET_TYPE_LABELS[type]}
     >
       <Ikon className="h-4 w-4" />

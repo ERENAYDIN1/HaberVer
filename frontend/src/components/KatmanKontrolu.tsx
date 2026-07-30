@@ -27,6 +27,11 @@ export interface AltFiltre {
   etiket: string;
   /** Haritadaki isaretci rengiyle ayni renk noktasi (lejant). */
   renk: string;
+  /** Haritada TEK bir renkle cizilmeyen secenekler icin dilimli swatch
+   *  (orn. "İyi" varliklar tur/grup rengiyle cizilir, tek bir "iyi rengi"
+   *  yoktur). Verilirse `renk` yerine bu dilimler gosterilir; onceden burada
+   *  haritada hic basilmayan bir yesil (#10b981) duruyordu. */
+  renkler?: string[];
   secili: boolean;
   sayi: number;
 }
@@ -38,6 +43,16 @@ export interface AltGrup {
   baslik?: string;
   secenekler: AltFiltre[];
   onSec: (anahtar: string) => void;
+}
+
+/** Birden fazla rengi keskin geciste yan yana dizen swatch arka plani
+ *  ("bu secenek tek bir renkle cizilmez" anlamini tasir). */
+function dilimliArkaPlan(renkler: string[]): string {
+  const dilim = 100 / renkler.length;
+  const duraklar = renkler
+    .map((r, i) => `${r} ${i * dilim}% ${(i + 1) * dilim}%`)
+    .join(", ");
+  return `linear-gradient(135deg, ${duraklar})`;
 }
 
 interface KatmanTanimi {
@@ -196,7 +211,8 @@ export default function KatmanKontrolu({
 
               {/* Alt-filtreler: dikey liste, sola girintili, hafif ayrac cizgisiyle. */}
               {altlar && genisletilmis && (
-                <div className="mb-1 ml-4 border-l border-slate-200 pl-1.5">
+                // 13 varlik turu + durumlar listeyi uzattigindan kaydirmali.
+                <div className="mb-1 ml-4 max-h-[15rem] overflow-y-auto border-l border-slate-200 pl-1.5">
                   {altlar.map((grup, i) => (
                     <div key={grup.baslik ?? i} className={i > 0 ? "mt-1" : undefined}>
                       {grup.baslik && (
@@ -218,7 +234,15 @@ export default function KatmanKontrolu({
                             className="flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-[4px] border transition"
                             style={{
                               borderColor: alt.secili ? alt.renk : "#cbd5e1",
-                              backgroundColor: alt.secili ? alt.renk : "transparent",
+                              ...(alt.renkler
+                                ? {
+                                    background: alt.secili
+                                      ? dilimliArkaPlan(alt.renkler)
+                                      : "transparent",
+                                  }
+                                : {
+                                    backgroundColor: alt.secili ? alt.renk : "transparent",
+                                  }),
                             }}
                           >
                             {alt.secili && <IconCheck className="h-2.5 w-2.5 text-white" />}

@@ -1,4 +1,8 @@
+import { useEffect, useState } from "react";
+
+import { bolgeAta, bolgeSil } from "../api/bolgeler";
 import { BOLGE_TIP_ETIKETLERI, type Bolge } from "../types/bolge";
+import { YAKA_KISA, type EkipOzet, type Yaka } from "../types/saha";
 import {
   alanEtiketi,
   cokHalkaliAlanM2,
@@ -6,6 +10,7 @@ import {
   poligonMerkezi,
   enBuyukHalkaMerkezi,
 } from "../utils/geo";
+import { AksiyonButonu, AksiyonSeridi, SilOnayi } from "./Aksiyonlar";
 import { IconCheck, IconLasso, IconRoute, IconUsers } from "./icons";
 import Modal from "./Modal";
 
@@ -16,6 +21,14 @@ interface BolgeDetayModalProps {
   onSekilDuzenle?: (bolge: Bolge) => void;
   /** Kaydin uzerine ucar. */
   onGit?: (bolge: Bolge) => void;
+  /** Ekibe aktarma/silme yetkisi (personel). */
+  yonetebilir?: boolean;
+  /** Atama listesini besleyen saha ekipleri. */
+  ekipler?: EkipOzet[];
+  /** Atama degisince (ust bilesen ["bolgeler"] sorgusunu tazeler). */
+  onDegisti?: () => void;
+  /** Silme basarili olunca (ust bilesen modali kapatir, secimi birakir). */
+  onSilindi?: () => void;
 }
 
 function tarih(deger: string | null | undefined): string | null {
@@ -30,7 +43,50 @@ export default function BolgeDetayModal({
   onKapat,
   onSekilDuzenle,
   onGit,
+  yonetebilir = false,
+  ekipler,
+  onDegisti,
+  onSilindi,
 }: BolgeDetayModalProps) {
+  const [islemde, setIslemde] = useState(false);
+  const [hata, setHata] = useState<string | null>(null);
+
+  // Modal her zaman monte kalir (bolge yokken null doner), bu yuzden kayit
+  // degisince islem durumu elle sifirlanir - yoksa bir onceki silme/atama
+  // isleminin "islemde" durumu yeni kayda tasinir. (Acik silme onayini
+  // SilOnayi kendi `sifirlaAnahtari` prop'uyla birakir.)
+  useEffect(() => {
+    setIslemde(false);
+    setHata(null);
+  }, [bolge?.id]);
+
+  const ata = async (workerId: string | null) => {
+    if (!bolge) return;
+    setIslemde(true);
+    setHata(null);
+    try {
+      await bolgeAta(bolge.id, workerId);
+      onDegisti?.();
+    } catch (e) {
+      setHata((e as Error).message);
+    } finally {
+      setIslemde(false);
+    }
+  };
+
+  const sil = async () => {
+    if (!bolge) return;
+    setIslemde(true);
+    setHata(null);
+    try {
+      await bolgeSil(bolge.id);
+      onSilindi?.();
+    } catch (e) {
+      setHata((e as Error).message);
+      setIslemde(false);
+    }
+  };
+
   if (!bolge) return null;
 
   const cizgi = bolge.tip === "cizgi";
@@ -106,30 +162,66 @@ export default function BolgeDetayModal({
             ))}
         </dl>
 
-        <div className="flex gap-2 border-t border-slate-200 pt-3">
+        {/* Ekibe aktarma: haritadaki alan/cizgi -> popup -> "Detay" yolundan da
+            yonlendirme yapilabilsin (paneldeki kartla ayni islem). */}
+        {yonetebilir && (
+          <div className="flex items-center gap-2 border-t border-slate-200 pt-3">
+            <label className="text-xs text-slate-500">
+              {cizgi ? "Güzergâh ekibi" : "Görev ekibi"}
+            </label>
+            <select
+              value={bolge.worker_id ?? ""}
+              disabled={islemde}
+              onChange={(e) => ata(e.target.value || null)}
+              className="min-w-0 flex-1 border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-emerald-500 disabled:opacity-50"
+            >
+              <option value="">Atanmamış</option>
+              {(ekipler ?? []).map((ekip) => (
+                <option key={ekip.id} value={ekip.id}>
+                  {ekip.full_name || ekip.email}
+                  {ekip.yaka ? ` · ${YAKA_KISA[ekip.yaka as Yaka] ?? ekip.yaka}` : ""}
+                </option>
+              ))}
+            </select>
+            {islemde && <span className="text-[11px] text-slate-400">…</span>}
+          </div>
+        )}
+
+        {hata && <p className="text-xs text-red-600">{hata}</p>}
+
+        {/* Islem seridi varlik/ihbar detay modalleriyle ayni: soldan islemler,
+            saga itilmis iki adimli silme. */}
+        <AksiyonSeridi>
           {onGit && (
-            <button
+            <AksiyonButonu
               onClick={() => {
                 onGit(bolge);
                 onKapat();
               }}
-              className="flex-1 border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
             >
               Haritada göster
-            </button>
+            </AksiyonButonu>
           )}
           {onSekilDuzenle && (
-            <button
+            <AksiyonButonu
+              tur="mor"
               onClick={() => {
                 onSekilDuzenle(bolge);
                 onKapat();
               }}
-              className="flex-1 bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-violet-500"
             >
               Şekli Düzenle
-            </button>
+            </AksiyonButonu>
           )}
-        </div>
+          {yonetebilir && onSilindi && (
+            <SilOnayi
+              ad={bolge.ad}
+              sifirlaAnahtari={bolge.id}
+              siliniyor={islemde}
+              onSil={sil}
+            />
+          )}
+        </AksiyonSeridi>
       </div>
     </Modal>
   );

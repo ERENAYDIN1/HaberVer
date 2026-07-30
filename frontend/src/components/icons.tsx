@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 
+import { TIP_GLIF_PATH } from "../data/tipGlifleri";
 import type { AssetType } from "../types/asset";
 
 interface IconProps {
@@ -17,13 +18,20 @@ const temelOzellikler = {
   strokeLinejoin: "round" as const,
 };
 
-export function IconTree({ className }: IconProps) {
+/** Bir turun ham glif dizgisini (data/tipGlifleri.ts) cizen ic bilesen.
+ *  Dizgiler derleme zamani sabitleri oldugundan enjeksiyon yuzeyi yok. */
+function TipGlifi({ ic, className }: IconProps & { ic: string }) {
   return (
-    <svg {...temelOzellikler} className={className}>
-      <path d="M12 3 6.5 11h2.7L5 18h6M12 3l5.5 8h-2.7L19 18h-6" />
-      <path d="M12 14v7" />
-    </svg>
+    <svg
+      {...temelOzellikler}
+      className={className}
+      dangerouslySetInnerHTML={{ __html: ic }}
+    />
   );
+}
+
+export function IconTree({ className }: IconProps) {
+  return <TipGlifi ic={TIP_GLIF_PATH.agac} className={className} />;
 }
 
 /**
@@ -66,12 +74,7 @@ export function IconMarkaLogo({ className }: IconProps) {
 }
 
 export function IconLamp({ className }: IconProps) {
-  return (
-    <svg {...temelOzellikler} className={className}>
-      <path d="M12 2v3M8.5 5h7l-1.3 4.5h-4.4L8.5 5z" />
-      <path d="M12 9.5V21M9 21h6" />
-    </svg>
-  );
+  return <TipGlifi ic={TIP_GLIF_PATH.direk} className={className} />;
 }
 
 /** Yol tarifi / navigasyon - yonlu ok. */
@@ -85,12 +88,7 @@ export function IconRoute({ className }: IconProps) {
 
 /** Sulama sistemi - su damlasi. */
 export function IconDrop({ className }: IconProps) {
-  return (
-    <svg {...temelOzellikler} className={className}>
-      <path d="M12 3s6 6.3 6 10.5a6 6 0 0 1-12 0C6 9.3 12 3 12 3z" />
-      <path d="M9.5 13.5a2.5 2.5 0 0 0 2.5 2.5" />
-    </svg>
-  );
+  return <TipGlifi ic={TIP_GLIF_PATH.sulama} className={className} />;
 }
 
 export function IconPin({ className }: IconProps) {
@@ -389,9 +387,10 @@ export function IconMenu({ className }: IconProps) {
 
 /** Varlik turunun ikon karsiligi - liste satirlari, lejant ve bildirimler ayni
  *  esleme icin kendi kopyalarini tutuyordu. Turun rengi icin bkz.
- *  types/asset.ts `TIP_RENGI`. */
-export const TIP_IKONU: Record<AssetType, TipIkonu> = {
-  agac: IconTree,
-  direk: IconLamp,
-  sulama: IconDrop,
-};
+ *  types/asset.ts `TIP_RENGI`, ham glifi icin `TIP_GLIF_PATH` (yukarida). */
+export const TIP_IKONU: Record<AssetType, TipIkonu> = Object.fromEntries(
+  Object.entries(TIP_GLIF_PATH).map(([tur, ic]): [string, TipIkonu] => [
+    tur,
+    ({ className }: IconProps) => <TipGlifi ic={ic} className={className} />,
+  ])
+) as Record<AssetType, TipIkonu>;

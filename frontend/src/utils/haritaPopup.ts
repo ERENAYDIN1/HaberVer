@@ -32,7 +32,38 @@ import { kacis } from "./html";
  *  piksele oturur ve yazi keskin kalir. (200 + ~20 padding = 220, cift.) */
 export const POPUP_GENISLIK = "200px";
 
-export function popupIcerigi(asset: AssetFeature): string {
+/** Popup'un alt dugme seridi: `Detay` her zaman; ikinci (dolu) dugme yalnizca
+ *  yetkiliyse ve baglama gore degisir - varlikta "Düzenle", onaylanmis ihbarda
+ *  "Yönet" (ondan olusan varligin atama modali), reddedilmis ihbarda "Reddi
+ *  Geri Al". Iki dugme yan yana esit genislikte durur (bolge popup'iyla ayni
+ *  dil). */
+interface PopupDugmesi {
+  /** Tiklama dinleyicisinin baglanacagi sinif (MapView bu siniftan yakalar). */
+  sinif: string;
+  etiket: string;
+  /** Yikici/geri alici islemler icin ayri vurgu rengi (varsayilan: ana renk). */
+  renk?: string;
+}
+
+function detayDugmeleri(renk: string, ikinci?: PopupDugmesi | null): string {
+  const detay =
+    `<button type="button" class="popup-detay-btn" style="` +
+    `flex:1; padding:5px 0; border:1px solid ${renk}; border-radius:6px; ` +
+    `background:#fff; color:${renk}; font-size:11px; font-weight:600; ` +
+    `cursor:pointer;">Detay</button>`;
+  const ek = ikinci
+    ? `<button type="button" class="${ikinci.sinif}" style="` +
+      `flex:1; padding:5px 0; border:1px solid ${ikinci.renk ?? renk}; border-radius:6px; ` +
+      `background:${ikinci.renk ?? renk}; color:#fff; font-size:11px; font-weight:600; ` +
+      `cursor:pointer;">${kacis(ikinci.etiket)}</button>`
+    : "";
+  return `<div style="display:flex; gap:6px; margin-top:8px">${detay}${ek}</div>`;
+}
+
+export function popupIcerigi(
+  asset: AssetFeature,
+  duzenlenebilir = false
+): string {
   const { name, type, status, source, brand_model, install_date, photo_url } =
     asset.properties;
   const bakim = status === "bakim_lazim";
@@ -74,10 +105,10 @@ export function popupIcerigi(asset: AssetFeature): string {
       </div>
       <div style="color:#64748b; font-size:11px; margin-top:6px">${satirlar}</div>
       <div class="popup-konum" style="color:#64748b; font-size:11px; margin-top:2px"></div>
-      <button type="button" class="popup-detay-btn" style="
-        margin-top:8px; width:100%; padding:5px 0; border:1px solid #059669;
-        border-radius:6px; background:#fff; color:#059669; font-size:11px;
-        font-weight:600; cursor:pointer;">Detayları Gör</button>
+      ${detayDugmeleri(
+        "#059669",
+        duzenlenebilir ? { sinif: "popup-duzenle-btn", etiket: "Düzenle" } : null
+      )}
     </div>
   `;
 }
@@ -99,7 +130,11 @@ export async function konumSatiriDoldur(
   }
 }
 
-export function ihbarPopupIcerigi(report: ReportFeature): string {
+/** Ihbar isaretcisinin popup'i. `yetkili` (personel) ise ihbarin durumuna gore
+ *  ikinci bir islem dugmesi cikar - bekleyen ihbarda karar zaten "Detay"daki
+ *  modalde verilir, onaylanmis ihbarda ondan olusan varligin yonetimi (ekibe
+ *  atama/degistirme), reddedilmis ihbarda reddi geri alma. */
+export function ihbarPopupIcerigi(report: ReportFeature, yetkili = false): string {
   const { name, type, status, note, photo_url } = report.properties;
   const foto = fotoUrl(photo_url);
   const durumRenk: Record<string, { bg: string; fg: string }> = {
@@ -108,6 +143,14 @@ export function ihbarPopupIcerigi(report: ReportFeature): string {
     reddedildi: { bg: "#fee2e2", fg: "#991b1b" },
   };
   const dr = durumRenk[status] ?? durumRenk.beklemede;
+
+  let ikinciDugme: PopupDugmesi | null = null;
+  if (yetkili && status === "onaylandi") {
+    // Ayni islem ihbar detay modalinde de var; iki yerde AYNI ad kullanilir.
+    ikinciDugme = { sinif: "popup-varlik-btn", etiket: "Varlığı Yönet", renk: "#059669" };
+  } else if (yetkili && status === "reddedildi") {
+    ikinciDugme = { sinif: "popup-geri-al-btn", etiket: "Reddi Geri Al", renk: "#e11d48" };
+  }
 
   return `
     <div style="font-family: system-ui, sans-serif; width: ${POPUP_GENISLIK}">
@@ -130,10 +173,7 @@ export function ihbarPopupIcerigi(report: ReportFeature): string {
           ? `<div style="color:#64748b; font-size:11px; margin-top:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden">${kacis(note)}</div>`
           : ""
       }
-      <button type="button" class="popup-detay-btn" style="
-        margin-top:8px; width:100%; padding:5px 0; border:1px solid #9333ea;
-        border-radius:6px; background:#fff; color:#9333ea; font-size:11px;
-        font-weight:600; cursor:pointer;">Detayları Gör</button>
+      ${detayDugmeleri("#9333ea", ikinciDugme)}
     </div>
   `;
 }

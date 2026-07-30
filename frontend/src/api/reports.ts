@@ -40,8 +40,14 @@ export function listReports(status?: ReportStatus) {
   return istek<ReportFeatureCollection>(`/reports${q}`);
 }
 
-export function approveReport(id: string) {
-  return istek<ReportFeature>(`/reports/${id}/onayla`, { method: "POST" });
+/** Ihbari onaylar (bakim bekleyen bir varlik olusur). `type` verilirse personel
+ *  vatandasin sectigi turu duzeltmis olur - hem olusan varlik hem arsivlenen
+ *  ihbar kaydi bu turle yazilir. Verilmezse vatandasin turu aynen kabul edilir. */
+export function approveReport(id: string, type?: AssetType) {
+  return istek<ReportFeature>(`/reports/${id}/onayla`, {
+    method: "POST",
+    ...(type ? { body: JSON.stringify({ type }) } : {}),
+  });
 }
 
 export function rejectReport(id: string, review_note?: string) {
@@ -49,4 +55,10 @@ export function rejectReport(id: string, review_note?: string) {
     method: "POST",
     body: JSON.stringify({ review_note: review_note || null }),
   });
+}
+
+/** Reddedilen bir ihbarin reddini geri alir: ihbar tekrar "beklemede" olur ve
+ *  ret nedeni/inceleyen bilgisi temizlenir (yalnizca personel). */
+export function reopenReport(id: string) {
+  return istek<ReportFeature>(`/reports/${id}/geri-al`, { method: "POST" });
 }

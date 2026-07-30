@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 
 import { fotoUrl } from "../api/reports";
 import { ekibeAta, gorevDurumu, gorevGeriAl } from "../api/saha";
+import { useAuth } from "../auth/AuthContext";
+import { useDeleteAsset, useRepairAsset } from "../hooks/useAssets";
 import { useKonumCozumu } from "../hooks/useSinirlar";
 import {
   ASSET_SOURCE_LABELS,
@@ -18,6 +20,7 @@ import {
   type EkipOzet,
   type Yaka,
 } from "../types/saha";
+import { AksiyonButonu, AksiyonSeridi, SilOnayi } from "./Aksiyonlar";
 import { IconCheck } from "./icons";
 import Modal from "./Modal";
 
@@ -30,6 +33,56 @@ interface AssetDetayModalProps {
   ekipler?: EkipOzet[];
   /** Basarili atama sonrasi (liste/ekip ozetini tazelemek icin). */
   onAtandi?: () => void;
+  /** Verilirse modalda "Düzenle" cikar (formu acmak ust bilesenin isi: iki
+   *  modal ust uste binmesin diye detay kapatilip duzenleme acilir). */
+  onDuzenle?: (asset: AssetFeature) => void;
+  /** Verilirse "Sil" cikar; silme bu modalin icinde yapilir, basarili olunca
+   *  cagrilir (ust bilesen modali kapatip secimi birakir). */
+  onSilindi?: () => void;
+}
+
+/** Bir varligin bu modaldan yonetilebilmesi icin ust bilesenlerin gecmesi
+ *  gereken ORTAK prop kumesi. Tek yerde durur ki "Varlıklar" listesi,
+ *  "İhbarlar > Onaylandı" listesi ve haritadaki isaretci ayni yetenekleri
+ *  sunsun - eskiden her cagri yeri farkli bir alt kumeyi geciyor, ayni varlik
+ *  acildigi yere gore bazen atanabiliyor bazen salt okunur oluyordu. */
+export interface VarlikYonetimProplari {
+  atayabilir: boolean;
+  ekipler?: EkipOzet[];
+  onAtandi: () => void;
+  onDuzenle?: (asset: AssetFeature) => void;
+  onSilindi: () => void;
+}
+
+/** Yukaridaki kumeyi tek yerde uretir; "Varlıklar" ve "İhbarlar > Onaylandı"
+ *  panelleri bunu kullandigi icin ikisi ayrisamaz. `detayKapat` iki modalin
+ *  ust uste binmesini onler (duzenleme formu acilirken detay kapanir). */
+export function useVarlikYonetimi({
+  ekipler,
+  onDuzenle,
+  detayKapat,
+}: {
+  ekipler?: EkipOzet[];
+  /** Duzenleme formunu acan ust bilesen isi (yoksa "Düzenle" cikmaz). */
+  onDuzenle?: (asset: AssetFeature) => void;
+  detayKapat: () => void;
+}): VarlikYonetimProplari {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const yetkili = user?.role !== "saha_calisani";
+  return {
+    atayabilir: yetkili,
+    ekipler,
+    onAtandi: () => queryClient.invalidateQueries({ queryKey: ["saha"] }),
+    onDuzenle:
+      yetkili && onDuzenle
+        ? (asset) => {
+            detayKapat();
+            onDuzenle(asset);
+          }
+        : undefined,
+    onSilindi: detayKapat,
+  };
 }
 
 /** Bir varligin tum detaylarini (foto dahil) kucuk bir pop up icinde gosterir.
@@ -41,10 +94,20 @@ export default function AssetDetayModal({
   atayabilir = false,
   ekipler,
   onAtandi,
+  onDuzenle,
+  onSilindi,
 }: AssetDetayModalProps) {
   const koord = asset ? asset.geometry.coordinates : null;
   const { data: konum } = useKonumCozumu(koord ? koord[1] : null, koord ? koord[0] : null);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const deleteAsset = useDeleteAsset();
+  const repairAsset = useRepairAsset();
+  /** Islem seridi, modal NEREDEN acilirsa acilsin ayni: liste satirindaki
+   *  kisayollar (Detay/Tamir/Düzenle/Sil) ile haritadaki popup ayni modale
+   *  ciktigi icin ikisinde de tam takim gorunur. */
+  const islemModu = Boolean(onDuzenle || onSilindi);
+  const tamCrudYetkisi = user?.role !== "saha_calisani";
 
   const [seciliEkip, setSeciliEkip] = useState("");
   const [atamaHatasi, setAtamaHatasi] = useState<string | null>(null);
@@ -74,7 +137,8 @@ export default function AssetDetayModal({
     seciliEkipNesnesi?.yaka && varlikYaka && seciliEkipNesnesi.yaka !== varlikYaka,
   );
 
-  // Varlik degisince atama durumunu sifirla.
+  // Varlik degisince atama durumunu sifirla (bekleyen silme onayini SilOnayi
+  // kendi `sifirlaAnahtari` prop'uyla birakir).
   useEffect(() => {
     setSeciliEkip("");
     setAtamaHatasi(null);
@@ -214,6 +278,45 @@ export default function AssetDetayModal({
             </dd>
           </div>
         </dl>
+
+        {/* Islem seridi: tamir/duzenleme/silme burada toplanir. Modal NEREDEN
+            acilirsa acilsin ayni serit gorunur - "Varlıklar" listesi,
+            "İhbarlar > Onaylandı" listesi ve haritadaki isaretci ayni ekrana
+            cikar (bkz. useVarlikYonetimi). */}
+        {islemModu && (
+          <AksiyonSeridi>
+            {bakim && (
+              <AksiyonButonu
+                tur="birincil"
+                onClick={() =>
+                  repairAsset.mutate(p.id, { onSuccess: () => onKapat() })
+                }
+                disabled={repairAsset.isPending}
+              >
+                <IconCheck className="h-3.5 w-3.5" />
+                {repairAsset.isPending ? "…" : "Tamir Edildi"}
+              </AksiyonButonu>
+            )}
+            {tamCrudYetkisi && onDuzenle && (
+              <AksiyonButonu onClick={() => onDuzenle(asset)}>Düzenle</AksiyonButonu>
+            )}
+            {tamCrudYetkisi && onSilindi && (
+              <SilOnayi
+                ad={p.name}
+                sifirlaAnahtari={p.id}
+                siliniyor={deleteAsset.isPending}
+                onSil={() =>
+                  deleteAsset.mutate(p.id, { onSuccess: () => onSilindi() })
+                }
+              />
+            )}
+            {(deleteAsset.isError || repairAsset.isError) && (
+              <p className="w-full text-xs text-red-600">
+                {(deleteAsset.error ?? repairAsset.error)?.message}
+              </p>
+            )}
+          </AksiyonSeridi>
+        )}
 
         {atamaGoster && (
           <div className="border-t border-slate-200 pt-3">

@@ -1,7 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { approveReport, listReports, rejectReport } from "../api/reports";
+import {
+  approveReport,
+  listReports,
+  rejectReport,
+  reopenReport,
+} from "../api/reports";
 import { useAuth } from "../auth/AuthContext";
 import { useDeleteAsset, useRepairAsset } from "../hooks/useAssets";
 import {
@@ -10,7 +15,8 @@ import {
   type AssetFeatureCollection,
 } from "../types/asset";
 import { REPORT_STATUSES, type ReportFeature, type ReportStatus } from "../types/report";
-import AssetDetayModal from "./AssetDetayModal";
+import type { EkipOzet } from "../types/saha";
+import AssetDetayModal, { useVarlikYonetimi } from "./AssetDetayModal";
 import AssetForm from "./AssetForm";
 import IhbarSatiri from "./IhbarSatiri";
 import Modal from "./Modal";
@@ -58,6 +64,10 @@ interface IhbarPaneliProps {
    *  secimiyle (harita + detay karti) ayni kanali kullanir. */
   seciliVarlikId?: string | null;
   onVarlikSec: (id: string) => void;
+  /** Saha ekipleri - "Onaylandı" listesindeki bir varligin detayindan da ekibe
+   *  atama/atanan ekibi degistirme yapilabilsin diye (haritadaki isaretcinin
+   *  "Yönet" dugmesiyle ayni yetenek). */
+  ekipler?: EkipOzet[];
 }
 
 export default function IhbarPaneli({
@@ -70,6 +80,7 @@ export default function IhbarPaneli({
   ihbarVarlikSorgu,
   seciliVarlikId,
   onVarlikSec,
+  ekipler,
 }: IhbarPaneliProps) {
   const { user } = useAuth();
   const tamCrudYetkisi = user?.role !== "saha_calisani";
@@ -78,6 +89,12 @@ export default function IhbarPaneli({
   const [duzenlenen, setDuzenlenen] = useState<AssetFeature | null>(null);
   const [detayAsset, setDetayAsset] = useState<AssetFeature | null>(null);
   const seciliVarlikRef = useRef<HTMLLIElement>(null);
+  // "Varlıklar" panelindekiyle ayni yonetim kumesi (bkz. useVarlikYonetimi).
+  const yonetim = useVarlikYonetimi({
+    ekipler,
+    onDuzenle: setDuzenlenen,
+    detayKapat: () => setDetayAsset(null),
+  });
 
   const queryClient = useQueryClient();
   const [islemHatasi, setIslemHatasi] = useState<string | null>(null);
@@ -144,10 +161,29 @@ export default function IhbarPaneli({
     }
   };
 
-  const sil = (asset: AssetFeature) => {
-    if (window.confirm(`"${asset.properties.name}" silinsin mi?`)) {
-      deleteAsset.mutate(asset.properties.id);
+  /** Reddi geri al: ihbar tekrar "beklemede"ye doner. Alt sekme burada
+   *  degistirilmez - App'teki secim/durum senkronu (secili ihbar hangi
+   *  durumdaysa o sekme acilir) kaydi Bekleyen listesinde secili gosterir. */
+  const geriAl = async (id: string) => {
+    setIslemdeki(id);
+    setIslemHatasi(null);
+    try {
+      await reopenReport(id);
+      await ihbarlariTazele();
+    } catch (e) {
+      setIslemHatasi((e as Error).message);
+    } finally {
+      setIslemdeki(null);
     }
+  };
+
+  // Onay satirin kendi icinde (SilOnayi) alinir - bkz. AssetList'teki ikizi.
+  const sil = (asset: AssetFeature) => {
+    deleteAsset.mutate(asset.properties.id, {
+      onSuccess: () => {
+        if (detayAsset?.properties.id === asset.properties.id) setDetayAsset(null);
+      },
+    });
   };
 
   // Haritadan secim yapildiginda "Onaylandı" listesindeki karti gorunur
@@ -292,6 +328,7 @@ export default function IhbarPaneli({
                   onayReddetYetkisi={tamCrudYetkisi}
                   onOnayla={onayla}
                   onReddet={reddet}
+                  onGeriAl={geriAl}
                   islemPending={islemdeki === ih.properties.id}
                 />
               );
@@ -300,7 +337,11 @@ export default function IhbarPaneli({
         </div>
       )}
 
-      <AssetDetayModal asset={detayAsset} onKapat={() => setDetayAsset(null)} />
+      <AssetDetayModal
+        asset={detayAsset}
+        onKapat={() => setDetayAsset(null)}
+        {...yonetim}
+      />
 
       <Modal
         acik={duzenlenen !== null}

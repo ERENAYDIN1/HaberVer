@@ -6,6 +6,7 @@ import IhbarDurumRozeti from "../components/IhbarDurumRozeti";
 import KonumSecMap from "../components/KonumSecMap";
 import { inputClass, labelClass } from "../utils/formSiniflari";
 import { IconCamera, IconLogout, IconPin, IconTree } from "../components/icons";
+import TipSecenekleri from "../components/TipSecenekleri";
 import { ASSET_TYPES, ASSET_TYPE_LABELS, type AssetType } from "../types/asset";
 import type { ReportFeature } from "../types/report";
 
@@ -14,7 +15,10 @@ export default function VatandasEkran() {
   const { user, cikisYap } = useAuth();
 
   const [ad, setAd] = useState("");
-  const [tip, setTip] = useState<AssetType>("agac");
+  // Bilincli olarak BOS baslar: 13 tur arasinda sessiz bir varsayilan (eskiden
+  // "agac"), kullanici tur alanini hic fark etmeden gonderdiginde yanlis
+  // veri uretiyordu. Gonderimde zorunlu alan olarak dogrulanir.
+  const [tip, setTip] = useState<AssetType | "">("");
   const [not, setNot] = useState("");
   const [konum, setKonum] = useState<[number, number] | null>(null);
   const [ucus, setUcus] = useState<{
@@ -81,7 +85,7 @@ export default function VatandasEkran() {
 
   const formuSifirla = () => {
     setAd("");
-    setTip("agac");
+    setTip("");
     setNot("");
     setKonum(null);
     setFoto(null);
@@ -93,6 +97,7 @@ export default function VatandasEkran() {
     setHata(null);
     setBasari(false);
     if (!ad.trim()) return setHata("Lütfen bir başlık/isim girin");
+    if (!tip) return setHata("Lütfen bir tür seçin");
     if (!not.trim()) return setHata("Lütfen bir açıklama girin");
     if (!konum) return setHata("Lütfen bir konum seçin");
     if (!foto) return setHata("Lütfen bir fotoğraf ekleyin");
@@ -174,20 +179,23 @@ export default function VatandasEkran() {
 
             <div>
               <label className={labelClass} htmlFor="tip">
-                Tür
+                Tür <span className="text-red-500">*</span>
               </label>
               <select
                 id="tip"
                 className={inputClass}
                 value={tip}
-                onChange={(e) => setTip(e.target.value as AssetType)}
+                onChange={(e) => setTip(e.target.value as AssetType | "")}
               >
-                {ASSET_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {ASSET_TYPE_LABELS[t]}
-                  </option>
-                ))}
+                <option value="">Seçiniz…</option>
+                <TipSecenekleri turler={ASSET_TYPES} />
               </select>
+              {tip === "diger" && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Listede bulamadıysanız sorun değil — ne olduğunu başlıkta ve
+                  açıklamada yazmanız yeterli.
+                </p>
+              )}
             </div>
 
             <div>

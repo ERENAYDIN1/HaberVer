@@ -21,6 +21,7 @@ const ACTION_STIL: Record<
   asset_deleted: { ikon: IconX, rozet: "bg-red-100 text-red-700" },
   report_approved: { ikon: IconCheck, rozet: "bg-emerald-100 text-emerald-700" },
   report_rejected: { ikon: IconX, rozet: "bg-red-100 text-red-700" },
+  report_reopened: { ikon: IconHistory, rozet: "bg-amber-100 text-amber-700" },
   user_created: { ikon: IconUsers, rozet: "bg-indigo-100 text-indigo-700" },
   user_updated: { ikon: IconUsers, rozet: "bg-blue-100 text-blue-700" },
   assignment_created: { ikon: IconUsers, rozet: "bg-indigo-100 text-indigo-700" },

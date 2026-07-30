@@ -17,25 +17,17 @@ import KonumSecMap, {
 } from "../components/KonumSecMap";
 import {
   IconCheck,
-  IconDrop,
-  IconLamp,
   IconLasso,
   IconLogout,
   IconPin,
   IconRoute,
-  IconTree,
   IconWarning,
+  TIP_IKONU,
 } from "../components/icons";
-import { ASSET_TYPE_LABELS, type AssetType } from "../types/asset";
+import { ASSET_TYPE_LABELS } from "../types/asset";
 import type { Bolge } from "../types/bolge";
 import { alanEtiketi, mesafeEtiketi, mesafeMetre } from "../utils/geo";
 import { kacis } from "../utils/html";
-
-const TIP_IKON: Record<AssetType, (p: { className?: string }) => React.ReactElement> = {
-  agac: IconTree,
-  direk: IconLamp,
-  sulama: IconDrop,
-};
 
 const GOREV_RENGI = "#d97706"; // amber - "iş bekliyor"
 
@@ -473,7 +465,7 @@ export default function SahaEkran() {
                 </li>
                 {siraliGorevler.map(({ gorev: g, mesafe }, sira) => {
                   const p = g.properties;
-                  const Ikon = TIP_IKON[p.type];
+                  const Ikon = TIP_IKONU[p.type];
                   const fotoSrc = fotoUrl(p.photo_url);
                   return (
                     <li
@@ -649,7 +641,7 @@ export default function SahaEkran() {
                   ))}
                   {tamamlananlar.map((g) => {
                     const p = g.properties;
-                    const Ikon = TIP_IKON[p.type];
+                    const Ikon = TIP_IKONU[p.type];
                     return (
                       <li
                         key={p.assignment_id}

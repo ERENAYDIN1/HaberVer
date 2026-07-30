@@ -6,10 +6,10 @@ import { useKonumCozumu } from "../hooks/useSinirlar";
 import {
   ASSET_STATUSES,
   ASSET_STATUS_LABELS,
-  ASSET_TYPE_LABELS,
   KAYITLI_ASSET_TYPES,
 } from "../types/asset";
 import type { AssetFeature, AssetStatus, AssetType } from "../types/asset";
+import TipSecenekleri from "./TipSecenekleri";
 import { inputClass, labelClass } from "../utils/formSiniflari";
 
 interface AssetFormValues {
@@ -59,12 +59,13 @@ const errorClass = "mt-1 text-xs text-red-600";
 export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) {
   const duzenlemeModu = asset !== undefined;
 
-  // Kayitli varlik olarak yalnizca KAYITLI_ASSET_TYPES eklenebilir.
-  // Duzenleme modunda mevcut varligin tipi listede yoksa basa eklenir ki
-  // secim bozulmasin.
+  // Kayitli varlik olarak yalnizca KAYITLI_ASSET_TYPES eklenebilir ("Diğer"
+  // yalnizca ihbardan gelir). Duzenleme modunda mevcut varligin tipi listede
+  // yoksa (orn. ihbardan dogmus bir "Diğer" varligi) eklenir ki secim
+  // bozulmasin; gruplu listede kendi grubunun altinda gorunur.
   const tipSecenekleri: AssetType[] = [...KAYITLI_ASSET_TYPES];
   if (asset && !tipSecenekleri.includes(asset.properties.type)) {
-    tipSecenekleri.unshift(asset.properties.type);
+    tipSecenekleri.push(asset.properties.type);
   }
 
   const {
@@ -158,11 +159,7 @@ export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) 
             Tip
           </label>
           <select id="type" className={inputClass} {...register("type")}>
-            {tipSecenekleri.map((t) => (
-              <option key={t} value={t}>
-                {ASSET_TYPE_LABELS[t]}
-              </option>
-            ))}
+            <TipSecenekleri turler={tipSecenekleri} />
           </select>
         </div>
         <div>

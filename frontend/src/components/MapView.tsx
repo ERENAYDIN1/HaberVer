@@ -8,6 +8,7 @@ import type { TamamlananAlan } from "../types/alan";
 import type { Bolge, SekilDuzenleme } from "../types/bolge";
 import { TIP_RENGI, TIP_RENGI_VARSAYILAN } from "../types/asset";
 import type { AssetFeatureCollection } from "../types/asset";
+import { IHBAR_DURUM_RENGI, REPORT_STATUSES } from "../types/report";
 import type { ReportFeatureCollection } from "../types/report";
 import type { EkipGorevleri } from "../types/saha";
 import {
@@ -22,6 +23,7 @@ import { BOS_GEOJSON } from "../utils/geojson";
 import { haritayaKapaliAttributionEkle } from "../utils/haritaAttribution";
 // Popup/marker HTML uretimi ayri modulde: bu dosya haritanin yasam dongusune
 // (kaynak/katman/effect) odakli kalsin diye.
+import { TIP_GLIF_PATH } from "../data/tipGlifleri";
 import {
   bolgePopupIcerigi,
   ekipMarkerGuncelle,
@@ -53,22 +55,30 @@ const SEKIL_SOURCE_ID = "sekil-duzenleme";
 const OLCUM_SOURCE_ID = "olcum";
 const DINAMIK_SOURCE_ID = "dinamik-onizleme";
 const OLCUM_RENK = "#2563eb";
-/** Ihbar (report) noktalari, kayitli/ihbar VARLIKLARINDAN (yesil/amber) acikca
- *  ayrilsin diye mor tonuyla gosterilir - "Ä°hbarlar" sekmesindeki queue. */
-const IHBAR_RENK = "#9333ea";
+/* ------------------------------------------------------------------ *
+ * Isaretci gorsel dili
+ *
+ * SEKIL = SINIF, RENK = TEK ANLAM:
+ *   - Envanterdeki VARLIK  -> DAIRE. Dolgu: tur (grup) rengi; "bakim lazim"
+ *     ise amber dolgu + amber uyari halosu. Ihbardan dogmus varlikta ayrica
+ *     ince MOR ic halka ("assets-ihbar-kaynak").
+ *   - IHBAR kaydi          -> PIN (damla). Rengi ihbarin DURUMU.
+ *
+ * Onceden ikisi de daireydi ve ayni paleti farkli anlamlarda kullaniyordu:
+ * "iyi" bir agac (yesil daire + agac glifi) ile onaylanmis bir ihbar (yesil
+ * daire + agac glifi) neredeyse ayni gorunuyordu. Sinif farkini artik renk
+ * degil silüet tasir, dolayisiyla ayni yesil tonu iki yerde gorunse de
+ * karismaz.
+ * ------------------------------------------------------------------ */
 
-/** Ihbar noktasi durumuna gore renk: beklemede mor (yeni ihbar kimligi),
- *  onaylandi yesil (cozuldu), reddedildi kirmizi. Sag-ustteki katman
- *  filtresindeki durum rozetleriyle birebir ayni palet. */
-const IHBAR_DURUM_RENGI_IFADESI = [
-  "match",
-  ["get", "status"],
-  "onaylandi",
-  "#059669",
-  "reddedildi",
-  "#e11d48",
-  IHBAR_RENK,
-] as unknown as maplibregl.ExpressionSpecification;
+/** Ihbar kimliginin rengi (bekleyen ihbar moru). Ihbardan dogan varliklarin
+ *  ince ic halkasinda da bu kullanilir - varligi kokenine baglar. */
+const IHBAR_RENK = IHBAR_DURUM_RENGI.beklemede;
+
+/** Secili ihbar pini: normal pinin ALTINA daha buyuk cizilen koyu pin, kalin
+ *  bir kontur etkisi verir (daire secim halkasi pinin UCUNU cevreleyecegi icin
+ *  okunmuyordu). */
+const IHBAR_PIN_SECIM_RENK = "#0f172a";
 
 const BOS_KOLEKSIYON: AssetFeatureCollection = {
   type: "FeatureCollection",
@@ -86,23 +96,15 @@ const TIP_RENGI_IFADESI = [
   TIP_RENGI_VARSAYILAN,
 ] as unknown as maplibregl.ExpressionSpecification;
 
-/** Her tur icin beyaz cizgi glifi (marker dairesinin ortasina bindirilir).
- *  Path'ler icons.tsx'teki IconTree/IconLamp/IconDrop ile ayni. */
-const TIP_GLIFLERI: Record<string, string> = {
-  agac: '<path d="M12 3 6.5 11h2.7L5 18h6M12 3l5.5 8h-2.7L19 18h-6"/><path d="M12 14v7"/>',
-  direk: '<path d="M12 2v3M8.5 5h7l-1.3 4.5h-4.4L8.5 5z"/><path d="M12 9.5V21M9 21h6"/>',
-  sulama:
-    '<path d="M12 3s6 6.3 6 10.5a6 6 0 0 1-12 0C6 9.3 12 3 12 3z"/><path d="M9.5 13.5a2.5 2.5 0 0 0 2.5 2.5"/>',
-};
+/** Pin goruntulerinin viewBox'i. Ucu (12,32) noktasinda, bas merkezi (12,12);
+ *  katmanlar `icon-anchor: "bottom"` kullandigi icin ucu tam koordinata oturur. */
+const PIN_VIEWBOX = { g: 24, y: 32 };
 
-/** Bir turun beyaz glifini SVG->raster cevirip haritaya `tip-<tur>` adiyla ekler. */
-function tipIkonuYukle(map: maplibregl.Map, tur: string, ic: string): Promise<void> {
-  const id = `tip-${tur}`;
+/** Bir SVG dizgisini raster'a cevirip haritaya verilen adla ekler. Yukleme
+ *  basarisiz olsa bile resolve eder: tek bir bozuk goruntu tum katman kurulumunu
+ *  bloklamasin (o goruntuye bagli isaretci sessizce cizilmez). */
+function svgIkonuYukle(map: maplibregl.Map, id: string, svg: string): Promise<void> {
   if (map.hasImage(id)) return Promise.resolve();
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48" height="48" ` +
-    `fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" ` +
-    `stroke-linejoin="round">${ic}</svg>`;
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -114,11 +116,64 @@ function tipIkonuYukle(map: maplibregl.Map, tur: string, ic: string): Promise<vo
   });
 }
 
-/** Tum tur gliflerini haritaya yukler (stil degisiminde tekrar cagrilir). */
+/** Beyaz cizgi glifi (varlik dairesinin ortasina bindirilir). Path'ler
+ *  icons.tsx'teki `TIP_GLIF_PATH` TEK kaynagindan gelir - React ikonlariyla
+ *  ayni cizim, iki kopya yok. */
+function tipGlifiSvg(ic: string): string {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48" height="48" ` +
+    `fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" ` +
+    `stroke-linejoin="round">${ic}</svg>`
+  );
+}
+
+/** Ayni glifin PIN varyanti: 24x24 cizim, pinin BASINA (12,12) oturacak sekilde
+ *  kucultulup PIN_VIEWBOX'a yerlestirilir. Pinle ayni viewBox/olcu kullandigi
+ *  icin iki katman ayni `icon-anchor`/`icon-size` ile hizalanir - `icon-offset`
+ *  hesabi (ve olceklendikce kayma riski) hic devreye girmez. */
+function pinGlifiSvg(ic: string): string {
+  const olcek = 0.62;
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PIN_VIEWBOX.g} ${PIN_VIEWBOX.y}" ` +
+    `width="${PIN_VIEWBOX.g * 2}" height="${PIN_VIEWBOX.y * 2}" fill="none" ` +
+    // Kucultuldugu icin cizgi kalinligi telafi edilir (2.2 / 0.62 ~ 3.5).
+    `stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">` +
+    `<g transform="translate(12 12) scale(${olcek}) translate(-12 -12)">${ic}</g></svg>`
+  );
+}
+
+/** Ihbar pini (damla). Beyaz kontur her altlikta (uydu dahil) okunur kalmasi
+ *  icin. SDF kullanilmiyor: SDF'in renklendirilebilirligi icin ham distance
+ *  field uretmek gerekiyor, alfa maskesini SDF gibi vermek kenar/halo
+ *  davranisini bozuyor - durum basina hazir goruntu bakelemek hem risksiz hem
+ *  repodaki mevcut kalip (bkz. tipGlifiSvg). */
+function ihbarPinSvg(renk: string): string {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PIN_VIEWBOX.g} ${PIN_VIEWBOX.y}" ` +
+    `width="${PIN_VIEWBOX.g * 2}" height="${PIN_VIEWBOX.y * 2}">` +
+    `<path d="M12 31.2C12 31.2 2.4 18.6 2.4 12A9.6 9.6 0 1 1 21.6 12C21.6 18.6 12 31.2 12 31.2Z" ` +
+    `fill="${renk}" stroke="#ffffff" stroke-width="1.9" stroke-linejoin="round"/></svg>`
+  );
+}
+
+/** Bir turun glifini hem daire (tip-*) hem pin (pin-glif-*) varyantiyla yukler. */
+function tipIkonuYukle(map: maplibregl.Map, tur: string, ic: string): Promise<void> {
+  return Promise.all([
+    svgIkonuYukle(map, `tip-${tur}`, tipGlifiSvg(ic)),
+    svgIkonuYukle(map, `pin-glif-${tur}`, pinGlifiSvg(ic)),
+  ]).then(() => undefined);
+}
+
+/** Tum tur gliflerini + ihbar durum pinlerini haritaya yukler (stil
+ *  degisiminde katmanlar bastan kuruldugu icin tekrar cagrilir). */
 function tipIkonlariniHazirla(map: maplibregl.Map): Promise<void> {
-  return Promise.all(
-    Object.entries(TIP_GLIFLERI).map(([tur, ic]) => tipIkonuYukle(map, tur, ic))
-  ).then(() => undefined);
+  return Promise.all([
+    ...Object.entries(TIP_GLIF_PATH).map(([tur, ic]) => tipIkonuYukle(map, tur, ic)),
+    ...REPORT_STATUSES.map((d) =>
+      svgIkonuYukle(map, `ihbar-pin-${d}`, ihbarPinSvg(IHBAR_DURUM_RENGI[d]))
+    ),
+    svgIkonuYukle(map, "ihbar-pin-secim", ihbarPinSvg(IHBAR_PIN_SECIM_RENK)),
+  ]).then(() => undefined);
 }
 
 /** Bir varlik/ihbara ucarken kullanilan zoom/sure degerleri: haritadaki bir
@@ -136,19 +191,35 @@ const IKON_KATMAN_YERLESIMI: Record<string, unknown> = {
   "icon-ignore-placement": true,
 };
 
+/** Ihbar pini ve pin glifi: ucu koordinata otursun diye alttan cakili. Ikisi
+ *  ayni viewBox/olcuyu kullandigi icin glif otomatik olarak pinin basina gelir. */
+const PIN_KATMAN_YERLESIMI: Record<string, unknown> = {
+  ...IKON_KATMAN_YERLESIMI,
+  "icon-anchor": "bottom",
+};
+
+/** Secili ihbarin altina cizilen koyu pin - normalden bir tik buyuk olmasi
+ *  kalin bir kontur etkisi verir (olcek IKON_KATMAN_YERLESIMI'nin ~1.22 kati). */
+const PIN_SECIM_YERLESIMI: Record<string, unknown> = {
+  ...PIN_KATMAN_YERLESIMI,
+  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.67, 16, 1.16],
+};
+
 /** Isaretci olculeri tek yerde: tur glifi okunabilir kalsin diye daireler
  *  belirgin (kalin beyaz halka + yumusak golge), ama uzaklasinca (z10-12)
  *  birbirine girmesin diye o uctaki yaricaplar belirgin sekilde kucuk. */
 const ISARETCI = {
   /** Varlik dairesi yaricapi (zoom 10 -> 16 arasi interpolasyon). */
   varlikYaricap: ["interpolate", ["linear"], ["zoom"], 10, 8, 16, 14.5],
-  /** Ihbar dairesi - varliklardan bir tik kucuk kalir. */
-  ihbarYaricap: ["interpolate", ["linear"], ["zoom"], 10, 7, 16, 12.5],
+  /** Ihbar pininin ucundaki yer golgesi (pin havada durmasin). */
+  ihbarGolgeYaricap: ["interpolate", ["linear"], ["zoom"], 10, 2.5, 16, 4],
+  /** "Ihbardan dogmus varlik" mor ic halkasi - beyaz cercevenin hemen ICINDE,
+   *  amber uyari halkasiyla cakismamasi icin ana daireden kucuk. */
+  kaynakYaricap: ["interpolate", ["linear"], ["zoom"], 10, 5.6, 16, 11],
   /** "Bakim lazim" amber uyari halkasi - ana dairenin disinda kalmali. */
   uyariYaricap: ["interpolate", ["linear"], ["zoom"], 10, 10.5, 16, 17],
   /** Secim halkalari - uyari halkasinin da disinda. */
   varlikSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 12.5, 16, 19],
-  ihbarSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 10.5, 16, 17],
   beyazHalka: 2.2,
 } as const;
 
@@ -221,9 +292,19 @@ interface MapViewProps {
   /** Bir varlik popup'undaki "Detaylari Gor" butonuna tiklaninca - sol-alttaki
    *  zengin detay kartini acar (artik secim aninda otomatik acilmiyor). */
   onVarlikDetay?: (id: string) => void;
+  /** Varlik popup'undaki "Düzenle" - dogrudan duzenleme formunu acar. Verilmezse
+   *  (yetkisi olmayan roller) dugme popup'ta hic cizilmez. */
+  onVarlikDuzenle?: (id: string) => void;
   /** Bir ihbar popup'undaki "Detaylari Gor" butonuna tiklaninca - ayni sekilde
    *  ihbarin ozet kartini acar. */
   onIhbarDetay?: (id: string) => void;
+  /** ONAYLANMIS ihbar popup'undaki "Yönet" - ihbardan olusan varligin detay
+   *  modalini (ekibe atama/degistirme, duzenle, sil) acar. Verilmezse dugme
+   *  cizilmez; ayrica bu prop popup'in "personel" modunda oldugunu belirtir. */
+  onIhbarVarlikYonet?: (id: string) => void;
+  /** REDDEDILMIS ihbar popup'undaki "Reddi Geri Al" - ihbari tekrar
+   *  "beklemede"ye ceker. Verilmezse dugme cizilmez. */
+  onIhbarGeriAl?: (id: string) => void;
   /** Harita her hareket ettiginde (pan/zoom) gorunen alanin sinirlarini bildirir;
    *  konum aramasini o an ekranda gorunen bolgeye onceliklendirmek icin kullanilir. */
   onGorunumDegisti?: (bounds: [[number, number], [number, number]]) => void;
@@ -236,6 +317,11 @@ interface MapViewProps {
   /** Haritadaki bir bolge/guzergah popup'indaki "Detay" dugmesi - alanlar ve
    *  cizgiler de varlik isaretcileri gibi tiklanip detayi gorulebilir. */
   onBolgeDetay?: (id: string) => void;
+  /** Secili bolge/guzergah - varlik/ihbar isaretcileriyle ayni mantik: haritada
+   *  belirgin (duz, kalin) bir kenarlikla isaretlenir. */
+  seciliBolgeId?: string | null;
+  /** Bir bolgeye/guzergaha tiklaninca (secim). */
+  onBolgeSec?: (id: string) => void;
   /** Popup'taki "Şekli Düzenle" - haritada kose duzenleme modunu baslatir. */
   onSekilDuzenle?: (id: string) => void;
   /** Sekli duzenlenmekte olan bolge (taslak geometri). Verildiginde bu kayit
@@ -269,10 +355,15 @@ export default function MapView({
   ucusHedefi,
   onGorunumDegisti,
   onVarlikDetay,
+  onVarlikDuzenle,
   onIhbarDetay,
+  onIhbarVarlikYonet,
+  onIhbarGeriAl,
   ekipler,
   bolgeler,
   onBolgeDetay,
+  seciliBolgeId,
+  onBolgeSec,
   onSekilDuzenle,
   sekilDuzenleme,
   onSekilDegis,
@@ -281,6 +372,11 @@ export default function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  /** Acik popup hangi secime ait: varlik / ihbar / bolge. Ayni anda tek popup
+   *  gosterilir, ama her secim yalnizca KENDI popup'ini kapatabilir - yoksa
+   *  bir bolge secilirken varlik secimi temizlendigi icin (secimUygula) yeni
+   *  acilan bolge popup'i aninda kapaniyordu. */
+  const popupTuruRef = useRef<"varlik" | "ihbar" | "bolge" | null>(null);
   const hazirRef = useRef(false);
   /** Aktif cizimin alan etiketi (m2/ha) ve tamamlanan alanlarin kalici etiketleri. */
   const cizimEtiketRef = useRef<maplibregl.Marker | null>(null);
@@ -315,6 +411,8 @@ export default function MapView({
   const tamamlananAlanlarRef = useRef(tamamlananAlanlar);
   const bolgelerRef = useRef(bolgeler);
   const onBolgeDetayRef = useRef(onBolgeDetay);
+  const seciliBolgeIdRef = useRef(seciliBolgeId);
+  const onBolgeSecRef = useRef(onBolgeSec);
   const onSekilDuzenleRef = useRef(onSekilDuzenle);
   const sekilDuzenlemeRef = useRef(sekilDuzenleme);
   const onSekilDegisRef = useRef(onSekilDegis);
@@ -330,7 +428,10 @@ export default function MapView({
   const cizimNoktalariRef = useRef(cizimNoktalari);
   const seciliIdRef = useRef(seciliId);
   const onVarlikDetayRef = useRef(onVarlikDetay);
+  const onVarlikDuzenleRef = useRef(onVarlikDuzenle);
   const onIhbarDetayRef = useRef(onIhbarDetay);
+  const onIhbarVarlikYonetRef = useRef(onIhbarVarlikYonet);
+  const onIhbarGeriAlRef = useRef(onIhbarGeriAl);
   /** Cizim/olcum sirasinda son bilinen fare konumu (elastik cizgi icin). */
   const sonFareRef = useRef<[number, number] | null>(null);
   /** Son secim (varlik/ihbar) haritadaki bir noktaya tiklanarak mi yapildi;
@@ -346,6 +447,8 @@ export default function MapView({
     tamamlananAlanlarRef.current = tamamlananAlanlar;
     bolgelerRef.current = bolgeler;
     onBolgeDetayRef.current = onBolgeDetay;
+    seciliBolgeIdRef.current = seciliBolgeId;
+    onBolgeSecRef.current = onBolgeSec;
     onSekilDuzenleRef.current = onSekilDuzenle;
     sekilDuzenlemeRef.current = sekilDuzenleme;
     onSekilDegisRef.current = onSekilDegis;
@@ -361,12 +464,15 @@ export default function MapView({
     cizimNoktalariRef.current = cizimNoktalari;
     seciliIdRef.current = seciliId;
     onVarlikDetayRef.current = onVarlikDetay;
+    onVarlikDuzenleRef.current = onVarlikDuzenle;
     onIhbarDetayRef.current = onIhbarDetay;
+    onIhbarVarlikYonetRef.current = onIhbarVarlikYonet;
+    onIhbarGeriAlRef.current = onIhbarGeriAl;
   });
 
   // Layer-scoped click/hover callback'leri sabit referans olarak tutulur ki
   // stil degisiminde map.off/map.on ile guvenle yeniden baglanabilsin.
-  // "assets-circle" ve "assets-icon" (aynÄ± sekilde "reports-circle"/"reports-icon")
+  // "assets-circle" ve "assets-icon" (ihbarlarda "reports-pin"/"reports-icon")
   // ayni nokta icin ayri katmanlar oldugundan, tek bir tiklama her iki katmanin
   // click handler'ini da tetikler; ayni DOM olayini iki kez islemeyi onlemek icin
   // son islenen originalEvent'i tutuyoruz (aksi halde secim toggle'i kendi
@@ -412,12 +518,17 @@ export default function MapView({
     const map = mapRef.current;
     if (!bolge || !map) return;
 
+    // Alan/cizgi de bir isaretci gibi SECILIR: haritada belirgin kenarlikla
+    // isaretlenir ve (panel acikken) sol panelde de ayni kayit vurgulanir.
+    onBolgeSecRef.current?.(bolge.id);
+
     popupRef.current?.remove();
     const popup = new maplibregl.Popup({ offset: 8, closeButton: true })
       .setLngLat(e.lngLat)
       .setHTML(bolgePopupIcerigi(bolge))
       .addTo(map);
     popupRef.current = popup;
+    popupTuruRef.current = "bolge";
     const el = popup.getElement();
     el?.querySelector(".popup-detay-btn")?.addEventListener("click", () => {
       onBolgeDetayRef.current?.(bolge.id);
@@ -480,8 +591,9 @@ export default function MapView({
 
     const katmanlar = ["assets-circle"];
     if (map.getLayer("assets-icon")) katmanlar.push("assets-icon");
-    if (map.getLayer("reports-circle")) katmanlar.push("reports-circle");
-    if (map.getLayer("reports-icon")) katmanlar.push("reports-icon");
+    for (const k of ["reports-circle", "reports-pin", "reports-icon"]) {
+      if (map.getLayer(k)) katmanlar.push(k);
+    }
     // Bolge dolgusu/cizgisi de "dolu" sayilir: uzerine tiklamak kendi
     // popup'ini acar, bos harita tiklamasi olarak islenmemeli. Tiklama kapaliyken
     // ("Ekle" formu acikken) bu katmanlar sayilmaz, koordinat secimi calisir.
@@ -949,17 +1061,28 @@ export default function MapView({
     cizimEtiketiUygula(map);
   }
 
+  /** Acik popup verilen turlerden birine aitse kapatir; degilse dokunmaz. */
+  function popupKapat(turler: ("varlik" | "ihbar" | "bolge")[]) {
+    if (!popupTuruRef.current || !turler.includes(popupTuruRef.current)) return;
+    popupRef.current?.remove();
+    popupRef.current = null;
+    popupTuruRef.current = null;
+  }
+
   function secimUygula(map: maplibregl.Map) {
     const id = seciliIdRef.current;
     map.setFilter("assets-selected", ["==", ["get", "id"], id ?? ""]);
 
+    const secili = id
+      ? assetsRef.current?.features.find((f) => f.properties.id === id)
+      : undefined;
+    if (!secili) {
+      popupKapat(["varlik"]);
+      return;
+    }
+
+    // Ayni anda tek popup: baska turde bir popup acikken de degistirilir.
     popupRef.current?.remove();
-    popupRef.current = null;
-
-    if (!id || !assetsRef.current) return;
-    const secili = assetsRef.current.features.find((f) => f.properties.id === id);
-    if (!secili) return;
-
     // anchor sabit: harita kaydirilirken popup bir anda karsi tarafa "atlamasin"
     // (sabit anchor olmadan MapLibre gorunurde tutmak icin anchor'i degistirir).
     const popup = new maplibregl.Popup({
@@ -968,14 +1091,27 @@ export default function MapView({
       anchor: "bottom",
     })
       .setLngLat(secili.geometry.coordinates)
-      .setHTML(popupIcerigi(secili))
+      .setHTML(popupIcerigi(secili, Boolean(onVarlikDuzenleRef.current)))
       .addTo(map);
     popupRef.current = popup;
+    popupTuruRef.current = "varlik";
     konumSatiriDoldur(popup, secili);
-    popup
-      .getElement()
+    const el = popup.getElement();
+    el
       ?.querySelector(".popup-detay-btn")
       ?.addEventListener("click", () => onVarlikDetayRef.current?.(secili.properties.id));
+    el
+      ?.querySelector(".popup-duzenle-btn")
+      ?.addEventListener("click", () => onVarlikDuzenleRef.current?.(secili.properties.id));
+  }
+
+  /** Secili bolge/guzergahi haritada belirgin kenarlikla isaretler. Popup'a
+   *  DOKUNMAZ: bolge popup'i tiklama aninda acilir, secim efekti onu kapatmamali. */
+  function secimBolgeUygula(map: maplibregl.Map) {
+    if (!map.getLayer("bolge-secili")) return;
+    const id = seciliBolgeIdRef.current;
+    map.setFilter("bolge-secili", ["==", ["get", "id"], id ?? ""]);
+    if (!id) popupKapat(["bolge"]);
   }
 
   /** Secili ihbari haritada vurgular ve popup acar (varlik secimiyle ayni
@@ -985,26 +1121,47 @@ export default function MapView({
     const id = seciliIhbarIdRef.current;
     map.setFilter("reports-selected", ["==", ["get", "id"], id ?? ""]);
 
-    if (!id) return;
-    const secili = reportsRef.current?.features.find(
-      (f) => f.properties.id === id
-    );
-    if (!secili) return;
+    const secili = id
+      ? reportsRef.current?.features.find((f) => f.properties.id === id)
+      : undefined;
+    if (!secili) {
+      popupKapat(["ihbar"]);
+      return;
+    }
 
     popupRef.current?.remove();
     const popup = new maplibregl.Popup({
-      offset: 14,
+      // Ihbar artik PIN olarak ciziliyor: popup pinin ustunde kalsin diye
+      // offset pinin yuksekligi kadar (varlik dairelerindeki 14'ten fazla).
+      offset: 34,
       closeButton: false,
       anchor: "bottom",
     })
       .setLngLat(secili.geometry.coordinates)
-      .setHTML(ihbarPopupIcerigi(secili))
+      // Personel modu: ikinci dugmelerden en az biri baglanmissa popup islem
+      // dugmesi cizer (hangisi cizilecegini ihbarin durumu belirler).
+      .setHTML(
+        ihbarPopupIcerigi(
+          secili,
+          Boolean(onIhbarVarlikYonetRef.current || onIhbarGeriAlRef.current)
+        )
+      )
       .addTo(map);
     popupRef.current = popup;
-    popup
-      .getElement()
+    popupTuruRef.current = "ihbar";
+    const el = popup.getElement();
+    el
       ?.querySelector(".popup-detay-btn")
       ?.addEventListener("click", () => onIhbarDetayRef.current?.(secili.properties.id));
+    el
+      ?.querySelector(".popup-varlik-btn")
+      ?.addEventListener("click", () =>
+        onIhbarVarlikYonetRef.current?.(secili.properties.id)
+      );
+    el?.querySelector(".popup-geri-al-btn")?.addEventListener("click", () => {
+      popup.remove();
+      onIhbarGeriAlRef.current?.(secili.properties.id);
+    });
   }
 
   /** Kaynaklar/katmanlar yoksa (ilk yukleme ya da stil degisimi sonrasi) yeniden kurar. */
@@ -1039,16 +1196,42 @@ export default function MapView({
         },
       });
 
-      // Ana isaretci: dolgu TUR rengine gore (agac/direk/sulama), beyaz cerceve.
+      // Ana isaretci: dolgu TUR (grup) rengine gore, beyaz cerceve. "Bakim
+      // lazim" varliklarda dolgu amber'e doner - sag-ustteki lejantin "Bakım
+      // Lazım" swatch'i (#f59e0b) boylece haritada gercekten basilan renk olur;
+      // turu glif tasimaya devam eder.
       map.addLayer({
         id: "assets-circle",
         type: "circle",
         source: SOURCE_ID,
         paint: {
           "circle-radius": ISARETCI.varlikYaricap as never,
-          "circle-color": TIP_RENGI_IFADESI,
+          "circle-color": [
+            "case",
+            ["==", ["get", "status"], "bakim_lazim"],
+            "#f59e0b",
+            TIP_RENGI_IFADESI,
+          ] as never,
           "circle-stroke-width": ISARETCI.beyazHalka,
           "circle-stroke-color": "#ffffff",
+        },
+      });
+
+      // Ihbardan dogmus varlik: beyaz cercevenin hemen icinde ince MOR halka.
+      // `source` haritada hic kodlanmiyordu, dolayisiyla onaylanan bir ihbardan
+      // olusan varlik normal envanter varligindan ayirt edilemiyordu. Mor,
+      // ihbar kimliginin rengi - bagi dogrudan kurar. MapLibre `circle`
+      // kesikli kontur desteklemedigi icin "kesikli halka" yerine ince halka.
+      map.addLayer({
+        id: "assets-ihbar-kaynak",
+        type: "circle",
+        source: SOURCE_ID,
+        filter: ["==", ["get", "source"], "ihbar"],
+        paint: {
+          "circle-radius": ISARETCI.kaynakYaricap as never,
+          "circle-color": "transparent",
+          "circle-stroke-width": 1.6,
+          "circle-stroke-color": IHBAR_RENK,
         },
       });
 
@@ -1069,36 +1252,15 @@ export default function MapView({
     if (!map.getSource(REPORTS_SOURCE_ID)) {
       map.addSource(REPORTS_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
 
-      map.addLayer({
-        id: "reports-golge",
-        type: "circle",
-        source: REPORTS_SOURCE_ID,
-        paint: golgeBoyasi(ISARETCI.ihbarYaricap) as never,
-      });
-
-      // Ihbar noktalari - varliklardan (yesil/amber) acikca ayrilsin diye mor.
+      // Ihbarin PIN ucundaki yer golgesi. Pinin kendisi bir symbol katmanidir
+      // ve goruntuler asenkron yuklendigi icin sonradan eklenir; bu kucuk daire
+      // hem pinin "yere basmasini" saglar hem SENKRON var oldugundan tiklama/
+      // hover baglantilarinin (ve katman sirasi kontrolunun) sabit dayanagidir.
       map.addLayer({
         id: "reports-circle",
         type: "circle",
         source: REPORTS_SOURCE_ID,
-        paint: {
-          "circle-radius": ISARETCI.ihbarYaricap as never,
-          "circle-color": IHBAR_DURUM_RENGI_IFADESI,
-          "circle-stroke-width": ISARETCI.beyazHalka,
-          "circle-stroke-color": "#ffffff",
-        },
-      });
-      map.addLayer({
-        id: "reports-selected",
-        type: "circle",
-        source: REPORTS_SOURCE_ID,
-        filter: ["==", ["get", "id"], ""],
-        paint: {
-          "circle-radius": ISARETCI.ihbarSecimYaricap as never,
-          "circle-color": "transparent",
-          "circle-stroke-width": 3,
-          "circle-stroke-color": "#6b21a8",
-        },
+        paint: golgeBoyasi(ISARETCI.ihbarGolgeYaricap) as never,
       });
     }
 
@@ -1138,6 +1300,21 @@ export default function MapView({
           "line-color": ["get", "renk"],
           "line-width": 2.5,
           "line-dasharray": [3, 2],
+        },
+      });
+      // Secili kayit: kesik kenarligin uzerine DUZ bir hat cizilir - varlik/ihbar
+      // isaretcilerindeki secim halkasinin bolge karsiligi. Kalinlik bilincli
+      // olarak normal kenarlikla ayni (2.5): secimi kalinlik degil, kesik
+      // cizginin duz hatta donmesi anlatir - kalin hat sekli kabalastiriyordu.
+      map.addLayer({
+        id: "bolge-secili",
+        type: "line",
+        source: BOLGE_SOURCE_ID,
+        filter: ["==", ["get", "id"], ""],
+        paint: {
+          "line-color": ["get", "renk"],
+          "line-width": 2.5,
+          "line-opacity": 1,
         },
       });
       // Gorunmez, kalin vurus alani: 2.5px'lik bir guzergah cizgisini tam
@@ -1306,6 +1483,7 @@ export default function MapView({
     olcumUygula(map);
     secimUygula(map);
     secimIhbarUygula(map);
+    secimBolgeUygula(map);
     gorunumDegistiRef.current();
 
     // Tur gliflerini (beyaz ikonlar) yukleyip sembol katmanlarini ekle.
@@ -1333,21 +1511,47 @@ export default function MapView({
       }
 
       if (map.getSource(REPORTS_SOURCE_ID) && !map.getLayer("reports-icon")) {
+        // Secim pini EN ALTA: normal pinin arkasindan tasarak kontur olur.
+        map.addLayer({
+          id: "reports-selected",
+          type: "symbol",
+          source: REPORTS_SOURCE_ID,
+          filter: ["==", ["get", "id"], ""],
+          layout: { "icon-image": "ihbar-pin-secim", ...PIN_SECIM_YERLESIMI },
+        });
+        // Ihbar pini - rengi ihbarin DURUMU (bekleyen mor / onaylanan yesil /
+        // reddedilen kirmizi), sekli varliklardan (daire) ayirir.
+        map.addLayer({
+          id: "reports-pin",
+          type: "symbol",
+          source: REPORTS_SOURCE_ID,
+          layout: {
+            "icon-image": ["concat", "ihbar-pin-", ["get", "status"]],
+            ...PIN_KATMAN_YERLESIMI,
+          },
+        });
+        // Tur glifi, pinle ayni viewBox'ta kucultulmus varyantindan (pin-glif-*)
+        // basilir; boylece basina tam oturur, icon-offset hesabi gerekmez.
         map.addLayer({
           id: "reports-icon",
           type: "symbol",
           source: REPORTS_SOURCE_ID,
           layout: {
-            "icon-image": ["concat", "tip-", ["get", "type"]],
-            ...IKON_KATMAN_YERLESIMI,
+            "icon-image": ["concat", "pin-glif-", ["get", "type"]],
+            ...PIN_KATMAN_YERLESIMI,
           },
         });
-        map.off("click", "reports-icon", reportsTiklandiRef.current);
-        map.on("click", "reports-icon", reportsTiklandiRef.current);
-        map.off("mouseenter", "reports-icon", fareGirdiRef.current);
-        map.on("mouseenter", "reports-icon", fareGirdiRef.current);
-        map.off("mouseleave", "reports-icon", fareCiktiRef.current);
-        map.on("mouseleave", "reports-icon", fareCiktiRef.current);
+        for (const katman of ["reports-pin", "reports-icon"]) {
+          map.off("click", katman, reportsTiklandiRef.current);
+          map.on("click", katman, reportsTiklandiRef.current);
+          map.off("mouseenter", katman, fareGirdiRef.current);
+          map.on("mouseenter", katman, fareGirdiRef.current);
+          map.off("mouseleave", katman, fareCiktiRef.current);
+          map.on("mouseleave", katman, fareCiktiRef.current);
+        }
+        // Secim katmani artik asenkron eklendigi icin, bu arada yapilmis bir
+        // secimin filtresi kaybolmasin diye guncel secim tekrar uygulanir.
+        secimIhbarUygula(map);
       }
     });
   }
@@ -1516,6 +1720,14 @@ export default function MapView({
     if (hazirRef.current) bolgeleriUygula(map);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bolgeler]);
+
+  // --- Secili bolge/guzergah degisince vurguyu guncelle ---
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !hazirRef.current) return;
+    secimBolgeUygula(map);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seciliBolgeId]);
 
   // --- Sekil duzenleme: taslak degisince cizimi ve tutamaklari yenile ---
   // Duzenlenen kayit ayrica kalici bolge katmanindan cikarilir (ve duzenleme

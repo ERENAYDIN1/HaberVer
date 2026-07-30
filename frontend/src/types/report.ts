@@ -9,6 +9,19 @@ export const REPORT_STATUS_LABELS: Record<ReportStatus, string> = {
   reddedildi: "Reddedildi",
 };
 
+/** Ihbar durumu -> hex renk. Haritadaki ihbar PIN'leri (MapView, durum basina
+ *  bir hazir goruntu uretir) ve sag-ustteki lejant swatch'lari bu TEK kaynaktan
+ *  beslenir - daha once ayni palet App.tsx ve MapView.tsx'te iki kopyaydi.
+ *
+ *  Not: bu renkler yalnizca IHBAR kayitlarinin durumunu anlatir. Varlik
+ *  isaretcileri daire, ihbarlar pin cizildigi icin ayni yesil tonu iki yerde
+ *  gorunse bile sinif karismaz (bkz. MapView "Isaretci gorsel dili"). */
+export const IHBAR_DURUM_RENGI: Record<ReportStatus, string> = {
+  beklemede: "#9333ea",
+  onaylandi: "#059669",
+  reddedildi: "#e11d48",
+};
+
 export interface ReportProperties {
   id: string;
   reporter_id: string;

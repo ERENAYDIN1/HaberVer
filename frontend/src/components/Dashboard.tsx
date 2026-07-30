@@ -11,7 +11,12 @@ import {
 } from "recharts";
 
 import { konumCozumleToplu, type KonumCozumu } from "../api/sinirlar";
-import { ASSET_TYPES, ASSET_TYPE_LABELS } from "../types/asset";
+import {
+  GRUP_RENGI,
+  TIP_GRUBU,
+  TIP_GRUPLARI,
+  TIP_GRUP_KISA,
+} from "../types/asset";
 import type { AssetFeature, AssetFeatureCollection } from "../types/asset";
 import { csvIndir, jsonIndir } from "../utils/export";
 
@@ -148,9 +153,13 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
   ).length;
   const bakimOrani = toplam === 0 ? 0 : Math.round((bakimGerekli / toplam) * 100);
 
-  const tipDagilimi = ASSET_TYPES.map((t) => ({
-    tip: ASSET_TYPE_LABELS[t],
-    sayi: filtrelenmis.filter((f) => f.properties.type === t).length,
+  // 13 tur duz bir grafikte okunamiyor: dagilim TUR GRUBUNA gore (5 bar)
+  // gosterilir ve her bar grubun HARITADAKI rengini tasir. Bir grubun icindeki
+  // tur dagilimi soldaki listenin tur filtresinden okunur.
+  const tipDagilimi = TIP_GRUPLARI.map((g) => ({
+    tip: TIP_GRUP_KISA[g],
+    renk: GRUP_RENGI[g],
+    sayi: filtrelenmis.filter((f) => TIP_GRUBU[f.properties.type] === g).length,
   }));
   const enBuyuk = Math.max(...tipDagilimi.map((d) => d.sayi), 1);
 
@@ -308,10 +317,11 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
         </div>
       </div>
 
-      {/* Tipe gore dagilim - tek seri, tek hue, degerler ucta dogrudan etiketli */}
+      {/* Tur grubuna gore dagilim - barlar haritadaki grup renklerini tasir,
+          degerler ucta dogrudan etiketli */}
       <div className="mb-6">
         <p className="mb-2 text-xs font-medium text-slate-600">
-          Tipe göre dağılım
+          Tür grubuna göre dağılım
         </p>
         {toplam === 0 ? (
           <p className="py-4 text-center text-xs text-slate-400">
@@ -329,7 +339,7 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
               <YAxis
                 type="category"
                 dataKey="tip"
-                width={54}
+                width={78}
                 axisLine={false}
                 tickLine={false}
                 tick={{ fontSize: 12, fill: RENK.ikincilMetin }}
@@ -343,7 +353,7 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
                 animationEasing="ease-out"
               >
                 {tipDagilimi.map((d) => (
-                  <Cell key={d.tip} fill={RENK.seri} />
+                  <Cell key={d.tip} fill={d.renk} />
                 ))}
                 <LabelList
                   dataKey="sayi"

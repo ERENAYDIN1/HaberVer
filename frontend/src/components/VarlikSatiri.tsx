@@ -9,6 +9,7 @@ import {
   kalanSilmeGunu,
   type AssetFeature,
 } from "../types/asset";
+import { SilOnayi } from "./Aksiyonlar";
 import FotoBuyutucu from "./FotoBuyutucu";
 import { IconPin, TIP_IKONU } from "./icons";
 
@@ -168,16 +169,12 @@ const VarlikSatiri = forwardRef<HTMLLIElement, VarlikSatiriProps>(function Varli
                       Düzenle
                     </button>
                   )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSil(asset);
-                    }}
-                    disabled={silPending}
-                    className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50"
-                  >
-                    Sil
-                  </button>
+                  <SilOnayi
+                    satirIci
+                    sifirlaAnahtari={id}
+                    siliniyor={silPending}
+                    onSil={() => onSil(asset)}
+                  />
                 </>
               )}
             </>
