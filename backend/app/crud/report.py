@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models.asset import Asset, AssetSource, AssetStatus
+from ..models.asset import Asset, AssetSource, AssetStatus, AssetType
 from ..models.log import LogAction
 from ..models.report import Report, ReportStatus
 from ..models.user import User
@@ -66,9 +66,23 @@ def create_report(
     return get(db, report.id)
 
 
-def approve_report(db: Session, report: Report, reviewer: User):
+def approve_report(
+    db: Session,
+    report: Report,
+    reviewer: User,
+    yeni_tip: AssetType | None = None,
+):
     """Ihbari onaylar: 'Bakim Lazim' durumunda yeni bir Asset olusturur ve
-    ihbari 'onaylandi' olarak isaretleyip olusan varliga baglar."""
+    ihbari 'onaylandi' olarak isaretleyip olusan varliga baglar.
+
+    `yeni_tip` verilirse (personel onay ekraninda turu duzeltmisse) hem olusan
+    varlik hem IHBAR KAYDI bu turle yazilir - aksi halde kuyrukta arsivlenen
+    ihbar vatandasin yanlis secimini gostermeye devam ederdi."""
+    tur_notu: str | None = None
+    if yeni_tip is not None and yeni_tip != report.type:
+        tur_notu = f"Tür düzeltildi: {report.type.value} → {yeni_tip.value}"
+        report.type = yeni_tip
+
     asset = Asset(
         name=report.name,
         type=report.type,
@@ -92,6 +106,7 @@ def approve_report(db: Session, report: Report, reviewer: User):
         entity_type="report",
         entity_id=report.id,
         entity_name=report.name,
+        detail=tur_notu,
     )
     add_log(
         db,
@@ -133,6 +148,31 @@ def reject_report(
         entity_id=report.id,
         entity_name=report.name,
         detail=review_note,
+    )
+    db.commit()
+    return get(db, report.id)
+
+
+def reopen_report(db: Session, report: Report, reviewer: User):
+    """Reddedilen bir ihbarin reddini geri alir: kayit 'beklemede'ye doner ve
+    inceleme izleri (kim/ne zaman/ret nedeni) temizlenir - ihbar, hic
+    sonuclandirilmamis gibi kuyruga geri girer ve tekrar onaylanabilir.
+
+    Onaylanmis ihbarlar icin cagrilmaz (router 409 doner): onay bir varlik
+    olusturdugundan geri alinmasi o varligi ve atamasini da bozardi."""
+    report.status = ReportStatus.beklemede
+    report.reviewed_by = None
+    report.reviewed_at = None
+    report.review_note = None
+
+    add_log(
+        db,
+        action=LogAction.report_reopened,
+        actor=reviewer,
+        entity_type="report",
+        entity_id=report.id,
+        entity_name=report.name,
+        detail="Ret geri alındı",
     )
     db.commit()
     return get(db, report.id)

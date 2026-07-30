@@ -11,9 +11,25 @@ from ..database import Base
 
 
 class AssetType(str, enum.Enum):
+    """Varlik/ihbar turu. `reports.type` ayni PG enum'unu paylasir (bkz.
+    models/report.py) - vatandas ihbari ile envanter ayni sozlugu kullanir.
+    Arayuzde turler 5 gruba (yesil alan/aydinlatma/yol/altyapi/diger)
+    ayrilir; gruplama yalnizca frontend kavramidir (types/asset.ts).
+    `diger` yalnizca ihbardan gelir, envantere elle eklenemez."""
+
     agac = "agac"
     direk = "direk"
     sulama = "sulama"
+    rogar = "rogar"
+    yol = "yol"
+    kaldirim = "kaldirim"
+    bank = "bank"
+    cop_kutusu = "cop_kutusu"
+    trafik_levhasi = "trafik_levhasi"
+    elektrik_panosu = "elektrik_panosu"
+    oyun_grubu = "oyun_grubu"
+    su_hatti = "su_hatti"
+    diger = "diger"
 
 
 class AssetStatus(str, enum.Enum):

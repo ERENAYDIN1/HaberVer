@@ -95,16 +95,21 @@ def list_reports(
 @router.post("/{report_id}/onayla", response_model=ReportFeature)
 def approve(
     report_id: uuid.UUID,
+    data: ReportReview | None = None,
     user: User = Depends(personel),
     db: Session = Depends(get_db),
 ):
+    """Ihbari onaylar. Govde opsiyoneldir; `type` gonderilirse personel
+    vatandasin sectigi turu duzeltmis olur (bkz. crud.approve_report)."""
     row = crud.get(db, report_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Ihbar bulunamadi")
     report = row[0]
     if report.status != ReportStatus.beklemede:
         raise HTTPException(status_code=409, detail="Ihbar zaten sonuclandirilmis")
-    return ReportFeature.from_row(crud.approve_report(db, report, user))
+    return ReportFeature.from_row(
+        crud.approve_report(db, report, user, yeni_tip=data.type if data else None)
+    )
 
 
 @router.post("/{report_id}/reddet", response_model=ReportFeature)
@@ -123,3 +128,21 @@ def reject(
     return ReportFeature.from_row(
         crud.reject_report(db, report, user, data.review_note)
     )
+
+
+@router.post("/{report_id}/geri-al", response_model=ReportFeature)
+def reopen(
+    report_id: uuid.UUID,
+    user: User = Depends(personel),
+    db: Session = Depends(get_db),
+):
+    """Reddedilen ihbarin reddini geri alir (tekrar 'beklemede')."""
+    row = crud.get(db, report_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Ihbar bulunamadi")
+    report = row[0]
+    if report.status != ReportStatus.reddedildi:
+        raise HTTPException(
+            status_code=409, detail="Yalnizca reddedilmis ihbarlarin reddi geri alinabilir"
+        )
+    return ReportFeature.from_row(crud.reopen_report(db, report, user))

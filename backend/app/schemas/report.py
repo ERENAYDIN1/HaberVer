@@ -50,6 +50,11 @@ class ReportFeatureCollection(BaseModel):
 
 
 class ReportReview(BaseModel):
-    """Ihbari onaylama/reddetme istegi. review_note red icin gerekce olabilir."""
+    """Ihbari onaylama/reddetme istegi. review_note red icin gerekce olabilir.
+
+    `type` yalnizca ONAYDA anlamlidir: personel, vatandasin sectigi turu
+    (fotografa bakarak) duzeltebilir; verilmezse vatandasin turu aynen kabul
+    edilir."""
 
     review_note: str | None = Field(default=None, max_length=1000)
+    type: AssetType | None = None

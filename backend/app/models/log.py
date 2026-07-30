@@ -16,6 +16,8 @@ class LogAction(str, enum.Enum):
     asset_deleted = "asset_deleted"
     report_approved = "report_approved"
     report_rejected = "report_rejected"
+    # Reddedilen ihbarin reddi geri alinip tekrar "beklemede"ye dondurulmesi.
+    report_reopened = "report_reopened"
     user_created = "user_created"
     user_updated = "user_updated"
     assignment_created = "assignment_created"

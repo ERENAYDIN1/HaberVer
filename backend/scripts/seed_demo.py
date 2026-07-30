@@ -50,6 +50,12 @@ BAKIM_VARLIKLARI = [
     ("Kadıköy Moda Parkı Sulama Hattı", "sulama", 29.0265, 40.9885),
     ("Beşiktaş Sahil Sulama Vanası", "sulama", 29.0060, 41.0435),
     ("Bakırköy Botanik Sulama Sistemi", "sulama", 28.8710, 40.9800),
+    # Genisletilmis tur sozlugunden ornekler (haritadaki grup renkleri +
+    # glifler tek bakista ayirt edilebilsin diye her gruptan en az bir tane).
+    ("Karaköy Kemeraltı Rögar Kapağı", "rogar", 28.9755, 41.0230),
+    ("Üsküdar Sahil Yolu Çukuru", "yol", 29.0155, 41.0265),
+    ("Kadıköy Bahariye Bankı B-12", "bank", 29.0285, 40.9905),
+    ("Şişli Elektrik Panosu P-4", "elektrik_panosu", 28.9895, 41.0625),
 ]
 
 # --- Saglam (iyi) varliklar: (ad, tip, lon, lat, marka_model, kurulum) -------
@@ -75,6 +81,17 @@ IYI_VARLIKLAR = [
     ("Çubuklu Sahil Aydınlatma D-4", "direk", 29.0850, 41.1000,
      "Philips UrbanLine 80W", "2017-07-30"),
     ("Maltepe Sahil Parkı Zeytini", "agac", 29.1300, 40.9250, None, "2015-02-16"),
+    # Genisletilmis tur sozlugunden ornekler
+    ("Maçka Parkı Oyun Grubu OG-2", "oyun_grubu", 28.9960, 41.0448,
+     "Kompan Robinia", "2022-03-08"),
+    ("Eminönü Meydan Çöp Konteyneri K-9", "cop_kutusu", 28.9705, 41.0175,
+     "Otto 800L", "2023-01-19"),
+    ("Beşiktaş İskele Trafik Levhası L-31", "trafik_levhasi", 29.0072, 41.0412,
+     None, "2021-11-04"),
+    ("Moda Sahil Kaldırım Bölümü K-5", "kaldirim", 29.0270, 40.9840,
+     None, "2016-06-21"),
+    ("Bostancı Su Hattı Vanası V-7", "su_hatti", 29.0960, 40.9520,
+     "Hunter PGV-151", "2020-02-13"),
 ]
 
 # --- Bekleyen vatandas ihbarlari: (ad, tip, lon, lat, aciklama) --------------
@@ -97,6 +114,28 @@ IHBARLAR = [
      "Ağaç son fırtınadan sonra yana yattı, park halindeki araçlara doğru eğik."),
     ("Pendik Sahil'de kırık aydınlatma direği", "direk", 29.2350, 40.8760,
      "Direğin alt kapağı kopmuş, kabloları açıkta duruyor. Çocuklar için tehlikeli."),
+    # Genisletilmis tur sozlugu: vatandas ihbarlari gercekte cok cesitli olur -
+    # her tur grubundan ornek var, "diger" de dahil.
+    ("Beyoğlu'nda açık kalmış rögar kapağı", "rogar", 28.9770, 41.0335,
+     "Rögar kapağı yerinde değil, çukur açıkta. Gece görünmüyor, çok tehlikeli."),
+    ("Mecidiyeköy'de derin asfalt çukuru", "yol", 28.9970, 41.0670,
+     "Yolun ortasında derin bir çukur var, araçlar üzerinden geçerken zıplıyor."),
+    ("Üsküdar'da kırık bank", "bank", 29.0135, 41.0255,
+     "Parktaki bankın oturma tahtaları kırılmış, oturulamıyor."),
+    ("Fikirtepe'de devrilmiş çöp konteyneri", "cop_kutusu", 29.0410, 40.9930,
+     "Konteyner devrilmiş, çöpler kaldırıma yayılmış durumda."),
+    ("Levent'te dönmüş yön levhası", "trafik_levhasi", 29.0140, 41.0790,
+     "Levha rüzgârdan dönmüş, yanlış yönü gösteriyor."),
+    ("Zeytinburnu'nda çökük kaldırım", "kaldirim", 28.9060, 40.9930,
+     "Kaldırım taşları çökmüş, yaşlılar ve bebek arabaları geçemiyor."),
+    ("Kartal'da kapağı açık elektrik panosu", "elektrik_panosu", 29.1830, 40.8960,
+     "Pano kapağı açık, içindeki kablolar görünüyor. Çocuk parkının yanında."),
+    ("Ataşehir'de kırık oyun grubu", "oyun_grubu", 29.1270, 40.9930,
+     "Kaydırağın merdiveni kopmuş, çocuklar düşüyor."),
+    ("Eyüpsultan'da su sızıntısı", "su_hatti", 28.9340, 41.0480,
+     "Kaldırımın altından sürekli su sızıyor, yol sürekli ıslak ve kaygan."),
+    ("Şirinevler'de kaldırıma bırakılmış moloz", "diger", 28.8460, 40.9930,
+     "Kaldırımın tamamını kapatan bir inşaat molozu yığını var, yürünemiyor."),
 ]
 
 # --- Baslangic atamalari: (varlik_adi, ekip_emaili) --------------------------
