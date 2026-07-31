@@ -182,7 +182,12 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
                 id_token = oturum.id_token
                 oturum_crud.sil(db, oturum_id)
     response.delete_cookie(settings.session_cookie_name, path="/")
-    return {"cikis_url": keycloak.cikis_url(id_token, settings.app_base_url)}
+    # Cikista uygulama koku DEGIL /giris'e donulur: kok rota girisi kendisi
+    # baslattigi icin (bkz. frontend RequireRole) kullanici cikar cikmaz
+    # dogrudan Keycloak giris formuna atilir ve "cikamiyorum" izlenimi olusur.
+    # /giris kendiliginden yonlendirmeyen tek sayfadir.
+    donus = f"{settings.app_base_url.rstrip('/')}/giris"
+    return {"cikis_url": keycloak.cikis_url(id_token, donus)}
 
 
 @router.get("/me", response_model=UserOut)

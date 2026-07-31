@@ -2,7 +2,8 @@
 
 Gercek OIDC akisinin tum adimlarini gecer: /api/auth/login -> Keycloak giris
 formu -> kod -> /api/auth/callback -> oturum cookie'si -> /api/auth/me.
-Ayrica cookie'siz erisimin 401, yanlis rolun 403 verdigini dogrular.
+Ayrica cookie'siz erisimin 401, yanlis rolun 403 verdigini ve cikisin yalnizca
+yerel oturumu degil Keycloak SSO oturumunu da kapattigini dogrular.
 
 Kullanim (backend container icinde):
     python scripts/auth_akis_testi.py [email] [parola]
@@ -111,6 +112,17 @@ def main() -> None:
     sonra = istemci.get(f"{API}/api/auth/me")
     assert sonra.status_code == 401, sonra.status_code
     print("[ok] cikistan sonra /auth/me -> 401")
+
+    # Yerel oturumun silinmesi YETMEZ: cikis adresi gercekten izlenmezse
+    # Keycloak SSO oturumu ayakta kalir ve bir sonraki /auth/login formu hic
+    # gostermeden kod verir - kullanici "cikamamis" olur. Olcut: giris formu.
+    # follow_redirects=False, cunku cikisin son duragi tarayiciya ait
+    # http://localhost:5173/giris ve container icinden erisilemez.
+    istemci.get(ic(cikis.json()["cikis_url"]))
+    tekrar = istemci.get(f"{API}/api/auth/login", params={"next": "/"})
+    kc = istemci.get(ic(tekrar.headers["location"]))
+    assert 'name="password"' in kc.text, "SSO oturumu kapanmamis (sessiz giris)"
+    print("[ok] cikis adresi izlenince Keycloak SSO oturumu da kapaniyor")
 
 
 if __name__ == "__main__":

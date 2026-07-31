@@ -8,7 +8,12 @@ import {
 
 import * as authApi from "../api/auth";
 import type { User } from "../types/auth";
-import { girisBaslat, kayitBaslat } from "./token";
+import {
+  cikisiBaslat,
+  girisBaslat,
+  girisDenemesiniUnut,
+  kayitBaslat,
+} from "./token";
 
 interface AuthContextTipi {
   user: User | null;
@@ -33,22 +38,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     authApi
       .me()
-      .then(setUser)
+      .then((gelen) => {
+        // Oturum kuruldu: RequireRole'un dongu isareti temizlenir, yoksa
+        // ayni sekmede daha sonra cikis yapinca giris dongu sanilirdi.
+        girisDenemesiniUnut();
+        setUser(gelen);
+      })
       .catch(() => setUser(null))
       .finally(() => setYukleniyor(false));
   }, []);
 
   const cikisYap = async () => {
+    // ILK is: giris kapisini kapat. Bu satirdan sonra RequireRole "kullanici
+    // yok" gorse bile giris baslatmaz; yoksa o yonlendirme asagidaki cikis
+    // navigasyonunu iptal eder ve Keycloak oturumu hic kapanmaz.
+    cikisiBaslat();
     let cikisUrl: string | null = null;
     try {
       cikisUrl = (await authApi.logout()).cikis_url;
     } catch {
-      // Sunucuya ulasilamasa bile yerel durumu temizle.
+      // Sunucuya ulasilamasa bile kullaniciyi disari cikar.
     }
-    setUser(null);
+    // `setUser(null)` bilincli olarak YOK: zaten sayfadan ayriliyoruz ve
+    // durumu bosaltmak yalnizca bir ara render (ve yukaridaki yaris) uretir.
     // Keycloak oturumu da kapansin diye kimlik saglayiciya gidilir; o da
     // kullaniciyi uygulamaya geri dondurur.
-    window.location.href = cikisUrl ?? "/";
+    // Sunucuya ulasilamadiginda bile koke DEGIL /giris'e gidilir: kok rota
+    // girisi kendisi baslatir ve kullanici cikamamis gibi olurdu.
+    window.location.href = cikisUrl ?? "/giris";
   };
 
   return (

@@ -7,9 +7,7 @@ import App from "./App";
 import { AuthProvider } from "./auth/AuthContext";
 import RequireRole from "./auth/RequireRole";
 import "./index.css";
-import KayitVatandas from "./pages/KayitVatandas";
-import LoginPersonel from "./pages/LoginPersonel";
-import LoginVatandas from "./pages/LoginVatandas";
+import Giris from "./pages/Giris";
 import SahaEkran from "./pages/SahaEkran";
 import VatandasEkran from "./pages/VatandasEkran";
 
@@ -25,13 +23,21 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/giris" element={<LoginPersonel />} />
-            <Route path="/vatandas/giris" element={<LoginVatandas />} />
-            <Route path="/vatandas/kayit" element={<KayitVatandas />} />
+            <Route path="/giris" element={<Giris />} />
+            {/* Rol bazli giris sayfalari kalkti (tek kapi /giris); eski
+                baglantilar kirilmasin diye oraya yonlendiriliyor. */}
+            <Route
+              path="/vatandas/giris"
+              element={<Navigate to="/giris" replace />}
+            />
+            <Route
+              path="/vatandas/kayit"
+              element={<Navigate to="/giris" replace />}
+            />
             <Route
               path="/vatandas"
               element={
-                <RequireRole roller={["vatandas"]} girisYolu="/vatandas/giris">
+                <RequireRole roller={["vatandas"]}>
                   <VatandasEkran />
                 </RequireRole>
               }
@@ -39,7 +45,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route
               path="/saha"
               element={
-                <RequireRole roller={["saha_calisani"]} girisYolu="/giris">
+                <RequireRole roller={["saha_calisani"]}>
                   <SahaEkran />
                 </RequireRole>
               }
@@ -47,7 +53,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route
               path="/"
               element={
-                <RequireRole roller={["admin", "calisan"]} girisYolu="/giris">
+                <RequireRole roller={["admin", "calisan"]}>
                   <App />
                 </RequireRole>
               }

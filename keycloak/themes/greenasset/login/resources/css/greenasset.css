@@ -1,0 +1,171 @@
+/* GreenAsset giris ekrani - ikiye bolunmus duzen.
+   Solda beyaz zeminde form, sagda tam boy botanik panel.
+
+   Renkler PF5'in kendi degiskenleri uzerinden eziliyor; boylece tek tek
+   bilesen secicisi kovalamak yerine tema degiskeni degistirilmis oluyor ve
+   Keycloak surum yukseltmelerinde kirilma yuzeyi kucuk kaliyor. */
+
+:root {
+  --ga-yesil: #14603f;
+  --ga-yesil-koyu: #0f4c32;
+  --ga-metin: #101a15;
+  --ga-soluk: #66756d;
+  --ga-hat: #d6ded9;
+
+  --pf-v5-global--primary-color--100: var(--ga-yesil);
+  --pf-v5-global--primary-color--200: var(--ga-yesil-koyu);
+  --pf-v5-global--link--Color: var(--ga-yesil);
+  --pf-v5-global--link--Color--hover: var(--ga-yesil-koyu);
+}
+
+/* --- Sayfa / bolunme -------------------------------------------------------
+   Panel ayri bir DOM elementi DEGIL, body'nin arka plani: Keycloak'in
+   sablonuna dokunmadan tam boy bir sutun elde etmenin tek yolu bu (login.ftl
+   kopyalamak surum bagimliligi getirirdi). SVG kendi icinde
+   preserveAspectRatio="slice" oldugu icin kutusunu fotograf gibi kirparak
+   kapliyor, esnemiyor. */
+body#keycloak-bg {
+  background: #ffffff;
+  min-height: 100dvh;
+}
+
+.pf-v5-c-login {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.25rem;
+  box-sizing: border-box;
+}
+
+.pf-v5-c-login__container {
+  width: min(23rem, 100%);
+  max-width: none;
+  margin: 0;
+}
+
+/* Dar ekranda panel tamamen kalkar: formu bir seride sikistirmaktansa
+   ekranin tamamini vermek daha okunur. */
+@media (min-width: 900px) {
+  body#keycloak-bg {
+    background:
+      #ffffff url("../img/yaprak-paneli.svg") no-repeat right center / 46% 100%;
+  }
+  .pf-v5-c-login {
+    padding-right: 46vw;
+  }
+}
+
+/* --- Kart yok --------------------------------------------------------------
+   Form dogrudan beyaz zeminde duruyor; PF5'in kart cercevesi/golgesi ve
+   yatay ic bosluklari sifirlanir ki baslik, alanlar ve alt serit ayni
+   hizadan bassin. */
+.pf-v5-c-login__main {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.pf-v5-c-login__main-header,
+.pf-v5-c-login__main-body,
+.pf-v5-c-login__main-footer-band {
+  padding-inline: 0;
+  background: transparent;
+  border: 0;
+}
+
+/* --- Marka (kartin ustunde, realm displayNameHtml'inden gelir) ---- */
+#kc-header-wrapper {
+  display: block;
+  text-align: left;
+  padding-bottom: 1.4rem;
+}
+
+.ga-marka {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: #14251d;
+}
+
+/* Amblem: yaprak izlenimi veren asimetrik yuvarlak - ek dosya gerektirmez. */
+.ga-marka::before {
+  content: "";
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 50% 0 50% 50%;
+  background: var(--ga-yesil);
+  flex: none;
+}
+
+.ga-marka-alt {
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--ga-soluk);
+}
+
+/* --- Baslik --- */
+.pf-v5-c-login__main-title,
+#kc-page-title {
+  font-size: 1.4rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  color: var(--ga-metin);
+  line-height: 1.25;
+}
+
+/* --- Alanlar --- */
+.pf-v5-c-form__label-text {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #3f4d46;
+}
+
+.pf-v5-c-form-control,
+.pf-v5-c-form-control input,
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+  border-radius: 6px;
+  border-color: var(--ga-hat);
+  font-size: 0.88rem;
+}
+
+.pf-v5-c-form-control {
+  --pf-v5-c-form-control--Height: 2.6rem;
+}
+
+/* --- Butonlar --- */
+.pf-v5-c-button.pf-m-primary {
+  background-color: var(--ga-yesil);
+  border-radius: 6px;
+  font-weight: 600;
+  --pf-v5-c-button--PaddingTop: 0.62rem;
+  --pf-v5-c-button--PaddingBottom: 0.62rem;
+}
+
+.pf-v5-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:focus {
+  background-color: var(--ga-yesil-koyu);
+}
+
+/* --- Alt serit: "Vatandassaniz ... hemen kayit olun" --- */
+.pf-v5-c-login__main-footer-band {
+  margin-top: 1rem;
+  font-size: 0.78rem;
+  color: var(--ga-soluk);
+  text-align: center;
+}
+
+.pf-v5-c-login__main-footer-band a {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pf-v5-c-login__main-footer-band a:hover {
+  text-decoration: underline;
+}
