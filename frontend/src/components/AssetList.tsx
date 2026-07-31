@@ -11,7 +11,8 @@ import {
 import type {
   AssetFeature,
   AssetFeatureCollection,
-  AssetFilters,
+  AssetStatus,
+  AssetType,
 } from "../types/asset";
 import AssetDetayModal, { useVarlikYonetimi } from "./AssetDetayModal";
 import type { EkipOzet } from "../types/saha";
@@ -23,13 +24,43 @@ import { IconX } from "./icons";
 const selectClass =
   "flex-1 border border-slate-300 bg-white px-2 py-1.5 text-xs focus:border-emerald-500 focus:outline-none";
 
+/** Acilirlar tekil secer, lejant kutucuklari coklu - ikisi AYNI state'i
+ *  paylastigi icin acilirin gosteremeyecegi bir ara durum olusabilir (orn.
+ *  lejanttan 3 tur isaretli). O durumda acilir bu sentetik degeri gosterir;
+ *  secilmesi bir sey degistirmez (zaten mevcut durum), kullanici "Tüm tipler"e
+ *  ya da tekil bir tipe donerek cikar. */
+const KARISIK = "__karisik";
+
+/** Isaretli anahtar sayisina gore acilirin gostermesi gereken deger:
+ *  hepsi acik -> "" ("Tüm ..."), tek acik -> o anahtar, aksi halde KARISIK. */
+function acilirDegeri<K extends string>(
+  anahtarlar: readonly K[],
+  secili: Record<K, boolean>
+): string {
+  const acik = anahtarlar.filter((a) => secili[a]);
+  if (acik.length === anahtarlar.length) return "";
+  if (acik.length === 1) return acik[0];
+  return KARISIK;
+}
+
+/** KARISIK durumda acilirda gorunen metin - "hiçbiri" ayri yazilir, yoksa
+ *  "0 tip seçili" gibi tuhaf bir ifade cikiyordu. */
+function karisikEtiketi(acikSayisi: number, ad: string): string {
+  return acikSayisi === 0 ? `Hiçbir ${ad} seçili değil` : `${acikSayisi} ${ad} seçili`;
+}
+
 interface AssetListProps {
   data?: AssetFeatureCollection;
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
-  filters: AssetFilters;
-  onFiltersChange: (f: AssetFilters) => void;
+  /** Tur/durum filtresi: haritadaki lejantla PAYLASILAN state (bkz. App.tsx).
+   *  Buradaki acilir tekil secer (= yalnizca o kutucuk), lejant coklu secer;
+   *  ikisi de ayni durumu yazdigi icin biri digerini sifirlamaz. */
+  turler: Record<AssetType, boolean>;
+  onTurSec: (tur: AssetType | null) => void;
+  durumlar: Record<AssetStatus, boolean>;
+  onDurumSec: (durum: AssetStatus | null) => void;
   seciliId: string | null;
   onSec: (id: string) => void;
   onDuzenle: (asset: AssetFeature) => void;
@@ -50,8 +81,10 @@ export default function AssetList({
   isLoading,
   isError,
   error,
-  filters,
-  onFiltersChange,
+  turler,
+  onTurSec,
+  durumlar,
+  onDurumSec,
   seciliId,
   onSec,
   onDuzenle,
@@ -77,6 +110,13 @@ export default function AssetList({
     detayKapat: () => setDetayAsset(null),
   });
 
+  // Acilirlarin gosterecegi deger, paylasilan filtre state'inden turetilir -
+  // lejanttan yapilan degisiklik buraya da aninda yansir.
+  const tipDegeri = acilirDegeri(ASSET_TYPES, turler);
+  const durumDegeri = acilirDegeri(ASSET_STATUSES, durumlar);
+  const acikTipSayisi = ASSET_TYPES.filter((t) => turler[t]).length;
+  const acikDurumSayisi = ASSET_STATUSES.filter((s) => durumlar[s]).length;
+
   // Haritadan secim yapildiginda listedeki karti gorunur alana kaydir.
   useEffect(() => {
     seciliRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -97,29 +137,31 @@ export default function AssetList({
       <div className="flex gap-2 border-b border-slate-200 px-4 py-3">
         <select
           className={selectClass}
-          value={filters.type ?? ""}
-          onChange={(e) =>
-            onFiltersChange({
-              ...filters,
-              type: (e.target.value || undefined) as AssetFilters["type"],
-            })
-          }
+          value={tipDegeri}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v !== KARISIK) onTurSec((v || null) as AssetType | null);
+          }}
         >
           <option value="">Tüm tipler</option>
+          {tipDegeri === KARISIK && (
+            <option value={KARISIK}>{karisikEtiketi(acikTipSayisi, "tip")}</option>
+          )}
           <TipSecenekleri turler={ASSET_TYPES} />
         </select>
 
         <select
           className={selectClass}
-          value={filters.status ?? ""}
-          onChange={(e) =>
-            onFiltersChange({
-              ...filters,
-              status: (e.target.value || undefined) as AssetFilters["status"],
-            })
-          }
+          value={durumDegeri}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v !== KARISIK) onDurumSec((v || null) as AssetStatus | null);
+          }}
         >
           <option value="">Tüm durumlar</option>
+          {durumDegeri === KARISIK && (
+            <option value={KARISIK}>{karisikEtiketi(acikDurumSayisi, "durum")}</option>
+          )}
           {ASSET_STATUSES.map((s) => (
             <option key={s} value={s}>
               {ASSET_STATUS_LABELS[s]}
