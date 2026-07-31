@@ -136,17 +136,22 @@ export async function konumSatiriDoldur(
  *  atama/degistirme), reddedilmis ihbarda reddi geri alma. */
 export function ihbarPopupIcerigi(report: ReportFeature, yetkili = false): string {
   const { name, type, status, note, photo_url } = report.properties;
+  // Rozet ham durumu degil GORUNUMU anlatir: tamir edilmis bir is "Onaylandı"
+  // yazip acik isle ayni yesili tasimasin (bkz. types/report.ihbarGorunumu).
+  const gorunum = report.properties.gorunum ?? status;
   const foto = fotoUrl(photo_url);
   const durumRenk: Record<string, { bg: string; fg: string }> = {
     beklemede: { bg: "#fef3c7", fg: "#92400e" },
     onaylandi: { bg: "#d1fae5", fg: "#065f46" },
     reddedildi: { bg: "#fee2e2", fg: "#991b1b" },
+    tamir: { bg: "#f1f5f9", fg: "#475569" },
   };
-  const dr = durumRenk[status] ?? durumRenk.beklemede;
+  const dr = durumRenk[gorunum] ?? durumRenk.beklemede;
 
   let ikinciDugme: PopupDugmesi | null = null;
   if (yetkili && status === "onaylandi") {
     // Ayni islem ihbar detay modalinde de var; iki yerde AYNI ad kullanilir.
+    // Tamir edilmis kayitta da durur: varlik (silinene kadar) hala yonetilebilir.
     ikinciDugme = { sinif: "popup-varlik-btn", etiket: "Varlığı Yönet", renk: "#059669" };
   } else if (yetkili && status === "reddedildi") {
     ikinciDugme = { sinif: "popup-geri-al-btn", etiket: "Reddi Geri Al", renk: "#e11d48" };
@@ -165,7 +170,7 @@ export function ihbarPopupIcerigi(report: ReportFeature, yetkili = false): strin
         <span style="
           display:inline-block; padding:2px 8px; border-radius:9999px;
           font-size:11px; font-weight:500; background:${dr.bg}; color:${dr.fg}">
-          ${REPORT_STATUS_LABELS[status]}
+          ${REPORT_STATUS_LABELS[gorunum]}
         </span>
       </div>
       ${

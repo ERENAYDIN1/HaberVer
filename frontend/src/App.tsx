@@ -78,10 +78,13 @@ import type { TamamlananAlan } from "./types/alan";
 import type { Bolge, BolgeTipi, SekilDuzenleme } from "./types/bolge";
 import {
   IHBAR_DURUM_RENGI,
+  IHBAR_GORUNUMLERI,
   REPORT_STATUS_LABELS,
   REPORT_STATUSES,
+  ihbarGorunumu,
 } from "./types/report";
 import type {
+  IhbarGorunumu,
   ReportFeature,
   ReportFeatureCollection,
   ReportStatus,
@@ -151,7 +154,7 @@ function sekilNoktalari(
 const BASLANGIC = {
   filtreler: { source: "kayitli" } as AssetFilters,
   sekme: "liste" as Sekme,
-  ihbarDurum: "beklemede" as ReportStatus,
+  ihbarDurum: "beklemede" as IhbarGorunumu,
   /** Varsayilan olarak varliklar + saha ekipleri gorunur; ihbar noktalari ve
    *  kayitli bolgeler/guzergahlar gizli (kullanici lejanttan veya Bolgeler
    *  sekmesinden acar). */
@@ -164,10 +167,12 @@ const BASLANGIC = {
   } as Record<KatmanAnahtari, boolean>,
   katmanTurleri: { agac: true, direk: true, sulama: true } as Record<AssetType, boolean>,
   katmanVarlikDurumlari: { iyi: true, bakim_lazim: true } as Record<AssetStatus, boolean>,
-  katmanDurumlari: { beklemede: true, onaylandi: false, reddedildi: false } as Record<
-    ReportStatus,
-    boolean
-  >,
+  katmanDurumlari: {
+    beklemede: true,
+    onaylandi: false,
+    reddedildi: false,
+    tamir: false,
+  } as Record<IhbarGorunumu, boolean>,
   cizimRengi: "#059669",
   /** Harita acilis gorunumu (Istanbul merkezi + zoom 11). */
   zoom: 11,
@@ -189,10 +194,11 @@ const BOS_KATMANLAR: Record<KatmanAnahtari, boolean> = {
  *  kapali oldugu icin haritaya bir sey dusmez; ama kullanici katmani actiginda
  *  (ya da rozete baktiginda) elenmis degil, TOPLAM ihbar sayisini gorur.
  *  Acilistaki `BASLANGIC.katmanDurumlari` yalnizca "beklemede" isaretlidir. */
-const TUM_IHBAR_DURUMLARI: Record<ReportStatus, boolean> = {
+const TUM_IHBAR_DURUMLARI: Record<IhbarGorunumu, boolean> = {
   beklemede: true,
   onaylandi: true,
   reddedildi: true,
+  tamir: true,
 };
 
 /** Lejant (katman filtresi) kutucuklarini panel secimine gore kuran setState
@@ -261,7 +267,7 @@ export default function App() {
   // Burada tutulur ki bir bakim bildirimine tiklaninca dogrudan "onaylandi"ya
   // gecilebilsin ve harita, o an ham ihbar noktalarini mi yoksa onaylanmis
   // ihbarlardan olusan varliklari mi gosterecegini bilsin.
-  const [ihbarDurum, setIhbarDurum] = useState<ReportStatus>(BASLANGIC.ihbarDurum);
+  const [ihbarDurum, setIhbarDurum] = useState<IhbarGorunumu>(BASLANGIC.ihbarDurum);
   const [duzenlenen, setDuzenlenen] = useState<AssetFeature | null>(null);
   const [koordinat, setKoordinat] = useState<
     { longitude: number; latitude: number } | undefined
@@ -298,11 +304,11 @@ export default function App() {
   }, []);
   // Ihbar katmaninin durum alt-filtresi - varsayilan yalniz bekleyen ihbarlar
   // (onaylanan/reddedilen genel bakisi kalabalik yapmasin, istenirse acilir).
-  const [katmanDurumlari, setKatmanDurumlari] = useState<Record<ReportStatus, boolean>>(
+  const [katmanDurumlari, setKatmanDurumlari] = useState<Record<IhbarGorunumu, boolean>>(
     BASLANGIC.katmanDurumlari
   );
   const katmanDurumuDegistir = useCallback((anahtar: string) => {
-    setKatmanDurumlari((d) => ({ ...d, [anahtar]: !d[anahtar as ReportStatus] }));
+    setKatmanDurumlari((d) => ({ ...d, [anahtar]: !d[anahtar as IhbarGorunumu] }));
   }, []);
 
   // Panel kapalıyken hiçbir sekme "aktif" sayılmaz (harita sade kalır; ihbar
@@ -508,9 +514,11 @@ export default function App() {
       setSeciliIhbarId(onayliEslemeRef.current.varliktanRapora.get(id) ?? null);
       setDetayRapor(null);
       setSeciliBolgeId(null);
-      if (panelAcik && !(sekme === "ihbarlar" && ihbarDurum === "onaylandi")) {
-        setSekme("liste");
-      }
+      // "İhbarlar > Onaylandı" ve "> Tamir Edildi" zaten ihbardan olusan
+      // varliklari listeler; oradayken secim sekmeyi degistirmez.
+      const ihbarVarlikSekmesi =
+        sekme === "ihbarlar" && (ihbarDurum === "onaylandi" || ihbarDurum === "tamir");
+      if (panelAcik && !ihbarVarlikSekmesi) setSekme("liste");
     },
     [seciliId, panelAcik, sekme, ihbarDurum]
   );
@@ -1031,6 +1039,48 @@ export default function App() {
     reddedildi: reddedilenIhbarSorgu,
   };
 
+  /** Cekilen tum ihbarlar GORUNUME gore gruplanir: onaylanmislar, olusturduklari
+   *  varlik hala bakim bekliyorsa "onaylandi" (acik is), tamir edildiyse (ya da
+   *  varlik silindiyse) "tamir" olur. Hem harita katmani, hem lejant sayaclari,
+   *  hem panelin alt-sekme senkronu tek bu kaynagi okur; ayrim uc yerde ayri
+   *  ayri hesaplanmaz. Her ihbar nesnesine
+   *  `properties.gorunum` yazilir (harita pin rengi bunu okur). */
+  const ihbarGorunumleri = useMemo(() => {
+    const varlikDurumu = new Map<string, "iyi" | "bakim_lazim">();
+    for (const a of ihbarVarlikSorgu.data?.features ?? []) {
+      varlikDurumu.set(a.properties.id, a.properties.status);
+    }
+    const varlikBilgisiVar = ihbarVarlikSorgu.data !== undefined;
+    const gruplar = {
+      onaylandi: [] as ReportFeature[],
+      tamir: [] as ReportFeature[],
+      beklemede: [] as ReportFeature[],
+      reddedildi: [] as ReportFeature[],
+    } satisfies Record<IhbarGorunumu, ReportFeature[]>;
+    for (const durum of REPORT_STATUSES) {
+      for (const f of ihbarDurumSorgusu[durum].data?.features ?? []) {
+        const g = ihbarGorunumu(
+          f.properties.status,
+          f.properties.created_asset_id
+            ? varlikDurumu.get(f.properties.created_asset_id)
+            : undefined,
+          varlikBilgisiVar
+        );
+        gruplar[g].push({
+          ...f,
+          properties: { ...f.properties, gorunum: g },
+        });
+      }
+    }
+    return gruplar;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    ihbarVarlikSorgu.data,
+    bekleyenIhbarSorgu.data,
+    onaylananIhbarSorgu.data,
+    reddedilenIhbarSorgu.data,
+  ]);
+
   // --- Harita katman verileri (sag-ustteki KatmanKontrolu'ne bagli) --------
   // Sekmelerden bagimsiz: kullanici varlik/ihbar/saha ekibi katmanlarini istedigi
   // kombinasyonda ayni anda haritada gorebilir.
@@ -1073,33 +1123,27 @@ export default function App() {
   // durumun alt-filtresi otomatik acildigi icin dogal olarak calisir.
   const ihbarKatmanVeri = useMemo<ReportFeatureCollection>(() => {
     const gorulen = new Map<string, ReportFeature>();
-    for (const durum of REPORT_STATUSES) {
-      if (!katmanDurumlari[durum]) continue;
-      for (const f of ihbarDurumSorgusu[durum].data?.features ?? []) {
-        gorulen.set(f.properties.id, f);
-      }
+    for (const gorunum of IHBAR_GORUNUMLERI) {
+      if (!katmanDurumlari[gorunum]) continue;
+      for (const f of ihbarGorunumleri[gorunum]) gorulen.set(f.properties.id, f);
     }
     return { type: "FeatureCollection", features: [...gorulen.values()] };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    katmanDurumlari,
-    bekleyenIhbarSorgu.data,
-    onaylananIhbarSorgu.data,
-    reddedilenIhbarSorgu.data,
-  ]);
+  }, [katmanDurumlari, ihbarGorunumleri]);
 
   // Haritadan secilen ihbar hangi durumdaysa panelin alt sekmesi de ona gecer -
   // yoksa kullanici paneli sonradan actiginda (orn. "Reddedildi" sekmesi acik
   // kalmisken bekleyen bir ihbari secmisse) secili kayit listede hic gorunmez.
-  // "onaylandi" da dahil: o sekme ham ihbarlari degil onlardan olusan varliklari
-  // listeler, ama secim artik ikisini birlikte isaretledigi icin (bkz.
-  // onayliEslemeRef) dogru satir orada da vurgulanir.
+  // "onaylandi"/"tamir" de dahil: o iki sekme ham ihbarlari degil onlardan
+  // olusan varliklari listeler, ama secim artik ikisini birlikte isaretledigi
+  // icin (bkz. onayliEslemeRef) dogru satir orada da vurgulanir. Ham durum
+  // degil GORUNUM kullanilir, yoksa tamir edilmis bir ihbar secilince panel
+  // "Onaylandı" sekmesine gecip bos kaliyordu.
   useEffect(() => {
     if (!seciliIhbarId) return;
-    const durum = ihbarKatmanVeri.features.find(
+    const secili = ihbarKatmanVeri.features.find(
       (f) => f.properties.id === seciliIhbarId
-    )?.properties.status;
-    if (durum) setIhbarDurum(durum);
+    )?.properties;
+    if (secili) setIhbarDurum(secili.gorunum ?? secili.status);
   }, [seciliIhbarId, ihbarKatmanVeri]);
 
   const katmanSayilari: Record<KatmanAnahtari, number> = {
@@ -1157,22 +1201,16 @@ export default function App() {
     () => [
       {
         onSec: katmanDurumuDegistir,
-        secenekler: REPORT_STATUSES.map((d) => ({
+        secenekler: IHBAR_GORUNUMLERI.map((d) => ({
           anahtar: d,
           etiket: REPORT_STATUS_LABELS[d],
           renk: IHBAR_DURUM_RENGI[d],
           secili: katmanDurumlari[d],
-          sayi: ihbarDurumSorgusu[d].data?.features.length ?? 0,
+          sayi: ihbarGorunumleri[d].length,
         })),
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      katmanDurumlari,
-      bekleyenIhbarSorgu.data,
-      onaylananIhbarSorgu.data,
-      reddedilenIhbarSorgu.data,
-    ]
+    [katmanDurumlari, ihbarGorunumleri, katmanDurumuDegistir]
   );
 
   // --- Sol paneldeki secim -> sag-ustteki lejant (katman filtresi) senkronu ---
@@ -1200,7 +1238,7 @@ export default function App() {
       setKatmanlar((k) =>
         !k.varliklar && k.ihbarlar ? k : { ...k, varliklar: false, ihbarlar: true }
       );
-      setKatmanDurumlari(yalnizca(REPORT_STATUSES, ihbarDurum));
+      setKatmanDurumlari(yalnizca(IHBAR_GORUNUMLERI, ihbarDurum));
     } else if (aktifSekme === "liste") {
       setKatmanlar((k) =>
         k.varliklar && !k.ihbarlar ? k : { ...k, varliklar: true, ihbarlar: false }
@@ -1233,7 +1271,8 @@ export default function App() {
     setTamamlananAlanlar([]);
     if (asset.properties.source === "ihbar") {
       setSekme("ihbarlar");
-      setIhbarDurum("onaylandi");
+      // Tamir edilmis varlik artik "Onaylandı"da degil "Tamir Edildi"de listelenir.
+      setIhbarDurum(asset.properties.status === "iyi" ? "tamir" : "onaylandi");
     } else {
       setSekme("liste");
     }

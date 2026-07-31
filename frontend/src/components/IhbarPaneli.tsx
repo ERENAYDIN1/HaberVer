@@ -14,7 +14,12 @@ import {
   type AssetFeature,
   type AssetFeatureCollection,
 } from "../types/asset";
-import { REPORT_STATUSES, type ReportFeature, type ReportStatus } from "../types/report";
+import {
+  IHBAR_GORUNUMLERI,
+  type IhbarGorunumu,
+  type ReportFeature,
+  type ReportStatus,
+} from "../types/report";
 import type { EkipOzet } from "../types/saha";
 import AssetDetayModal, { useVarlikYonetimi } from "./AssetDetayModal";
 import AssetForm from "./AssetForm";
@@ -37,19 +42,27 @@ interface IhbarVarlikSorguSonucu {
  *  onIhbarlarChange efekti kendini surekli tetikler. */
 const BOS_IHBARLAR: ReportFeature[] = [];
 
-const SEKME_ETIKETLERI: Record<ReportStatus, string> = {
-  beklemede: "Bekleyen",
+const SEKME_ETIKETLERI: Record<IhbarGorunumu, string> = {
   onaylandi: "Onaylandı",
+  tamir: "Tamir Edildi",
+  beklemede: "Bekleyen",
   reddedildi: "Reddedildi",
 };
 
+/** Ham ihbar kaydi listeleyen sekmeler mi, ihbardan olusan VARLIKLARI mi
+ *  listeliyoruz: "Onaylandı" ve "Tamir Edildi" varlik listeler (biri hala bakim
+ *  bekleyenleri, digeri kapanmis olanlari), digerleri ham ihbari. */
+function varlikSekmesi(g: IhbarGorunumu): boolean {
+  return g === "onaylandi" || g === "tamir";
+}
+
 interface IhbarPaneliProps {
-  /** Durum sekmesi (Bekleyen İhbar/Onaylandı/Reddedildi) - App.tsx'te tutulur;
-   *  boylece bir bakim bildirimine tiklaninca dogrudan "onaylandi"ya gecilebilir
-   *  ve harita, o an ham ihbar noktalarini mi yoksa onaylanmis ihbarlardan
-   *  olusan varliklari mi gosterecegini bilir. */
-  durum: ReportStatus;
-  onDurumChange: (d: ReportStatus) => void;
+  /** Alt sekme (Onaylandı/Tamir Edildi/Bekleyen/Reddedildi) - App.tsx'te
+   *  tutulur; boylece bir bakim bildirimine tiklaninca dogrudan "onaylandi"ya
+   *  gecilebilir ve harita, o an ham ihbar noktalarini mi yoksa onaylanmis
+   *  ihbarlardan olusan varliklari mi gosterecegini bilir. */
+  durum: IhbarGorunumu;
+  onDurumChange: (d: IhbarGorunumu) => void;
   /** Bir ihbar onaylanip varliga donusunce ana varlik listesini tazelemek icin. */
   onVarlikOlustu?: () => void;
   /** Yuklenen (ham) ihbarlar degisince ust bilesene bildirir (haritada gostermek icin). */
@@ -106,15 +119,17 @@ export default function IhbarPaneli({
   // lejant sayaclari eski veriyle kaliyordu (alt filtreyi kapat-ac etmek de
   // ise yaramiyordu, cunku onbellekteki veri hala eskiydi).
   //
-  // "Onaylandı" alt-sekmesinde ham ihbar kaydi degil, olusan varliklar gosterilir
-  // (ihbarVarlikSorgu ust bilesenden gelir) - o sekmede ihbar cekmeye gerek yok.
+  // "Onaylandı"/"Tamir Edildi" alt-sekmelerinde ham ihbar kaydi degil, olusan
+  // varliklar gosterilir (ihbarVarlikSorgu ust bilesenden gelir) - o sekmelerde
+  // ihbar cekmeye gerek yok.
+  const varlikListesi = varlikSekmesi(durum);
   const ihbarSorgu = useQuery({
     queryKey: ["reports", durum],
-    queryFn: () => listReports(durum),
-    enabled: durum !== "onaylandi",
+    queryFn: () => listReports(durum as ReportStatus),
+    enabled: !varlikListesi,
   });
-  const ihbarlar = durum === "onaylandi" ? BOS_IHBARLAR : ihbarSorgu.data?.features ?? BOS_IHBARLAR;
-  const yukleniyor = durum !== "onaylandi" && ihbarSorgu.isLoading;
+  const ihbarlar = varlikListesi ? BOS_IHBARLAR : ihbarSorgu.data?.features ?? BOS_IHBARLAR;
+  const yukleniyor = !varlikListesi && ihbarSorgu.isLoading;
   const hata = islemHatasi ?? (ihbarSorgu.error as Error | null)?.message ?? null;
 
   const onIhbarlarChangeRef = useRef(onIhbarlarChange);
@@ -197,14 +212,15 @@ export default function IhbarPaneli({
     seciliVarlikRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [seciliRaporId]);
 
-  // "Onaylandı" sekmesindeki varliklari duruma gore ayir: once bakim
-  // bekleyenler, sonra tamir edilenler (otomatik silme kuyrugunda).
+  // Ihbardan olusan varliklar iki AYRI sekmeye bolunur: hala bakim bekleyenler
+  // ("Onaylandı" = acik is) ve tamir edilmis olanlar ("Tamir Edildi" = kapanmis
+  // is, otomatik silme kuyrugunda). Eskiden ikisi tek listede alt alta
+  // duruyordu; haritada da tek renk pin olduklari icin karisiyorlardi.
   const onayliVarliklar = ihbarVarlikSorgu.data?.features ?? [];
-  const bakimVarliklar = onayliVarliklar.filter(
-    (a) => a.properties.status === "bakim_lazim"
-  );
-  const tamirVarliklar = onayliVarliklar.filter(
-    (a) => a.properties.status === "iyi"
+  const gosterilenVarliklar = onayliVarliklar.filter((a) =>
+    durum === "tamir"
+      ? a.properties.status === "iyi"
+      : a.properties.status === "bakim_lazim"
   );
 
   // Iki bolumde de ayni VarlikSatiri kurulumu kullanildigindan tek yerde uret.
@@ -231,15 +247,15 @@ export default function IhbarPaneli({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Durum filtresi - uc sekme de esit genislikte (flex-1) ve kisa
-          etiketlerle (SEKME_ETIKETLERI) ayni buyuklukte gorunur; tam etiket
-          (ornek "Bekleyen İhbar") satirlar/rozetlerde hala kullanilir. */}
-      <div className="flex gap-1 border-b border-slate-200 px-4 py-2">
-        {REPORT_STATUSES.map((d) => (
+      {/* Alt sekmeler - dordu de esit genislikte (grid) ve kisa etiketlerle
+          (SEKME_ETIKETLERI) gorunur; tam etiket (ornek "Bekleyen İhbar")
+          satirlarda/rozetlerde hala kullanilir. */}
+      <div className="grid grid-cols-4 gap-1 border-b border-slate-200 px-4 py-2">
+        {IHBAR_GORUNUMLERI.map((d) => (
           <button
             key={d}
             onClick={() => onDurumChange(d)}
-            className={`flex-1 border px-2 py-1 text-center text-xs font-medium transition ${
+            className={`min-w-0 truncate border px-1 py-1 text-center text-[11px] font-medium transition ${
               durum === d
                 ? "border-emerald-600 bg-emerald-600 text-white"
                 : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
@@ -266,8 +282,16 @@ export default function IhbarPaneli({
         </p>
       )}
 
-      {durum === "onaylandi" ? (
+      {varlikListesi ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
+          {/* Tamir edilenler TAMIR_SAKLAMA_GUN sonra otomatik silinir
+              (VarlikSatiri her satirda kalan gunu gosterir). */}
+          {durum === "tamir" && (
+            <p className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] text-slate-500">
+              Tamir edilen varlıklar {TAMIR_SAKLAMA_GUN} gün sonra otomatik
+              olarak silinir.
+            </p>
+          )}
           {ihbarVarlikSorgu.isLoading && (
             <p className="p-4 text-sm text-slate-500">Yükleniyor…</p>
           )}
@@ -276,35 +300,17 @@ export default function IhbarPaneli({
               {ihbarVarlikSorgu.error?.message}
             </p>
           )}
-          {ihbarVarlikSorgu.data?.features.length === 0 && (
+          {!ihbarVarlikSorgu.isLoading && gosterilenVarliklar.length === 0 && (
             <p className="p-6 text-center text-sm text-slate-500">
-              Onaylanmış ihbardan oluşan varlık yok.
+              {durum === "tamir"
+                ? "Tamir edilmiş varlık yok."
+                : "Bakım bekleyen, ihbardan oluşmuş varlık yok."}
             </p>
           )}
 
-          {/* Bakim lazim olanlar ustte, tamir edilenler (durum 'iyi') altta ayri
-              bir bolumde - tamir edilenler TAMIR_SAKLAMA_GUN sonra otomatik
-              silinir (VarlikSatiri her satirda kalan gunu gosterir). */}
           <ul className="divide-y divide-slate-100">
-            {bakimVarliklar.map((asset) => varlikSatiriRender(asset))}
+            {gosterilenVarliklar.map((asset) => varlikSatiriRender(asset))}
           </ul>
-
-          {tamirVarliklar.length > 0 && (
-            <>
-              <div className="border-y border-slate-200 bg-slate-50 px-4 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Tamir Edildi
-                </p>
-                <p className="mt-0.5 text-[11px] text-slate-500">
-                  Tamir edilen varlıklar {TAMIR_SAKLAMA_GUN} gün sonra otomatik
-                  olarak silinir.
-                </p>
-              </div>
-              <ul className="divide-y divide-slate-100">
-                {tamirVarliklar.map((asset) => varlikSatiriRender(asset))}
-              </ul>
-            </>
-          )}
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
