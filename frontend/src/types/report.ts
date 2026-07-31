@@ -13,7 +13,9 @@ export type ReportStatus = (typeof REPORT_STATUSES)[number];
  *
  *  Siralama ACIK IS -> KAPANMIS IS: once uzerinde islem yapilacak olanlar
  *  (Onaylandı = ekip gidecek, Bekleyen = karar verilecek), sonra sonuclanmis
- *  olanlar (Tamir Edildi, Reddedildi). */
+ *  olanlar (Tamir Edildi, Reddedildi). Bu ayrim haritadaki giysiyle birebir
+ *  ortusur - ilk ikisi durum halkasi tasir, son ikisi sonumlenir
+ *  (bkz. IHBAR_GIYSISI / HALKALI_GORUNUMLER). */
 export const IHBAR_GORUNUMLERI = [
   "onaylandi",
   "beklemede",
@@ -44,22 +46,71 @@ export function ihbarGorunumu(
   return varlikDurumu === "bakim_lazim" ? "onaylandi" : "tamir";
 }
 
-/** Ihbar gorunumu -> hex renk. Haritadaki ihbar PIN'leri (MapView, gorunum
- *  basina bir hazir goruntu uretir) ve sag-ustteki lejant swatch'lari bu TEK
- *  kaynaktan beslenir - daha once ayni palet App.tsx ve MapView.tsx'te iki
- *  kopyaydi.
+/** Ihbar gorunumu -> DURUM SINYALI rengi. Bu renk artik pinin DOLGUSU degildir:
+ *  pin (varlik dairesi gibi) turunun grup rengini tasir, durum ise pinin
+ *  cevresindeki halka ve sag-ustteki rozetle anlatilir. Buradaki renk iste o
+ *  halkanin/rozetin rengidir; lejant swatch'lari da ayni kaynaktan beslenir.
  *
- *  Not: bu renkler yalnizca IHBAR kayitlarinin durumunu anlatir. Varlik
- *  isaretcileri daire, ihbarlar pin cizildigi icin ayni yesil tonu iki yerde
- *  gorunse bile sinif karismaz (bkz. MapView "Isaretci gorsel dili"). */
+ *  Neden degisti: eskiden dolgu duruma gore boyaniyordu ve palet varliklarin
+ *  KATEGORI paletiyle (GRUP_RENGI) uc tonda cakisiyordu - zumrut hem "Yeşil
+ *  Alan" hem "Onaylandı", slate hem "Diğer" hem "Tamir Edildi", mor hem
+ *  "ihbardan dogdu" hem "bekleyen" demekti. Artik renk YALNIZCA kategoriyi,
+ *  halka+rozet YALNIZCA durumu anlatir.
+ *
+ *  `onaylandi` bilincli olarak amber: bakim gerektiren bir varlikla onaylanmis
+ *  bir ihbar ayni seydir (ekibin gitmesi gereken acik is), dolayisiyla ayni
+ *  uyari rengini paylasirlar. Aralarindaki fark sekil - daire envanterin kendi
+ *  kaydi, pin vatandastan geldi. */
 export const IHBAR_DURUM_RENGI: Record<IhbarGorunumu, string> = {
   beklemede: "#9333ea",
-  onaylandi: "#059669",
+  // Bakim lazim varlikla ayni amber: ikisi de ACIK IS (bkz. MapView
+  // "assets-durum" uyari halkasi).
+  onaylandi: "#f59e0b",
   reddedildi: "#e11d48",
   // Tamir edilen (kapanmis) is: bilincli olarak notr gri - haritada "artik is
   // yok" demek.
   tamir: "#64748b",
 };
+
+/** Rozet simgeleri. Text degil PATH cizilir: rozet ~17px capinda bir diskte
+ *  basiliyor ve data-URI ile raster'a cevrilen bir SVG'de `<text>` tarayicinin
+ *  font secimine kalirdi. */
+export const DURUM_ROZETLERI = ["unlem", "soru", "onay", "carpi"] as const;
+export type DurumRozeti = (typeof DURUM_ROZETLERI)[number];
+
+/** Bir gorunumun harita "giysisi": pinin cevresindeki halka + rozet + sonumleme.
+ *  Rengi IHBAR_DURUM_RENGI verir; burasi yalnizca SEKLI tarif eder. */
+export interface IhbarGiysisi {
+  /** Pinin basini cevreleyen durum halkasi cizilsin mi. */
+  halka: boolean;
+  /** Halka kesikli mi (karar bekleyen = henuz kesinlesmemis). */
+  halkaKesikli: boolean;
+  /** Sag-ustteki kucuk rozet; null ise rozet cizilmez. */
+  rozet: DurumRozeti | null;
+  /** Kapanmis kayitlar sonumlenir - haritada dururlar ama gorsel agirliklari
+   *  acik islerle yarismaz. */
+  opaklik: number;
+}
+
+export const IHBAR_GIYSISI: Record<IhbarGorunumu, IhbarGiysisi> = {
+  // Acik is: dolu amber halka + "!" - bakim lazim varlikla ayni giysi.
+  onaylandi: { halka: true, halkaKesikli: false, rozet: "unlem", opaklik: 1 },
+  // Kapanmis is: halka yok, sonuk, kucuk bir onay isareti.
+  tamir: { halka: false, halkaKesikli: false, rozet: "onay", opaklik: 0.5 },
+  // Karar bekliyor: KESIKLI mor halka - "henuz kesinlesmedi" demek.
+  beklemede: { halka: true, halkaKesikli: true, rozet: "soru", opaklik: 1 },
+  // Reddedildi: en sonuk; haritadan silinmez ama neredeyse arka plana duser.
+  reddedildi: { halka: false, halkaKesikli: false, rozet: "carpi", opaklik: 0.38 },
+};
+
+/** Halka/rozet cizilen gorunumler - katman filtreleri bunlardan turetilir ki
+ *  MapLibre var olmayan bir goruntu adi ("ihbar-halka-tamir") istemesin. */
+export const HALKALI_GORUNUMLER = IHBAR_GORUNUMLERI.filter(
+  (d) => IHBAR_GIYSISI[d].halka
+);
+export const ROZETLI_GORUNUMLER = IHBAR_GORUNUMLERI.filter(
+  (d) => IHBAR_GIYSISI[d].rozet !== null
+);
 
 export interface ReportProperties {
   id: string;

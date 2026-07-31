@@ -106,12 +106,17 @@ const IDARI_ALAN_RENK = "#0891b2";
 /** Katman filtresindeki tur rengi icin ortak palet kullanilir (types/asset.ts
  *  `TIP_RENGI`); durum renkleri asagida.
  *
- *  "Bakım Lazım" haritada gercekten amber DOLGU basar (MapView
- *  "assets-circle" + "assets-durum" halosu), dolayisiyla tek renk dogru.
- *  "İyi" varliklar ise TUR (grup) rengiyle cizilir - tek bir "iyi rengi" yok;
- *  bu yuzden `renk` sadece kenarlik icin durur ve swatch grup renklerinden
- *  dilimlenir (`IYI_SWATCH_RENKLERI`). Onceden burada haritada hicbir katmanin
- *  basmadigi bir yesil (#10b981) duruyordu - lejant yaniltiyordu. */
+ *  Haritada her iki durumdaki varlik da TUR (grup) rengiyle cizilir - tek bir
+ *  "iyi rengi" ya da "bakim rengi" YOK. Bu yuzden iki swatch de grup
+ *  renklerinden dilimlenir (`IYI_SWATCH_RENKLERI`); `renk` yalnizca kenarlik
+ *  icin durur. "Bakım Lazım"in kenarligi amber cunku haritada durumu anlatan
+ *  sey dolgu degil, dairenin cevresindeki amber UYARI HALKASI + "!" rozeti
+ *  (MapView "assets-durum" / "assets-rozet") - ayni amber onaylanmis ihbar
+ *  pininde de kullanilir, ikisi de acik is.
+ *
+ *  Onceden "Bakım Lazım" gercekten amber dolgu basiyordu ve o varligin
+ *  kategorisi haritada tamamen kayboluyordu; "İyi" ise haritada hicbir
+ *  katmanin basmadigi bir yesil (#10b981) gosteriyordu. */
 const VARLIK_DURUM_RENGI: Record<AssetStatus, string> = {
   iyi: "#0f766e",
   bakim_lazim: "#f59e0b",
@@ -1178,11 +1183,10 @@ export default function App() {
           anahtar: s,
           etiket: ASSET_STATUS_LABELS[s],
           renk: VARLIK_DURUM_RENGI[s],
-          // "İyi" varliklar TUR (grup) rengiyle cizilir - tek bir "iyi rengi"
-          // yok, dolayisiyla swatch grup renklerinden dilimlenir. "Bakım
-          // Lazım" ise haritada gercekten amber DOLGU basar (MapView
-          // "assets-circle"), tek renk dogru.
-          renkler: s === "iyi" ? IYI_SWATCH_RENKLERI : undefined,
+          // Her iki durumda da dolgu TUR (grup) rengidir, o yuzden iki swatch
+          // de grup renklerinden dilimlenir; farki kenarlik rengi tasir
+          // (bakim = amber uyari halkasinin rengi).
+          renkler: IYI_SWATCH_RENKLERI,
           secili: katmanVarlikDurumlari[s],
           sayi: varlikDurumSayilari[s],
         })),

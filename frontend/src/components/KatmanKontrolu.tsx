@@ -28,9 +28,10 @@ export interface AltFiltre {
   /** Haritadaki isaretci rengiyle ayni renk noktasi (lejant). */
   renk: string;
   /** Haritada TEK bir renkle cizilmeyen secenekler icin dilimli swatch
-   *  (orn. "İyi" varliklar tur/grup rengiyle cizilir, tek bir "iyi rengi"
-   *  yoktur). Verilirse `renk` yerine bu dilimler gosterilir; onceden burada
-   *  haritada hic basilmayan bir yesil (#10b981) duruyordu. */
+   *  (varlik durumlari: haritada dolgu her zaman TUR/grup rengidir, tek bir
+   *  "iyi rengi" ya da "bakim rengi" yoktur). Verilirse dolgu bu dilimlerden
+   *  olusur, `renk` ise KENARLIGA duser - "Bakım Lazım"da kenarlik amber,
+   *  cunku haritada durumu anlatan sey dolgu degil amber uyari halkasi. */
   renkler?: string[];
   secili: boolean;
   sayi: number;
@@ -63,9 +64,9 @@ interface KatmanTanimi {
   ikon: (p: { className?: string }) => ReactElement;
 }
 
-/** Katman sirasi/etiketleri tek yerde; harita marker renkleriyle eslesir:
- *  varlik yesili, ihbar moru (MapView IHBAR_RENK), bolge menekse, guzergah
- *  mavisi, saha ekibi indigosu. Bolgeler/guzergahlar bilincli olarak ihbarlarla
+/** Katman sirasi/etiketleri tek yerde. Buradaki renkler ANA KATMAN kimligidir
+ *  (kenar cubugu/lejant ikonu), tek tek isaretcilerin rengi degil - isaretciler
+ *  turlerinin grup rengini tasir. Bolgeler/guzergahlar bilincli olarak ihbarlarla
  *  saha ekipleri ARASINDA durur: ustteki ikisi "is", alttaki "kim" - ikisi de
  *  bunlari baglayan gorev alani. Gorev bolgeleri (alan) ve guzergahlar (cizgi)
  *  ayri ayri acilip kapatilir; sol paneldeki iki ayri sekmeyle birebir eslesir. */

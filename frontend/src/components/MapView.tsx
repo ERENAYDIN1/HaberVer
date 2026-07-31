@@ -7,9 +7,15 @@ import { HARITA_STILLERI, type HaritaStilId } from "../data/mapStyles";
 import type { TamamlananAlan } from "../types/alan";
 import type { Bolge, SekilDuzenleme } from "../types/bolge";
 import { TIP_RENGI, TIP_RENGI_VARSAYILAN } from "../types/asset";
-import type { AssetFeatureCollection } from "../types/asset";
-import { IHBAR_DURUM_RENGI, REPORT_STATUSES } from "../types/report";
-import type { ReportFeatureCollection } from "../types/report";
+import type { AssetFeatureCollection, AssetType } from "../types/asset";
+import {
+  HALKALI_GORUNUMLER,
+  IHBAR_DURUM_RENGI,
+  IHBAR_GIYSISI,
+  IHBAR_GORUNUMLERI,
+  ROZETLI_GORUNUMLER,
+} from "../types/report";
+import type { DurumRozeti, ReportFeatureCollection } from "../types/report";
 import type { EkipGorevleri } from "../types/saha";
 import {
   alanEtiketi,
@@ -57,24 +63,28 @@ const OLCUM_SOURCE_ID = "olcum";
 const DINAMIK_SOURCE_ID = "dinamik-onizleme";
 const OLCUM_RENK = "#2563eb";
 /* ------------------------------------------------------------------ *
- * Isaretci gorsel dili
+ * Isaretci gorsel dili - UC BILGI, UC AYRI TASIYICI
  *
- * SEKIL = SINIF, RENK = TEK ANLAM:
- *   - Envanterdeki VARLIK  -> DAIRE. Dolgu: tur (grup) rengi; "bakim lazim"
- *     ise amber dolgu + amber uyari halosu. Ihbardan dogmus varlikta ayrica
- *     ince MOR ic halka ("assets-ihbar-kaynak").
- *   - IHBAR kaydi          -> PIN (damla). Rengi ihbarin DURUMU.
+ *   RENK          -> KATEGORI. Turun grup rengi (types/asset.ts GRUP_RENGI),
+ *                    hem varlik dairesinde hem ihbar pininde. Baska hicbir sey
+ *                    anlatmaz.
+ *   SEKIL         -> KAYDIN KAYNAGI. Dolu DAIRE = envanterdeki varlik,
+ *                    damla PIN = vatandas ihbari.
+ *   HALKA + ROZET -> IS DURUMU. Amber dolu halka + "!" = acik is; mor KESIKLI
+ *                    halka + "?" = karar bekliyor; halka yok + sonumleme =
+ *                    kapanmis (tamir "✓" %50, red "✕" %38).
+ *   GLIF          -> TUR (beyaz cizgi ikonu, data/tipGlifleri.ts).
  *
- * Onceden ikisi de daireydi ve ayni paleti farkli anlamlarda kullaniyordu:
- * "iyi" bir agac (yesil daire + agac glifi) ile onaylanmis bir ihbar (yesil
- * daire + agac glifi) neredeyse ayni gorunuyordu. Sinif farkini artik renk
- * degil silüet tasir, dolayisiyla ayni yesil tonu iki yerde gorunse de
- * karismaz.
+ * Onceki tasarimda renk hem kategoriyi hem durumu tasiyordu ve iki palet uc
+ * tonda cakisiyordu (zumrut = "Yeşil Alan" VE "Onaylandı", slate = "Diğer" VE
+ * "Tamir Edildi", mor = "ihbardan dogdu" VE "bekleyen"); ustune "bakim lazim"
+ * varligin dolgusu amber'e cevriliyor, yani o varligin KATEGORISI haritada
+ * tamamen kayboluyordu.
+ *
+ * Kilit karar: bakim gerektiren bir varlik ile onaylanmis bir ihbar AYNI amber
+ * giysiyi giyer - ikisi de ekibin gitmesi gereken acik istir. Aralarindaki tek
+ * fark sekil. Boylece "ayni is" mesaji renk feda edilmeden verilir.
  * ------------------------------------------------------------------ */
-
-/** Ihbar kimliginin rengi (bekleyen ihbar moru). Ihbardan dogan varliklarin
- *  ince ic halkasinda da bu kullanilir - varligi kokenine baglar. */
-const IHBAR_RENK = IHBAR_DURUM_RENGI.beklemede;
 
 /** Secili ihbar pini: normal pinin ALTINA daha buyuk cizilen koyu pin, kalin
  *  bir kontur etkisi verir (daire secim halkasi pinin UCUNU cevreleyecegi icin
@@ -97,9 +107,64 @@ const TIP_RENGI_IFADESI = [
   TIP_RENGI_VARSAYILAN,
 ] as unknown as maplibregl.ExpressionSpecification;
 
-/** Pin goruntulerinin viewBox'i. Ucu (12,32) noktasinda, bas merkezi (12,12);
- *  katmanlar `icon-anchor: "bottom"` kullandigi icin ucu tam koordinata oturur. */
-const PIN_VIEWBOX = { g: 24, y: 32 };
+/* --- Pin cizim uzayi ------------------------------------------------
+ *
+ * Pinin kendisi, tur glifi, durum halkasi ve rozet AYNI viewBox'ta cizilir;
+ * hepsi ayni `icon-anchor: "bottom"` + ayni `icon-size` ile eklendigi icin
+ * hizalama otomatiktir ve `icon-offset` hesabi (olceklendikce kayma riskiyle
+ * birlikte) hic devreye girmez. Bu, tur glifinde zaten kullanilan kalibin
+ * halka ve rozete genisletilmis hali.
+ *
+ * viewBox 24x32'den 34x42'ye BUYUTULDU: halka ve rozet pinin disina tastigi
+ * icin tuval genislemek zorundaydi. Cizim buyumedigi (yalnizca tuvale bosluk
+ * eklendigi) icin `icon-size` kalibrasyonu bundan etkilenmez - goruntuler
+ * pixelRatio 2 ile eklendiginden 1 viewBox birimi = icon-size 1'de 1 CSS px. */
+const PIN_VIEWBOX = { g: 34, y: 42 };
+/** Ham pin path'i (tepesi (12,12) merkezli, ucu (12,31.2)) bu kadar kaydirilir. */
+const PIN_KAYDIRMA = { x: 5, y: 10 };
+/** Kaydirma sonrasi pin BASININ merkezi - glif, halka ve rozet buna gore konumlanir. */
+const PIN_BAS = { x: 12 + PIN_KAYDIRMA.x, y: 12 + PIN_KAYDIRMA.y };
+/** Pin basinin viewBox birimindeki yaricapi (path'ten gelir, sabit). */
+const PIN_BAS_YARICAP = 9.6;
+
+/** Durum rozetlerinin cizimi - beyaz cizgi, rozet diskinin MERKEZINE gore.
+ *  `<text>` degil path: rozet ~17px capinda basiliyor ve data-URI ile raster'a
+ *  cevrilen bir SVG'de metin tarayicinin font secimine kalirdi. */
+const ROZET_CIZIMI: Record<DurumRozeti, string> = {
+  unlem: `<path d="M0 -3.6 V0.6"/><path d="M0 3.1 h0.01"/>`,
+  soru:
+    `<path d="M-2.3 -2 C-2.3 -4.6 2.4 -4.5 2.4 -1.9 C2.4 -0.3 0 0.2 0 1.7"/>` +
+    `<path d="M0 3.9 h0.01"/>`,
+  onay: `<path d="M-2.9 0.2 L-0.9 2.3 L3 -2.4"/>`,
+  carpi: `<path d="M-2.5 -2.5 L2.5 2.5"/><path d="M2.5 -2.5 L-2.5 2.5"/>`,
+};
+
+/** Renkli disk + uzerine beyaz simge. Disk yaricapi cagirana birakilir cunku
+ *  pin rozeti ile varlik rozeti farkli viewBox'larda ayni EKRAN boyutuna
+ *  gelmeli (ikisinin icon-size'lari farkli). */
+function rozetCizimi(
+  cx: number,
+  cy: number,
+  yaricap: number,
+  renk: string,
+  simge: DurumRozeti
+): string {
+  return (
+    `<circle cx="${cx}" cy="${cy}" r="${yaricap}" fill="${renk}" ` +
+    `stroke="#ffffff" stroke-width="1.9"/>` +
+    `<g transform="translate(${cx} ${cy})" fill="none" stroke="#ffffff" ` +
+    `stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">` +
+    `${ROZET_CIZIMI[simge]}</g>`
+  );
+}
+
+/** Pin uzayinda (PIN_VIEWBOX) bir SVG kabugu. */
+function pinSvgKabugu(ic: string): string {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PIN_VIEWBOX.g} ${PIN_VIEWBOX.y}" ` +
+    `width="${PIN_VIEWBOX.g * 2}" height="${PIN_VIEWBOX.y * 2}">${ic}</svg>`
+  );
+}
 
 /** Bir SVG dizgisini raster'a cevirip haritaya verilen adla ekler. Yukleme
  *  basarisiz olsa bile resolve eder: tek bir bozuk goruntu tum katman kurulumunu
@@ -128,53 +193,143 @@ function tipGlifiSvg(ic: string): string {
   );
 }
 
-/** Ayni glifin PIN varyanti: 24x24 cizim, pinin BASINA (12,12) oturacak sekilde
- *  kucultulup PIN_VIEWBOX'a yerlestirilir. Pinle ayni viewBox/olcu kullandigi
- *  icin iki katman ayni `icon-anchor`/`icon-size` ile hizalanir - `icon-offset`
- *  hesabi (ve olceklendikce kayma riski) hic devreye girmez. */
+/** Ayni glifin PIN varyanti: 24x24 cizim, pinin BASINA oturacak sekilde
+ *  kucultulup PIN_VIEWBOX'a yerlestirilir. Olcek 0.62 pinin bas capina goredir
+ *  ve pinle birlikte buyudugu icin `icon-size` degistiginde ayrica ayar
+ *  gerektirmez (bas 29px iken glif ~22.5px kalir - varlik dairesindeki oranin
+ *  aynisi). */
 function pinGlifiSvg(ic: string): string {
   const olcek = 0.62;
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PIN_VIEWBOX.g} ${PIN_VIEWBOX.y}" ` +
-    `width="${PIN_VIEWBOX.g * 2}" height="${PIN_VIEWBOX.y * 2}" fill="none" ` +
-    // Kucultuldugu icin cizgi kalinligi telafi edilir (2.2 / 0.62 ~ 3.5).
-    `stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">` +
-    `<g transform="translate(12 12) scale(${olcek}) translate(-12 -12)">${ic}</g></svg>`
+  return pinSvgKabugu(
+    `<g fill="none" stroke="#ffffff" stroke-width="${(2.2 / olcek).toFixed(2)}" ` +
+      `stroke-linecap="round" stroke-linejoin="round" ` +
+      `transform="translate(${PIN_BAS.x} ${PIN_BAS.y}) scale(${olcek}) translate(-12 -12)">` +
+      `${ic}</g>`
   );
 }
 
-/** Ihbar pini (damla). Beyaz kontur her altlikta (uydu dahil) okunur kalmasi
- *  icin. SDF kullanilmiyor: SDF'in renklendirilebilirligi icin ham distance
- *  field uretmek gerekiyor, alfa maskesini SDF gibi vermek kenar/halo
- *  davranisini bozuyor - durum basina hazir goruntu bakelemek hem risksiz hem
- *  repodaki mevcut kalip (bkz. tipGlifiSvg). */
+/** Ihbar pini (damla) - dolgusu artik TUR (grup) rengi. Beyaz kontur her
+ *  altlikta (uydu dahil) okunur kalmasi icin. SDF kullanilmiyor: SDF'in
+ *  renklendirilebilirligi icin ham distance field uretmek gerekiyor, alfa
+ *  maskesini SDF gibi vermek kenar/halo davranisini bozuyor - tur basina hazir
+ *  goruntu bakelemek hem risksiz hem repodaki mevcut kalip (bkz. tipGlifiSvg). */
 function ihbarPinSvg(renk: string): string {
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PIN_VIEWBOX.g} ${PIN_VIEWBOX.y}" ` +
-    `width="${PIN_VIEWBOX.g * 2}" height="${PIN_VIEWBOX.y * 2}">` +
-    `<path d="M12 31.2C12 31.2 2.4 18.6 2.4 12A9.6 9.6 0 1 1 21.6 12C21.6 18.6 12 31.2 12 31.2Z" ` +
-    `fill="${renk}" stroke="#ffffff" stroke-width="1.9" stroke-linejoin="round"/></svg>`
+  return pinSvgKabugu(
+    `<g transform="translate(${PIN_KAYDIRMA.x} ${PIN_KAYDIRMA.y})">` +
+      `<path d="M12 31.2C12 31.2 2.4 18.6 2.4 12A9.6 9.6 0 1 1 21.6 12C21.6 18.6 12 31.2 12 31.2Z" ` +
+      `fill="${renk}" stroke="#ffffff" stroke-width="1.9" stroke-linejoin="round"/></g>`
   );
 }
 
-/** Bir turun glifini hem daire (tip-*) hem pin (pin-glif-*) varyantiyla yukler. */
+/** Pinin basini cevreleyen DURUM halkasi (pinin ARKASINA cizilir). Kesikli
+ *  varyant "karar bekliyor" demek - sureklilik kesinlesmis bir durumu anlatir. */
+function ihbarHalkaSvg(renk: string, kesikli: boolean): string {
+  const r = PIN_BAS_YARICAP + 3.9;
+  return pinSvgKabugu(
+    `<circle cx="${PIN_BAS.x}" cy="${PIN_BAS.y}" r="${r}" fill="${renk}" opacity="0.16"/>` +
+      `<circle cx="${PIN_BAS.x}" cy="${PIN_BAS.y}" r="${r}" fill="none" stroke="${renk}" ` +
+      `stroke-width="2.4"${kesikli ? ` stroke-dasharray="4 3.2"` : ""}/>`
+  );
+}
+
+/** Pinin sag-ust omzundaki durum rozeti (pinin USTUNE cizilir). */
+function ihbarRozetSvg(renk: string, simge: DurumRozeti): string {
+  // Kayma bas yaricapindan bir tik ICERIDE (9.6 -> 9.2): tam yaricapta rozetin
+  // beyaz konturu viewBox kenarina milimi milimine dayaniyor ve kirpilma riski
+  // doguyordu.
+  const kayma = PIN_BAS_YARICAP - 0.4;
+  return pinSvgKabugu(
+    rozetCizimi(PIN_BAS.x + kayma, PIN_BAS.y - kayma, 6.4, renk, simge)
+  );
+}
+
+/* --- Varlik rozeti ---------------------------------------------------
+ *
+ * Varliklar `circle` katmani oldugu icin rozet pindeki gibi ayni cizime
+ * gomulemez; ayri bir symbol katmani gerekiyor. `icon-offset` yerine kaydirma
+ * GORUNTUYE gomuluyor (seffaf kare tuvalin sag-ustunde bir disk): icon-offset
+ * icon-size ile carpildigindan zoom'a bagli daire yaricapini takip ettirmek
+ * kirilgan olurdu, boyleyse tek bir icon-size interpolasyonu hem konumu hem
+ * boyu birlikte olcekliyor. */
+const VARLIK_ROZET_VIEWBOX = 40;
+/** Rozet diskinin tuval merkezine gore kosegen kaymasi (her iki eksende). */
+const VARLIK_ROZET_KAYMA = 9.9;
+
+function varlikRozetSvg(renk: string, simge: DurumRozeti): string {
+  const m = VARLIK_ROZET_VIEWBOX / 2;
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VARLIK_ROZET_VIEWBOX} ${VARLIK_ROZET_VIEWBOX}" ` +
+    `width="${VARLIK_ROZET_VIEWBOX * 2}" height="${VARLIK_ROZET_VIEWBOX * 2}">` +
+    // Yaricap pin rozetinden buyuk (6.4 -> 7.1) cunku varlik rozetinin
+    // icon-size'i daha kucuk; ikisi ekranda ayni capa gelsin diye telafi.
+    `${rozetCizimi(m + VARLIK_ROZET_KAYMA, m - VARLIK_ROZET_KAYMA, 7.1, renk, simge)}</svg>`
+  );
+}
+
+/** Bakim gerektiren varligin rozeti - onaylanmis ihbarla AYNI amber ve AYNI
+ *  simge; ikisi de acik is. */
+const VARLIK_UYARI_RENK = IHBAR_DURUM_RENGI.onaylandi;
+
+/** Bir turun glifini daire (tip-*), pin glifi (pin-glif-*) ve ihbar pini
+ *  (ihbar-pin-*) varyantlariyla yukler. Pin artik DURUMA degil TURE gore
+ *  renklendigi icin pin goruntusu de bu tur dongusunde uretilir. */
 function tipIkonuYukle(map: maplibregl.Map, tur: string, ic: string): Promise<void> {
+  const renk = TIP_RENGI[tur as AssetType] ?? TIP_RENGI_VARSAYILAN;
   return Promise.all([
     svgIkonuYukle(map, `tip-${tur}`, tipGlifiSvg(ic)),
     svgIkonuYukle(map, `pin-glif-${tur}`, pinGlifiSvg(ic)),
+    svgIkonuYukle(map, `ihbar-pin-${tur}`, ihbarPinSvg(renk)),
   ]).then(() => undefined);
 }
 
-/** Tum tur gliflerini + ihbar durum pinlerini haritaya yukler (stil
- *  degisiminde katmanlar bastan kuruldugu icin tekrar cagrilir). */
+/** Tum tur gliflerini/pinlerini + durum halkalarini + rozetleri haritaya yukler
+ *  (stil degisiminde katmanlar bastan kuruldugu icin tekrar cagrilir).
+ *
+ *  Halka ve rozet YALNIZCA onlari kullanan gorunumler icin uretilir; katman
+ *  filtreleri de ayni listelerden turetildigi icin MapLibre hicbir zaman var
+ *  olmayan bir goruntu adi istemez. */
 function tipIkonlariniHazirla(map: maplibregl.Map): Promise<void> {
   return Promise.all([
     ...Object.entries(TIP_GLIF_PATH).map(([tur, ic]) => tipIkonuYukle(map, tur, ic)),
-    ...REPORT_STATUSES.map((d) =>
-      svgIkonuYukle(map, `ihbar-pin-${d}`, ihbarPinSvg(IHBAR_DURUM_RENGI[d]))
+    ...HALKALI_GORUNUMLER.map((d) =>
+      svgIkonuYukle(
+        map,
+        `ihbar-halka-${d}`,
+        ihbarHalkaSvg(IHBAR_DURUM_RENGI[d], IHBAR_GIYSISI[d].halkaKesikli)
+      )
+    ),
+    ...ROZETLI_GORUNUMLER.map((d) =>
+      svgIkonuYukle(
+        map,
+        `ihbar-rozet-${d}`,
+        ihbarRozetSvg(IHBAR_DURUM_RENGI[d], IHBAR_GIYSISI[d].rozet as DurumRozeti)
+      )
     ),
     svgIkonuYukle(map, "ihbar-pin-secim", ihbarPinSvg(IHBAR_PIN_SECIM_RENK)),
+    svgIkonuYukle(
+      map,
+      "varlik-rozet-bakim",
+      varlikRozetSvg(VARLIK_UYARI_RENK, "unlem")
+    ),
   ]).then(() => undefined);
+}
+
+/** Gorunume gore sonumleme - kapanmis kayitlar (tamir/red) acik islerle gorsel
+ *  agirlikta yarismasin. Tum ihbar katmanlarina ayni ifade verilir. */
+const IHBAR_OPAKLIK_IFADESI = [
+  "match",
+  ["coalesce", ["get", "gorunum"], ["get", "status"]],
+  ...IHBAR_GORUNUMLERI.flatMap((d) => [d, IHBAR_GIYSISI[d].opaklik]),
+  1,
+] as unknown as maplibregl.ExpressionSpecification;
+
+/** Halka/rozet katmanlarinin filtresi: yalnizca o giysiyi giyen gorunumler. */
+function gorunumFiltresi(gorunumler: readonly string[]) {
+  return [
+    "in",
+    ["coalesce", ["get", "gorunum"], ["get", "status"]],
+    ["literal", gorunumler],
+  ] as unknown as maplibregl.FilterSpecification;
 }
 
 /** Bir varlik/ihbara ucarken kullanilan zoom/sure degerleri: haritadaki bir
@@ -192,19 +347,45 @@ const IKON_KATMAN_YERLESIMI: Record<string, unknown> = {
   "icon-ignore-placement": true,
 };
 
-/** Ihbar pini ve pin glifi: ucu koordinata otursun diye alttan cakili. Ikisi
- *  ayni viewBox/olcuyu kullandigi icin glif otomatik olarak pinin basina gelir. */
+/** Pin ailesi (pin, glif, halka, rozet): ucu koordinata otursun diye alttan
+ *  cakili. Hepsi ayni viewBox/olcuyu kullandigi icin parcalar birbirine
+ *  otomatik oturur.
+ *
+ *  OLCU KURALI: pinin BAS CAPI = varlik dairesinin CAPI. Bas capi viewBox'ta
+ *  sabit 19.2 birim (2 * PIN_BAS_YARICAP) ve 1 birim = icon-size 1'de 1 px
+ *  oldugundan olcek dogrudan turetilir:
+ *    z10 -> daire r 8    => 16 / 19.2 = 0.83
+ *    z16 -> daire r 14.5 => 29 / 19.2 = 1.51
+ *  Eskiden pin IKON_KATMAN_YERLESIMI'ni (0.55 -> 0.95) paylasiyordu, yani basi
+ *  18px capindaydi ve yanindaki 29px'lik daireden yapisal olarak kucuktu;
+ *  glifi de ayni oranda kuculdugu icin okunmuyordu. */
 const PIN_KATMAN_YERLESIMI: Record<string, unknown> = {
   ...IKON_KATMAN_YERLESIMI,
+  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.83, 16, 1.51],
   "icon-anchor": "bottom",
 };
 
 /** Secili ihbarin altina cizilen koyu pin - normalden bir tik buyuk olmasi
- *  kalin bir kontur etkisi verir (olcek IKON_KATMAN_YERLESIMI'nin ~1.22 kati). */
+ *  kalin bir kontur etkisi verir (olcek PIN_KATMAN_YERLESIMI'nin ~1.22 kati). */
 const PIN_SECIM_YERLESIMI: Record<string, unknown> = {
   ...PIN_KATMAN_YERLESIMI,
-  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.67, 16, 1.16],
+  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 1.01, 16, 1.84],
 };
+
+/** Varlik rozeti: kaymasi goruntuye gomulu oldugu icin merkeze cakili. Olcek,
+ *  rozet diskinin daire kenarinda pin rozetiyle AYNI capa gelmesi icin
+ *  turetildi (rozet merkezi tuval merkezinden 14.0 birim uzakta, hedef
+ *  daire yaricapinin ~1.31 kati).
+ *
+ *  minzoom: uzakta ~8px'lik bir "!" okunmaz; o mesafede durumu amber uyari
+ *  HALKASI zaten tasiyor, rozet yakinlasinca devreye giriyor. */
+const VARLIK_ROZET_YERLESIMI: Record<string, unknown> = {
+  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.75, 16, 1.36],
+  "icon-allow-overlap": true,
+  "icon-ignore-placement": true,
+};
+/** Rozetlerin gorunmeye basladigi zoom (hem varlik hem ihbar tarafinda). */
+const ROZET_MINZOOM = 12.5;
 
 /** Isaretci olculeri tek yerde: tur glifi okunabilir kalsin diye daireler
  *  belirgin (kalin beyaz halka + yumusak golge), ama uzaklasinca (z10-12)
@@ -214,10 +395,9 @@ const ISARETCI = {
   varlikYaricap: ["interpolate", ["linear"], ["zoom"], 10, 8, 16, 14.5],
   /** Ihbar pininin ucundaki yer golgesi (pin havada durmasin). */
   ihbarGolgeYaricap: ["interpolate", ["linear"], ["zoom"], 10, 2.5, 16, 4],
-  /** "Ihbardan dogmus varlik" mor ic halkasi - beyaz cercevenin hemen ICINDE,
-   *  amber uyari halkasiyla cakismamasi icin ana daireden kucuk. */
-  kaynakYaricap: ["interpolate", ["linear"], ["zoom"], 10, 5.6, 16, 11],
-  /** "Bakim lazim" amber uyari halkasi - ana dairenin disinda kalmali. */
+  /** "Bakim lazim" amber uyari halkasi - ana dairenin disinda kalmali. Artik
+   *  durumun TEK gorsel tasiyicisi (dolgu tur rengine birakildi), bu yuzden
+   *  ihbar pinindeki halkayla ayni agirlikta okunmali. */
   uyariYaricap: ["interpolate", ["linear"], ["zoom"], 10, 10.5, 16, 17],
   /** Secim halkalari - uyari halkasinin da disinda. */
   varlikSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 12.5, 16, 19],
@@ -226,11 +406,13 @@ const ISARETCI = {
 
 /** Isaretcinin altina yumusak golge - dairenin hafif buyugu, asagi kaydirilmis
  *  ve bulaniklastirilmis siyah bir daire (altliktan bagimsiz derinlik hissi). */
-function golgeBoyasi(yaricap: unknown): Record<string, unknown> {
+function golgeBoyasi(yaricap: unknown, opaklik: unknown = 1): Record<string, unknown> {
   return {
     "circle-radius": yaricap,
     "circle-color": "#0f172a",
-    "circle-opacity": 0.22,
+    // Sonumlenen ihbarlarda golge de sonmeli, yoksa %38 opak bir pinin altinda
+    // tam opak bir golge kaliyor.
+    "circle-opacity": ["*", 0.22, opaklik],
     "circle-blur": 0.5,
     "circle-translate": [0, 2],
   };
@@ -609,8 +791,17 @@ export default function MapView({
     if (sekilDuzenlemeRef.current) return;
 
     const katmanlar = ["assets-circle"];
-    if (map.getLayer("assets-icon")) katmanlar.push("assets-icon");
-    for (const k of ["reports-circle", "reports-pin", "reports-icon"]) {
+    // "reports-halka" bilincli olarak DISARIDA: dekoratif, pinin cevresinde
+    // genis bir alan kaplar ve buraya girseydi tiklanabilir olmadigi halde
+    // "dolu" sayilip koordinat secimini olu bir halkaya cevirirdi.
+    for (const k of [
+      "assets-icon",
+      "assets-rozet",
+      "reports-circle",
+      "reports-pin",
+      "reports-icon",
+      "reports-rozet",
+    ]) {
       if (map.getLayer(k)) katmanlar.push(k);
     }
     // Bolge dolgusu/cizgisi de "dolu" sayilir: uzerine tiklamak kendi
@@ -1293,9 +1484,11 @@ export default function MapView({
 
     popupRef.current?.remove();
     const popup = new maplibregl.Popup({
-      // Ihbar artik PIN olarak ciziliyor: popup pinin ustunde kalsin diye
-      // offset pinin yuksekligi kadar (varlik dairelerindeki 14'ten fazla).
-      offset: 34,
+      // Ihbar PIN olarak ciziliyor: popup pinin ustunde kalsin diye offset
+      // pinin yuksekligi kadar (varlik dairelerindeki 14'ten fazla). Pin
+      // buyudugu (icon-size 0.95 -> 1.51) ve etrafina durum halkasi geldigi
+      // icin 34'ten 50'ye cikti - eskisi kalsaydi balon pinin basina binerdi.
+      offset: 50,
       closeButton: false,
       anchor: "bottom",
     })
@@ -1342,8 +1535,10 @@ export default function MapView({
         paint: golgeBoyasi(ISARETCI.varlikYaricap) as never,
       });
 
-      // Bakim gereken varliklar icin amber uyari halkasi (dairenin altinda,
-      // tur renginden bagimsiz olarak "dikkat" sinyali verir).
+      // Bakim gereken varliklar icin amber uyari halkasi. Artik durumun TEK
+      // gorsel tasiyicisi: dolgu tur rengine birakildigi icin "dikkat" sinyali
+      // tamamen buraya (ve zoom >= ROZET_MINZOOM'da "!" rozetine) bindi.
+      // Onaylanmis ihbar pininin halkasiyla ayni amber - ikisi de acik is.
       map.addLayer({
         id: "assets-durum",
         type: "circle",
@@ -1351,51 +1546,34 @@ export default function MapView({
         filter: ["==", ["get", "status"], "bakim_lazim"],
         paint: {
           "circle-radius": ISARETCI.uyariYaricap as never,
-          "circle-color": "#f59e0b",
+          "circle-color": VARLIK_UYARI_RENK,
           "circle-opacity": 0.28,
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#f59e0b",
+          "circle-stroke-width": 2.4,
+          "circle-stroke-color": VARLIK_UYARI_RENK,
         },
       });
 
-      // Ana isaretci: dolgu TUR (grup) rengine gore, beyaz cerceve. "Bakim
-      // lazim" varliklarda dolgu amber'e doner - sag-ustteki lejantin "Bakım
-      // Lazım" swatch'i (#f59e0b) boylece haritada gercekten basilan renk olur;
-      // turu glif tasimaya devam eder.
+      // Ana isaretci: dolgu HER ZAMAN tur (grup) rengi, beyaz cerceve.
+      // Eskiden "bakim lazim" varliklarda dolgu amber'e cevriliyordu; bu, o
+      // varligin kategorisini haritada tamamen siliyordu. Durum artik yukaridaki
+      // halkada, kategori ise burada - iki eksen birbirine karismiyor.
       map.addLayer({
         id: "assets-circle",
         type: "circle",
         source: SOURCE_ID,
         paint: {
           "circle-radius": ISARETCI.varlikYaricap as never,
-          "circle-color": [
-            "case",
-            ["==", ["get", "status"], "bakim_lazim"],
-            "#f59e0b",
-            TIP_RENGI_IFADESI,
-          ] as never,
+          "circle-color": TIP_RENGI_IFADESI as never,
           "circle-stroke-width": ISARETCI.beyazHalka,
           "circle-stroke-color": "#ffffff",
         },
       });
 
-      // Ihbardan dogmus varlik: beyaz cercevenin hemen icinde ince MOR halka.
-      // `source` haritada hic kodlanmiyordu, dolayisiyla onaylanan bir ihbardan
-      // olusan varlik normal envanter varligindan ayirt edilemiyordu. Mor,
-      // ihbar kimliginin rengi - bagi dogrudan kurar. MapLibre `circle`
-      // kesikli kontur desteklemedigi icin "kesikli halka" yerine ince halka.
-      map.addLayer({
-        id: "assets-ihbar-kaynak",
-        type: "circle",
-        source: SOURCE_ID,
-        filter: ["==", ["get", "source"], "ihbar"],
-        paint: {
-          "circle-radius": ISARETCI.kaynakYaricap as never,
-          "circle-color": "transparent",
-          "circle-stroke-width": 1.6,
-          "circle-stroke-color": IHBAR_RENK,
-        },
-      });
+      // Not: "ihbardan dogmus varlik" icin cizilen ince MOR ic halka
+      // ("assets-ihbar-kaynak") KALDIRILDI. Kokeni artik seklin kendisi
+      // tasiyor (pin = vatandas ihbari) ve mor tek anlamina - "karar bekliyor"
+      // - geri dondu; ayrica ic halka amber uyari halkasiyla birlikte
+      // isaretciyi ic ice uc halkaya boguyordu.
 
       map.addLayer({
         id: "assets-selected",
@@ -1422,7 +1600,10 @@ export default function MapView({
         id: "reports-circle",
         type: "circle",
         source: REPORTS_SOURCE_ID,
-        paint: golgeBoyasi(ISARETCI.ihbarGolgeYaricap) as never,
+        paint: golgeBoyasi(
+          ISARETCI.ihbarGolgeYaricap,
+          IHBAR_OPAKLIK_IFADESI
+        ) as never,
       });
     }
 
@@ -1670,6 +1851,26 @@ export default function MapView({
         map.on("mouseenter", "assets-icon", fareGirdiRef.current);
         map.off("mouseleave", "assets-icon", fareCiktiRef.current);
         map.on("mouseleave", "assets-icon", fareCiktiRef.current);
+
+        // Bakim gerektiren varligin sag-ust omzundaki amber "!" rozeti -
+        // onaylanmis ihbar pininkiyle ayni simge ve ayni renk.
+        map.addLayer({
+          id: "assets-rozet",
+          type: "symbol",
+          source: SOURCE_ID,
+          minzoom: ROZET_MINZOOM,
+          filter: ["==", ["get", "status"], "bakim_lazim"],
+          layout: {
+            "icon-image": "varlik-rozet-bakim",
+            ...VARLIK_ROZET_YERLESIMI,
+          },
+        });
+        map.off("click", "assets-rozet", assetsTiklandiRef.current);
+        map.on("click", "assets-rozet", assetsTiklandiRef.current);
+        map.off("mouseenter", "assets-rozet", fareGirdiRef.current);
+        map.on("mouseenter", "assets-rozet", fareGirdiRef.current);
+        map.off("mouseleave", "assets-rozet", fareCiktiRef.current);
+        map.on("mouseleave", "assets-rozet", fareCiktiRef.current);
       }
 
       if (map.getSource(REPORTS_SOURCE_ID) && !map.getLayer("reports-icon")) {
@@ -1681,16 +1882,36 @@ export default function MapView({
           filter: ["==", ["get", "id"], ""],
           layout: { "icon-image": "ihbar-pin-secim", ...PIN_SECIM_YERLESIMI },
         });
-        // Ihbar pini - rengi ihbarin DURUMU (bekleyen mor / onaylanan yesil /
-        // reddedilen kirmizi), sekli varliklardan (daire) ayirir.
+        // Durum halkasi pinin ARKASINDA: amber dolu = acik is, mor kesikli =
+        // karar bekliyor. Kapanmis gorunumlerde (tamir/red) halka yok, o yuzden
+        // katman yalnizca HALKALI_GORUNUMLER'e filtrelenir.
+        map.addLayer({
+          id: "reports-halka",
+          type: "symbol",
+          source: REPORTS_SOURCE_ID,
+          filter: gorunumFiltresi(HALKALI_GORUNUMLER),
+          layout: {
+            "icon-image": [
+              "concat",
+              "ihbar-halka-",
+              ["coalesce", ["get", "gorunum"], ["get", "status"]],
+            ],
+            ...PIN_KATMAN_YERLESIMI,
+          },
+          paint: { "icon-opacity": IHBAR_OPAKLIK_IFADESI as never },
+        });
+        // Ihbar pini - dolgusu artik varliklarla AYNI tur (grup) rengi; sekil
+        // (damla) kaydin vatandastan geldigini, halka+rozet ise durumunu
+        // anlatir. `gorunum` App tarafinda eklenir; yoksa ham duruma dusulur.
         map.addLayer({
           id: "reports-pin",
           type: "symbol",
           source: REPORTS_SOURCE_ID,
           layout: {
-            "icon-image": ["concat", "ihbar-pin-", ["get", "status"]],
+            "icon-image": ["concat", "ihbar-pin-", ["get", "type"]],
             ...PIN_KATMAN_YERLESIMI,
           },
+          paint: { "icon-opacity": IHBAR_OPAKLIK_IFADESI as never },
         });
         // Tur glifi, pinle ayni viewBox'ta kucultulmus varyantindan (pin-glif-*)
         // basilir; boylece basina tam oturur, icon-offset hesabi gerekmez.
@@ -1702,8 +1923,28 @@ export default function MapView({
             "icon-image": ["concat", "pin-glif-", ["get", "type"]],
             ...PIN_KATMAN_YERLESIMI,
           },
+          paint: { "icon-opacity": IHBAR_OPAKLIK_IFADESI as never },
         });
-        for (const katman of ["reports-pin", "reports-icon"]) {
+        // Durum rozeti en ustte, pinin sag-ust omzunda.
+        map.addLayer({
+          id: "reports-rozet",
+          type: "symbol",
+          source: REPORTS_SOURCE_ID,
+          minzoom: ROZET_MINZOOM,
+          filter: gorunumFiltresi(ROZETLI_GORUNUMLER),
+          layout: {
+            "icon-image": [
+              "concat",
+              "ihbar-rozet-",
+              ["coalesce", ["get", "gorunum"], ["get", "status"]],
+            ],
+            ...PIN_KATMAN_YERLESIMI,
+          },
+          paint: { "icon-opacity": IHBAR_OPAKLIK_IFADESI as never },
+        });
+        // Halka tiklamaya baglanmaz: dolgusu pinin cevresinde genis bir alan
+        // kaplar ve bos haritaya tiklamayi (koordinat secimini) yutardi.
+        for (const katman of ["reports-pin", "reports-icon", "reports-rozet"]) {
           map.off("click", katman, reportsTiklandiRef.current);
           map.on("click", katman, reportsTiklandiRef.current);
           map.off("mouseenter", katman, fareGirdiRef.current);
