@@ -118,6 +118,33 @@ class GorevOzet(BaseModel):
         )
 
 
+class TamamlananOzet(BaseModel):
+    """Bir ekibin yakinda tamamladigi (tamir ettigi) is. Haritadaki ekip
+    popup'indaki kisa "Son Tamir Edilenler" listesi icin; aktif gorev ozetinden
+    (GorevOzet) daha az alan tasir - koordinat/atama bilgisi orada gerekmez."""
+
+    assignment_id: uuid.UUID
+    asset_id: uuid.UUID
+    name: str
+    type: AssetType
+    # Varligin O ANKI durumu: tamamlanan gorev geri alinmis ya da varlik yeniden
+    # bakima dusmus olabilir, o zaman 'bakim_lazim' doner.
+    status: AssetStatus
+    completed_at: datetime | None = None
+
+    @classmethod
+    def from_row(cls, row) -> "TamamlananOzet":
+        gorev, asset = row
+        return cls(
+            assignment_id=gorev.id,
+            asset_id=asset.id,
+            name=asset.name,
+            type=asset.type,
+            status=asset.status,
+            completed_at=gorev.completed_at,
+        )
+
+
 class EkipGorevleri(BaseModel):
     """Bir saha ekibi + kendine dusen aktif gorevler (personel yonetim panosu)."""
 
@@ -130,6 +157,8 @@ class EkipGorevleri(BaseModel):
     aktif_gorev: int
     yaka: str | None = None
     gorevler: list[GorevOzet]
+    # Ekibin en son tamamladigi birkac is (bkz. crud.SON_TAMAMLANAN_SAYISI).
+    son_tamamlananlar: list[TamamlananOzet] = []
 
 
 class HavuzVarlik(BaseModel):

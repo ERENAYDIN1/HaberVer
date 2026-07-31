@@ -28,6 +28,16 @@ function useAssetsInvalidator() {
   return () => queryClient.invalidateQueries({ queryKey: ASSETS_KEY });
 }
 
+/** Varligin durumunu degistiren islemler (tamir/silme) ayni zamanda GOREV
+ *  tablosunu da degistirir: tamir aktif gorevi kapatir, kapasite acilinca havuz
+ *  yeniden dagitilir. Bu yuzden "saha" sorgulari (ekip yukleri, ekip gorev
+ *  listeleri, havuz) da tazelenir - yoksa haritadaki ekip rozeti/popup'i bir
+ *  sonraki periyodik cekime kadar bitmis isi gostermeye devam ediyordu. */
+function useSahaInvalidator() {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: ["saha"] });
+}
+
 export function useCreateAsset() {
   const invalidate = useAssetsInvalidator();
   return useMutation({
@@ -47,16 +57,24 @@ export function useUpdateAsset() {
 
 export function useDeleteAsset() {
   const invalidate = useAssetsInvalidator();
+  const sahaTazele = useSahaInvalidator();
   return useMutation({
     mutationFn: (id: string) => deleteAsset(id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      sahaTazele();
+    },
   });
 }
 
 export function useRepairAsset() {
   const invalidate = useAssetsInvalidator();
+  const sahaTazele = useSahaInvalidator();
   return useMutation({
     mutationFn: (id: string) => repairAsset(id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      sahaTazele();
+    },
   });
 }

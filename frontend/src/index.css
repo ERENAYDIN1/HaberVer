@@ -42,6 +42,26 @@
   text-rendering: optimizeLegibility;
 }
 
+/* Ekip popup'i (MapView, saha ekibi marker'i) ayrica bir kural ister: anchor
+   "bottom" oldugu icin MapLibre `translate(-50%, -100%)` uygular, yani yalnizca
+   genislik degil YUKSEKLIK de piksele bolunur. Icerigi degisken (0-3 aktif is +
+   0-3 son tamir) ve varsayilan `line-height: normal` 10-13px yazilarda kesirli
+   satir kutulari uretiyor (13px -> ~15.6px); toplam yukseklik kesirli cikinca
+   -100% yarim piksele denk gelip metni bulaniklastiriyordu. Satir yuksekligi
+   TAM PIKSEL degerine sabitlenince her kutu tam sayi olur (istisna: 13px'lik ad
+   satiri, kendi inline `line-height:16px`'ini tasir - o da tam sayi).
+   Genislik zaten sabit ve cift (POPUP_GENISLIK). */
+.ekip-popup .maplibregl-popup-content {
+  line-height: 14px;
+}
+/* Ve bu popup katman promosyonundan cikarilir: MapLibre tum popup'lara
+   `will-change: transform` verir; icerigi 20 sn'de bir setHTML ile yeniden
+   yazilip yuksekligi degisen tek popup bu oldugundan, promote edilmis katman
+   eski rasterizasyonu olcekleyerek gosterebiliyor (bkz. yukaridaki 2. madde). */
+.ekip-popup {
+  will-change: auto;
+}
+
 /* Bolge/guzergah popup'inin sag ustteki kapatma carpisi varsayilan olcusuyle
    (tarayici buton yazi tipi, ~13px) tutturulmasi zor kaliyordu; hedefi biraz
    buyutmek icin yazi tipi ve dolgusu olculu sekilde artirildi. */

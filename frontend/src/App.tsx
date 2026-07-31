@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { assetsWithin } from "./api/assets";
+import { assetsWithin, getAsset } from "./api/assets";
 import { bolgeler as bolgeleriGetir } from "./api/bolgeler";
 import { bolgeGuncelle } from "./api/bolgeler";
 import { alanOzeti, alanTamponu, type AlanOzeti } from "./api/geo";
@@ -1496,6 +1496,24 @@ export default function App() {
     [ihbarVarlikSorgu.data, seciliRapor]
   );
 
+  /** Haritadaki ekip popup'inda bir is satirina tiklanmasi: o varligin detay
+   *  modali acilir - "Tamir Edildi", ekibe (yeniden) atama, duzenleme ve silme
+   *  hepsi orada (bkz. AssetDetayModal). Varlik ekrandaki listelerde olmayabilir
+   *  (baska sekme/filtre acik olabilir) ve durumu taze olmali, bu yuzden her
+   *  zaman API'den cekilir. Varlik silinmisse (tamir sonrasi otomatik silme)
+   *  kullaniciya sebebi soylenir. */
+  const ekipGoreviAcildi = useCallback(async (assetId: string) => {
+    try {
+      const varlik = await getAsset(assetId);
+      setDetayRapor(null);
+      setDetayBolge(null);
+      setDetayAsset(varlik);
+      setSeciliId(assetId);
+    } catch (e) {
+      window.alert(`Varlık açılamadı: ${(e as Error).message}`);
+    }
+  }, []);
+
   /** Reddedilmis ihbar popup'undaki "Reddi Geri Al". Secim BIRAKILMAZ: ihbar
    *  "beklemede"ye dondugu icin alt-sekme senkronu (yukaridaki efekt) paneli
    *  Bekleyen'e alir ve kullanici kaydi orada secili bulur. */
@@ -1732,6 +1750,8 @@ export default function App() {
           onIhbarVarlikYonet={personel ? ihbarVarligiYonet : undefined}
           onIhbarGeriAl={personel ? ihbarGeriAl : undefined}
           ekipler={katmanlar.ekipler ? ekipSorgu.data : undefined}
+          // Ekip popup'indaki bir ise tiklaninca o varligin detay/islem modali.
+          onEkipGorevSec={personel ? ekipGoreviAcildi : undefined}
           bolgeler={haritaBolgeleri}
           seciliBolgeId={seciliBolgeId}
           onBolgeSec={bolgeSecildi}

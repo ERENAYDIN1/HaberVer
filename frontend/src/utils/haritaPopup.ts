@@ -294,9 +294,21 @@ export function ekipMarkerGuncelle(el: HTMLElement, e: EkipGorevleri): void {
   el.title = `${kisaAd} - detay için tıklayın`;
 }
 
+/** ISO tarih -> cok kisa goreli sure ("3 sa", "2 gün"). Ekip popup'indaki
+ *  "Son Tamir Edilenler" satirlari dar oldugu icin uzun metin sigmiyor. */
+function kisaSure(iso: string | null): string {
+  if (!iso) return "";
+  const sn = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (sn < 60) return "az önce";
+  if (sn < 3600) return `${Math.floor(sn / 60)} dk`;
+  if (sn < 86400) return `${Math.floor(sn / 3600)} sa`;
+  return `${Math.floor(sn / 86400)} gün`;
+}
+
 /** Bir saha ekibi marker'ina tiklaninca acilan popup: tam ad + yuk + son
- *  gorulme + o an ustundeki aktif gorevlerin listesi (istek: haritadan ekibe
- *  basinca hangi gorevler onda, kac tane gorunsun). */
+ *  gorulme + o an ustundeki aktif gorevlerin listesi + son tamir ettikleri.
+ *  Gorev satirlari tiklanabilir: tiklama MapView'in delege dinleyicisine gider,
+ *  o da varligin detay modalini acar (tamir/atama/duzenleme orada). */
 export function ekipPopupHtml(e: EkipGorevleri): string {
   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
   const vurgu = dolu ? "#dc2626" : "#4f46e5";
@@ -316,12 +328,20 @@ export function ekipPopupHtml(e: EkipGorevleri): string {
       doluSegment ? vurgu : "#e2e8f0"
     }"></span>`;
   }).join("");
+  // Her gorev satiri TIKLANABILIR: `data-gorev-asset` MapView'in popup'a
+  // bagladigi delege dinleyici tarafindan yakalanir ve o varligin detay modali
+  // acilir (tamir/atama/duzenleme oradan yapilir). Bu yuzden satirlar <div>
+  // degil <button>.
   const satirlar = e.gorevler.length
     ? e.gorevler
         .map((g) => {
           const renk = TIP_RENGI[g.type] ?? TIP_RENGI_VARSAYILAN;
           return (
-            `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:#f8fafc">` +
+            `<button type="button" class="ekip-gorev-satiri" data-gorev-asset="${kacis(
+              g.asset_id
+            )}" title="${kacis(g.name)} - detay/tamir icin tıklayın" ` +
+            `style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;` +
+            `background:#f8fafc;border:1px solid #e2e8f0;width:100%;text-align:left;cursor:pointer">` +
             `<span style="width:6px;height:6px;border-radius:9999px;background:${renk};flex:none"></span>` +
             `<span style="flex:1;min-width:0;font-size:11px;color:#0f172a;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${kacis(
               g.name
@@ -329,20 +349,56 @@ export function ekipPopupHtml(e: EkipGorevleri): string {
             `<span style="font-size:10px;color:#94a3b8;flex:none">${kacis(
               ASSET_TYPE_LABELS[g.type]
             )}</span>` +
-            `</div>`
+            `<span style="font-size:11px;color:#cbd5e1;flex:none">›</span>` +
+            `</button>`
           );
         })
         .join("")
     : `<div style="padding:6px;border-radius:6px;background:#f8fafc;font-size:11px;color:#94a3b8;text-align:center">Şu an aktif görev yok</div>`;
+
+  // "En son neyi tamir etti" - kisa bir gecmis. Satirlar aktif gorevlerle ayni
+  // sekilde tiklanabilir (varlik silinmediyse detayi acilir).
+  const tamamlananlar = e.son_tamamlananlar ?? [];
+  const tamamlananBolum = tamamlananlar.length
+    ? `<div style="font-size:11px;font-weight:600;color:#475569;margin:8px 0 4px">Son Tamir Edilenler</div>` +
+      `<div style="display:flex;flex-direction:column;gap:3px">` +
+      tamamlananlar
+        .map(
+          (t) =>
+            `<button type="button" class="ekip-gorev-satiri" data-gorev-asset="${kacis(
+              t.asset_id
+            )}" title="${kacis(t.name)} - detay için tıklayın" ` +
+            `style="display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:6px;` +
+            `background:#fff;border:1px solid #f1f5f9;width:100%;text-align:left;cursor:pointer">` +
+            `<span style="font-size:10px;color:#10b981;flex:none">✓</span>` +
+            `<span style="flex:1;min-width:0;font-size:11px;color:#475569;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${kacis(
+              t.name
+            )}</span>` +
+            `<span style="font-size:10px;color:#94a3b8;flex:none">${kacis(
+              kisaSure(t.completed_at)
+            )}</span>` +
+            `</button>`
+        )
+        .join("") +
+      `</div>`
+    : "";
   return (
-    `<div style="font-family:system-ui,sans-serif;min-width:210px;max-width:250px">` +
+    // Genislik SABIT ve cift (POPUP_GENISLIK) - digerleriyle ayni sebeple:
+    // icerige gore esneyen bir popup (eskiden min-width/max-width) kesirli
+    // piksel genisligine oturuyor, anchor'daki `translate(-50%)` yarim piksele
+    // denk geliyor ve metin bulaniklasiyordu. YUKSEKLIK tarafi da onemli
+    // (anchor "bottom" -> `translate(...,-100%)`): satir yuksekligi
+    // `.ekip-popup` sinifiyla tam piksele sabitlenir, bkz. index.css.
+    `<div style="font-family:system-ui,sans-serif;width:${POPUP_GENISLIK}">` +
     // Baslik: haritadaki pin'in aynisi + ad + son gorulme
     `<div style="display:flex;align-items:center;gap:8px">` +
     `<span style="width:30px;height:30px;flex:none;border-radius:9999px;background:${
       dolu ? "linear-gradient(145deg,#fb7185,#dc2626)" : "linear-gradient(145deg,#818cf8,#4338ca)"
     };display:flex;align-items:center;justify-content:center">${EKIP_IKONU}</span>` +
     `<span style="min-width:0">` +
-    `<span style="display:block;font-weight:600;font-size:13px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${kacis(
+    // 13px ada 14px'lik ortak satir kutusu dar geliyor (overflow:hidden ile
+    // 'ğ/y' kuyruklari kirpilir), bu satira 16px verilir - yine TAM piksel.
+    `<span style="display:block;line-height:16px;font-weight:600;font-size:13px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${kacis(
       tamAd
     )}</span>` +
     `<span style="display:block;font-size:10px;color:#94a3b8">${
@@ -359,6 +415,7 @@ export function ekipPopupHtml(e: EkipGorevleri): string {
     }</div>` +
     `<div style="font-size:11px;font-weight:600;color:#475569;margin-bottom:4px">Üzerindeki İşler</div>` +
     `<div style="display:flex;flex-direction:column;gap:3px">${satirlar}</div>` +
+    tamamlananBolum +
     `</div>`
   );
 }

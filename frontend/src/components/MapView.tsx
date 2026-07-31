@@ -494,6 +494,10 @@ interface MapViewProps {
   /** Personel gorunumunde canli saha ekibi konumlari (DOM marker olarak cizilir);
    *  verilmezse hicbir sey gosterilmez. */
   ekipler?: EkipGorevleri[];
+  /** Ekip popup'indaki bir is satirina (aktif gorev ya da son tamir edilen)
+   *  tiklandiginda o varligin id'siyle cagrilir - ust bilesen varlik detay
+   *  modalini acar (tamir/atama/duzenleme orada yapilir). */
+  onEkipGorevSec?: (assetId: string) => void;
   /** Haritada gosterilecek kaydedilmis bolgeler/guzergahlar (Bölgeler paneli
    *  hangilerinin gorunur oldugunu belirler). */
   bolgeler?: Bolge[];
@@ -548,6 +552,7 @@ export default function MapView({
   onIhbarVarlikYonet,
   onIhbarGeriAl,
   ekipler,
+  onEkipGorevSec,
   bolgeler,
   onBolgeDetay,
   seciliBolgeId,
@@ -626,6 +631,7 @@ export default function MapView({
   const onIhbarDetayRef = useRef(onIhbarDetay);
   const onIhbarVarlikYonetRef = useRef(onIhbarVarlikYonet);
   const onIhbarGeriAlRef = useRef(onIhbarGeriAl);
+  const onEkipGorevSecRef = useRef(onEkipGorevSec);
   /** Cizim/olcum sirasinda son bilinen fare konumu (elastik cizgi icin). */
   const sonFareRef = useRef<[number, number] | null>(null);
   /** Son secim (varlik/ihbar) haritadaki bir noktaya tiklanarak mi yapildi;
@@ -663,6 +669,7 @@ export default function MapView({
     onIhbarDetayRef.current = onIhbarDetay;
     onIhbarVarlikYonetRef.current = onIhbarVarlikYonet;
     onIhbarGeriAlRef.current = onIhbarGeriAl;
+    onEkipGorevSecRef.current = onEkipGorevSec;
   });
 
   // Layer-scoped click/hover callback'leri sabit referans olarak tutulur ki
@@ -2167,17 +2174,38 @@ export default function MapView({
       if (!marker) {
         const el = document.createElement("div");
         ekipMarkerGuncelle(el, e);
+        const popup = new maplibregl.Popup({
+          // Pin (30px) + ucu (7px) kadar yukaridan acilsin ki isaretciyi
+          // ortmesin.
+          offset: 42,
+          closeButton: true,
+          anchor: "bottom",
+          // Metin bulanikligina karsi (tam piksel satir yuksekligi + katman
+          // promosyonunun kaldirilmasi) - kurallar index.css'te.
+          className: "ekip-popup",
+        }).setHTML(ekipPopupHtml(e));
+        // Is satirlarina tiklama: dinleyici tek tek satirlara DEGIL popup
+        // kapsayicisina baglanir (delegasyon) - icerik her veri tazelemesinde
+        // setHTML ile yeniden yazildigi icin satirlara baglanan dinleyiciler
+        // kaybolurdu. MapLibre popup kapsayicisini her acilista yeniden
+        // olusturdugundan, ayni elemana iki kez baglamamak icin isaretlenir.
+        popup.on("open", () => {
+          const kapsayici = popup.getElement();
+          if (!kapsayici || kapsayici.dataset.gorevBagli) return;
+          kapsayici.dataset.gorevBagli = "1";
+          kapsayici.addEventListener("click", (ev) => {
+            const hedef = (ev.target as HTMLElement | null)?.closest<HTMLElement>(
+              "[data-gorev-asset]"
+            );
+            const assetId = hedef?.dataset.gorevAsset;
+            if (!assetId) return;
+            ev.stopPropagation();
+            onEkipGorevSecRef.current?.(assetId);
+          });
+        });
         const yeni = new maplibregl.Marker({ element: el, anchor: "bottom" })
           .setLngLat([e.longitude, e.latitude])
-          .setPopup(
-            new maplibregl.Popup({
-              // Pin (30px) + ucu (7px) kadar yukaridan acilsin ki isaretciyi
-              // ortmesin.
-              offset: 42,
-              closeButton: true,
-              anchor: "bottom",
-            }).setHTML(ekipPopupHtml(e))
-          )
+          .setPopup(popup)
           .addTo(map);
         // Marker'a tiklama, haritanin kendi tiklamasi (sol "Ekle" formunu acar)
         // olarak algilanmasin: mousedown'i canvas'a birakma. MapLibre'nin

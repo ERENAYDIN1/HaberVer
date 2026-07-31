@@ -17,6 +17,13 @@ export function listAssets(filters: AssetFilters = {}) {
   return istek<AssetFeatureCollection>(`/assets${query ? `?${query}` : ""}`);
 }
 
+/** Tek bir varligi id ile ceker. Haritadaki ekip popup'indan bir ise
+ *  tiklandiginda kullanilir: o varlik o an ekrandaki listelerde olmayabilir
+ *  (baska filtre/sekme acik olabilir) ve durumu her halukarda taze olmali. */
+export function getAsset(id: string) {
+  return istek<AssetFeature>(`/assets/${id}`);
+}
+
 export function createAsset(data: AssetCreateInput) {
   return istek<AssetFeature>("/assets", {
     method: "POST",

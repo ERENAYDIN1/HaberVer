@@ -22,6 +22,7 @@ from ..schemas.saha import (
     GorevRef,
     HavuzVarlik,
     KonumGuncelle,
+    TamamlananOzet,
     VarlikRef,
 )
 from ..security import personel, require_role
@@ -105,6 +106,11 @@ def ekip_gorevleri(
     for row in crud.aktif_atamalar(db):
         gorev = row[0]
         grup.setdefault(gorev.worker_id, []).append(GorevOzet.from_row(row))
+    # Ekip basina son tamamlanan isler (haritadaki popup'in "Son Tamir Edilenler"
+    # satirlari) - aktif gorevlerle ayni desende tek sorgu + Python'da gruplama.
+    tamamlanan: dict[uuid.UUID, list[TamamlananOzet]] = {}
+    for row in crud.son_tamamlananlar(db):
+        tamamlanan.setdefault(row[0].worker_id, []).append(TamamlananOzet.from_row(row))
     return [
         EkipGorevleri(
             id=o.id,
@@ -116,6 +122,7 @@ def ekip_gorevleri(
             aktif_gorev=o.aktif_gorev,
             yaka=o.yaka,
             gorevler=grup.get(o.id, []),
+            son_tamamlananlar=tamamlanan.get(o.id, []),
         )
         for o in ozetler
     ]

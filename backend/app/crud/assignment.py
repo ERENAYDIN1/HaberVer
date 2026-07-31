@@ -28,6 +28,11 @@ MAKS_AKTIF_GOREV = 3
 # istedigi ekibe (menzil disi olsa da) atayabilir.
 MAKS_ATAMA_MESAFE_M = 5000
 
+# Ekip basina "son tamamlanan is" sayisi (GET /saha/ekip-gorevleri). Haritadaki
+# ekip popup'i dar oldugu icin kisa tutulur: amac tam gecmis degil, "bu ekip en
+# son neyi tamir etti" sorusuna bakisla cevap vermek.
+SON_TAMAMLANAN_SAYISI = 3
+
 
 def aktif_gorev_sayisi(db: Session, worker_id: uuid.UUID) -> int:
     return (
@@ -292,6 +297,33 @@ def tamamlananlarim(db: Session, worker_id: uuid.UUID, limit: int = 30):
         .where(Assignment.id.in_(select(en_son.c.aid)))
         .order_by(Assignment.completed_at.desc())
         .limit(limit)
+    )
+    return db.execute(stmt).all()
+
+
+def son_tamamlananlar(db: Session, kisi_basi: int = SON_TAMAMLANAN_SAYISI):
+    """Her ekibin EN SON tamamladigi gorevleri (ekip basina `kisi_basi` tane)
+    dondurur; haritadaki ekip popup'indaki kisa "Son Tamir Edilenler" listesi
+    bunu basar. Ekip sayisi kadar ayri sorgu atmak yerine tek sorguda pencere
+    fonksiyonuyla (row_number) kirpilir."""
+    sira = (
+        func.row_number()
+        .over(
+            partition_by=Assignment.worker_id,
+            order_by=Assignment.completed_at.desc(),
+        )
+        .label("sira")
+    )
+    alt = (
+        select(Assignment.id.label("aid"), sira)
+        .where(Assignment.status == AssignmentStatus.tamamlandi)
+        .subquery()
+    )
+    stmt = (
+        select(Assignment, Asset)
+        .join(Asset, Asset.id == Assignment.asset_id)
+        .where(Assignment.id.in_(select(alt.c.aid).where(alt.c.sira <= kisi_basi)))
+        .order_by(Assignment.completed_at.desc())
     )
     return db.execute(stmt).all()
 

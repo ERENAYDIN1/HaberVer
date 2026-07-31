@@ -83,9 +83,23 @@ export interface GorevOzet {
   yaka: string | null;
 }
 
+/** Bir ekibin yakinda tamamladigi (tamir ettigi) is - haritadaki ekip
+ *  popup'indaki kisa "Son Tamir Edilenler" listesi icin. Ekip basina en fazla
+ *  birkac tane doner (backend'deki SON_TAMAMLANAN_SAYISI). */
+export interface TamamlananOzet {
+  assignment_id: string;
+  asset_id: string;
+  name: string;
+  type: AssetType;
+  /** Varligin O ANKI durumu (is geri alinmis olabilir). */
+  status: AssetStatus;
+  completed_at: string | null;
+}
+
 /** Bir ekip + kendine dusen aktif gorevler (GET /api/saha/ekip-gorevleri). */
 export interface EkipGorevleri extends EkipOzet {
   gorevler: GorevOzet[];
+  son_tamamlananlar: TamamlananOzet[];
 }
 
 /** Havuzda bekleyen (henuz atanmamis) bakim varligi (GET /api/saha/havuz). */
