@@ -10,8 +10,13 @@ Kullanim (backend container icinde):
 """
 import re
 import sys
+from pathlib import Path
 
 import httpx
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.config import settings  # noqa: E402
 
 API = "http://localhost:8000"
 # Keycloak'in urettigi mutlak adresler tarayici icindir (localhost:8081);
@@ -59,8 +64,12 @@ def giris(email: str, parola: str) -> httpx.Client:
 
 
 def main() -> None:
-    email = sys.argv[1] if len(sys.argv) > 1 else "admin@greenasset.com"
-    parola = sys.argv[2] if len(sys.argv) > 2 else "admin1234"
+    # Varsayilanlar ayarlardan okunur, SABIT YAZILMAZ: burada bir zamanlar
+    # "admin1234" yaziyordu ve admin parolasi degistiginde test, uygulamada
+    # bir sorun varmis gibi patliyordu. Ayni sinif hata (bir parolanin kodda
+    # sabitlenmesi) A1'in de sebebiydi.
+    email = sys.argv[1] if len(sys.argv) > 1 else settings.default_admin_email
+    parola = sys.argv[2] if len(sys.argv) > 2 else settings.default_admin_password
 
     # Cookie'siz erisim reddedilmeli.
     anonim = httpx.get(f"{API}/api/auth/me", timeout=10.0)

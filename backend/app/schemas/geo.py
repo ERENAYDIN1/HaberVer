@@ -1,5 +1,26 @@
 from pydantic import BaseModel, Field, model_validator
 
+# Bir alanin halka basina kabul edilen azami nokta sayisi. Sinir PostGIS'i
+# korur: alan sayisi (50) sinirlandirilmisti ama nokta sayisi degildi, yani
+# "50 alan" yerine "1 alan, 500.000 kose" gondererek ayni yuk uretilebiliyordu.
+# En buyuk mesru girdi Istanbul il siniri (~900 nokta) ve elle cizilen alanlar
+# (onlarca nokta); 20.000 rahat bir tavandir.
+MAKS_HALKA_NOKTASI = 20_000
+
+
+def _halkalari_dogrula(halkalar: list[list[tuple[float, float]]]) -> None:
+    """Alan halkalarinin ortak dogrulamasi: bos olmamali, her halka en az 3
+    nokta icermeli ve ust nokta sinirini asmamali."""
+    if not halkalar:
+        raise ValueError("en az bir halka gonderilmelidir")
+    for halka in halkalar:
+        if len(halka) < 3:
+            raise ValueError("her halka en az 3 nokta icermelidir")
+        if len(halka) > MAKS_HALKA_NOKTASI:
+            raise ValueError(
+                f"bir halka en fazla {MAKS_HALKA_NOKTASI} nokta icerebilir"
+            )
+
 
 class AlanGirdi(BaseModel):
     """Alan ozeti icin tek bir alan: istemcideki id + halka listesi."""
@@ -12,11 +33,7 @@ class AlanGirdi(BaseModel):
 
     @model_validator(mode="after")
     def halkalar_gecerli_olmali(self) -> "AlanGirdi":
-        if not self.noktalar:
-            raise ValueError("en az bir halka gonderilmelidir")
-        for halka in self.noktalar:
-            if len(halka) < 3:
-                raise ValueError("her halka en az 3 nokta icermelidir")
+        _halkalari_dogrula(self.noktalar)
         return self
 
 
@@ -46,11 +63,7 @@ class TamponGirdi(BaseModel):
 
     @model_validator(mode="after")
     def halkalar_gecerli_olmali(self) -> "TamponGirdi":
-        if not self.noktalar:
-            raise ValueError("en az bir halka gonderilmelidir")
-        for halka in self.noktalar:
-            if len(halka) < 3:
-                raise ValueError("her halka en az 3 nokta icermelidir")
+        _halkalari_dogrula(self.noktalar)
         if self.mesafe_m == 0:
             raise ValueError("mesafe sifir olamaz")
         return self

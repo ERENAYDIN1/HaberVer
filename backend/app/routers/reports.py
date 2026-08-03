@@ -28,14 +28,55 @@ MAKS_FOTO_BAYT = 5 * 1024 * 1024  # 5 MB
 UZANTILAR = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 
 
+# Dosya parca parca okunur (bkz. _fotograf_kaydet); tek seferde belleğe alinmaz.
+OKUMA_PARCASI = 64 * 1024
+
+
+def _imza_uyuyor(icerik: bytes, content_type: str | None) -> bool:
+    """Dosyanin ilk baytlari, iddia edilen goruntu turunun sihirli sayisiyla
+    uyusuyor mu? (JPEG: FFD8FF, PNG: 89PNG..., WEBP: RIFF....WEBP)"""
+    if content_type == "image/jpeg":
+        return icerik.startswith(b"\xff\xd8\xff")
+    if content_type == "image/png":
+        return icerik.startswith(b"\x89PNG\r\n\x1a\n")
+    if content_type == "image/webp":
+        return icerik[:4] == b"RIFF" and icerik[8:12] == b"WEBP"
+    return False
+
+
 def _fotograf_kaydet(foto: UploadFile) -> str:
     if foto.content_type not in IZINLI_FOTO_TIPLERI:
         raise HTTPException(
             status_code=400, detail="Sadece JPEG, PNG veya WEBP yuklenebilir"
         )
-    icerik = foto.file.read()
-    if len(icerik) > MAKS_FOTO_BAYT:
-        raise HTTPException(status_code=400, detail="Fotograf en fazla 5 MB olabilir")
+
+    # Boyut siniri, dosya BELLEGE ALINMADAN once uygulanir. Onceki hali
+    # `icerik = foto.file.read()` ile tum govdeyi okuyup uzunluguna SONRA
+    # bakiyordu: 5 MB'lik sinir ancak 2 GB'lik bir yukleme tamamen belleğe
+    # alindiktan sonra devreye giriyordu, yani sinirin kendisi bir bellek
+    # tuketme yoluydu. Simdi esik asilir asilmaz okuma kesilir.
+    parcalar: list[bytes] = []
+    toplam = 0
+    while parca := foto.file.read(OKUMA_PARCASI):
+        toplam += len(parca)
+        if toplam > MAKS_FOTO_BAYT:
+            raise HTTPException(
+                status_code=413, detail="Fotograf en fazla 5 MB olabilir"
+            )
+        parcalar.append(parca)
+    if not toplam:
+        raise HTTPException(status_code=400, detail="Fotograf bos olamaz")
+    icerik = b"".join(parcalar)
+
+    # `content_type` tamamen ISTEMCININ soyledigi seydir; dosyanin gercekten o
+    # tur oldugunu kanitlamaz. Uzantiyi ve servis edilirken kullanilacak
+    # media_type'i ondan turettigimiz icin, baslangic baytlarindan da dogrularim:
+    # boylece "PNG diye gonderilen HTML" diske PNG olarak yazilamaz.
+    if not _imza_uyuyor(icerik, foto.content_type):
+        raise HTTPException(
+            status_code=400,
+            detail="Dosya icerigi belirtilen goruntu turuyle uyusmuyor",
+        )
 
     hedef_dizin = Path(settings.media_dir) / "reports"
     hedef_dizin.mkdir(parents=True, exist_ok=True)

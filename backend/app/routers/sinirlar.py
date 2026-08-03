@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..security import get_current_user
 
@@ -179,8 +179,20 @@ def konum_cozumle(lat: float, lon: float):
 
 
 class TopluKonumIstek(BaseModel):
+    """Toplu koordinat cozumleme istegi.
+
+    `max_length` ZORUNLU bir korumadir, kozmetik bir sinir degil: her nokta ~968
+    mahalle + 39 ilce poligonuna karsi SAF PYTHON ray-casting ile taranir ve
+    Istanbul disindaki bir nokta hicbir bbox'a girmedigi icin listenin sonuna
+    kadar gezilir - yani en pahali girdi ayni zamanda en kolay uretilen girdidir.
+    Sinirsiz birakildiginda, kendi kaydolmus herhangi bir vatandas hesabi
+    yuz binlerce noktayla istek atip CPU'yu doldurabiliyordu; uc senkron (`def`)
+    oldugu icin bu ayni zamanda FastAPI'nin thread havuzunu tuketip TUM API'yi
+    yanit veremez hale getiriyordu. Mesru kullanim (Dashboard'daki varlik
+    dagilimi) birkac duzine noktadir; 5000 fazlasiyla genis bir tavan."""
+
     # Her nokta [lon, lat] sirasindadir (GeoJSON koordinat sirasi).
-    noktalar: list[tuple[float, float]]
+    noktalar: list[tuple[float, float]] = Field(min_length=1, max_length=5000)
 
 
 @router.post("/konum/toplu")

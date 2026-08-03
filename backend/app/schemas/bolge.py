@@ -4,9 +4,21 @@ from datetime import datetime
 from pydantic import BaseModel, Field, model_validator
 
 from ..models.bolge import BolgeTipi
+from .geo import MAKS_HALKA_NOKTASI
 
 # Renk her zaman #rrggbb (frontend'deki renk secici bunu uretir).
 RENK_DESENI = r"^#[0-9a-fA-F]{6}$"
+
+
+def _nokta_sayisi_sinirli(noktalar: list[list[tuple[float, float]]]) -> None:
+    """Kaydedilen geometrinin dizi basina nokta ust siniri (bkz. schemas/geo.py).
+    Bolgeler kalici olarak yazildigi icin sinir burada ayrica gerekli: sinirsiz
+    bir geometri hem PostGIS'i hem sonraki her okumayi surekli mesgul ederdi."""
+    for dizi in noktalar:
+        if len(dizi) > MAKS_HALKA_NOKTASI:
+            raise ValueError(
+                f"bir nokta dizisi en fazla {MAKS_HALKA_NOKTASI} nokta icerebilir"
+            )
 
 
 class BolgeGirdi(BaseModel):
@@ -38,6 +50,7 @@ class BolgeGirdi(BaseModel):
             for halka in self.noktalar:
                 if len(halka) < 3:
                     raise ValueError("her alan halkasi en az 3 nokta icermelidir")
+        _nokta_sayisi_sinirli(self.noktalar)
         return self
 
 
@@ -58,8 +71,10 @@ class BolgeGuncelle(BaseModel):
 
     @model_validator(mode="after")
     def noktalar_bos_olmamali(self) -> "BolgeGuncelle":
-        if self.noktalar is not None and not self.noktalar:
-            raise ValueError("en az bir nokta dizisi gonderilmelidir")
+        if self.noktalar is not None:
+            if not self.noktalar:
+                raise ValueError("en az bir nokta dizisi gonderilmelidir")
+            _nokta_sayisi_sinirli(self.noktalar)
         return self
 
 

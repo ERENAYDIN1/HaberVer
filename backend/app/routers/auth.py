@@ -42,8 +42,19 @@ AKIS_OMRU_SN = 10 * 60
 
 def _guvenli_donus(yol: str | None) -> str:
     """Acik yonlendirme (open redirect) korumasi: yalnizca UYGULAMA ICI mutlak
-    yollara donulur. `//baska.site` gibi protokol-goreli adresler reddedilir."""
-    if not yol or not yol.startswith("/") or yol.startswith("//"):
+    yollara donulur.
+
+    `//baska.site` gibi protokol-goreli adreslerin yani sira `/\\baska.site` de
+    reddedilir: tarayicilarin cogu ters bolüyü bu baglamda egik cizgi gibi
+    okur, yani yalnizca `//` kontrol etmek bilinen bir atlatma yoludur (ayni
+    sinif acik react-router'da CVE olarak kayitlidir). Ayrica satir sonu /
+    kontrol karakterleri temizlenir - `Location` basligina kacip baslik
+    enjeksiyonuna donusmesinler."""
+    if not yol or not yol.startswith("/"):
+        return "/"
+    if yol.startswith(("//", "/\\")):
+        return "/"
+    if any(k in yol for k in "\r\n\t") or "\0" in yol:
         return "/"
     return yol
 

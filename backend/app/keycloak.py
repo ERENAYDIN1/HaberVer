@@ -153,22 +153,32 @@ def token_yenile(refresh_token: str) -> TokenSeti:
 
 
 def token_dogrula(token: str) -> dict:
-    """Imza (JWKS), issuer ve suresi dogrulanmis iddialar. Algoritma acikca
+    """Imza (JWKS), issuer, sure ve `azp` dogrulanmis iddialar. Algoritma acikca
     RS256'ya sabitlenir: `alg` alanina guvenmek klasik bir aciktir."""
     try:
         anahtar = _jwk_client.get_signing_key_from_jwt(token)
-        return jwt.decode(
+        claims = jwt.decode(
             token,
             anahtar.key,
             algorithms=["RS256"],
             issuer=ISSUER,
             # Keycloak access token'inin `aud` degeri istemciye gore degisir
-            # (cogu kurulumda "account"); dogrulamayi issuer + imza + azp
-            # uzerinden yapiyoruz.
+            # (cogu kurulumda "account"), bu yuzden `aud` yerine ASAGIDA `azp`
+            # dogrulanir.
             options={"verify_aud": False},
         )
     except jwt.PyJWTError as e:
         raise KeycloakHatasi(f"Token dogrulanamadi: {e}") from e
+
+    # `azp` (authorized party) = token'in HANGI ISTEMCI icin verildigi. Bu
+    # kontrol daha once yalnizca yorumda vaat ediliyordu, kodda yoktu: ayni
+    # realm'deki BASKA bir istemcinin cikardigi token da imza + issuer
+    # kontrolunden gecerdi. BFF'de token'lari kendimiz aldigimiz icin bugun
+    # somurulebilir degil, ama realm'e ikinci bir istemci eklendigi an gercek
+    # bir aciga donusurdu - ve o an kimse bu satiri hatirlamazdi.
+    if claims.get("azp") != settings.keycloak_client_id:
+        raise KeycloakHatasi("Token baska bir istemci icin verilmis (azp uyusmuyor)")
+    return claims
 
 
 def rolleri_oku(claims: dict) -> list[str]:

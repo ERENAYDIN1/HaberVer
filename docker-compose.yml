@@ -61,6 +61,14 @@ services:
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE}
+      # Ilk admin hesabi. Bunlar UNUTULMUSTU: konteynere gecirilmedikleri ve
+      # `.env` repo kokunde durup /app'e mount edilmedigi icin (yalnizca
+      # ./backend mount'lu) pydantic-settings dosyayi hic bulamiyor, dolayisiyla
+      # scripts/keycloak_bootstrap.py ilk admini `.env` ne yazarsa yazsin kodda
+      # yazili varsayilanla aciyordu. Varsayilanlar artik kaldirildi (config.py),
+      # yani bu iki satirin eksik olmasi sessiz bir zayiflik degil acilista hata.
+      DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD}
     ports:
       - "${BACKEND_PORT}:8000"
     volumes:

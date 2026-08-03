@@ -4,9 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..crud import asset as crud
+from ..crud import assignment as assignment_crud
+from ..crud.session import OturumBaglami
 from ..database import get_db
 from ..models.asset import AssetSource, AssetStatus, AssetType
-from ..models.user import User
+from ..models.user import User, UserRole
 from ..schemas.asset import (
     AssetCreate,
     AssetFeature,
@@ -14,7 +16,7 @@ from ..schemas.asset import (
     AssetUpdate,
     WithinQuery,
 )
-from ..security import personel, saha_dahil
+from ..security import get_context, personel, saha_dahil
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
 
@@ -84,10 +86,35 @@ def update_asset(
 
 @router.post("/{asset_id}/onar", response_model=AssetFeature)
 def repair_asset(
-    asset_id: uuid.UUID, user: User = Depends(saha_dahil), db: Session = Depends(get_db)
+    asset_id: uuid.UUID,
+    user: User = Depends(saha_dahil),
+    # `saha_dahil` de bunun uzerine kurulu; FastAPI bagimliliklari onbellekledigi
+    # icin `get_context` istek basina bir kez cozulur, iki satir ayni baglami
+    # paylasir. Rol buradan okunur, `user.role` KOLONUNDAN degil (bkz. security.py:
+    # o kolon SQL sorgulari icin tutulan bir aynadir, yetki dayanagi degildir).
+    baglam: OturumBaglami = Depends(get_context),
+    db: Session = Depends(get_db),
 ):
     """Varligi 'Tamir Edildi' olarak isaretler (durumu 'iyi'ye ceker); saha
-    calisaninin tam varlik duzenleme yetkisi olmadan kullanabilecegi tek islem."""
+    calisaninin tam varlik duzenleme yetkisi olmadan kullanabilecegi tek islem.
+
+    SAHA CALISANI YALNIZCA KENDISINE ATANMIS isi kapatabilir. Bu kural daha once
+    yalnizca arayuzde vardi (SahaEkran sadece `GET /saha/gorevlerim`'i cizer),
+    yani API'ye dogrudan gidilerek asilabiliyordu: bir saha hesabi kendisine
+    atanmamis - hatta havuzda bekleyen - herhangi bir varligi kapatabiliyor,
+    boylece baska ekibin gorevini `tamamlandi` yapip havuzu yeniden dagitiyor ve
+    audit log'a yanlis aktoru yaziyordu. Arayuz bir yetki siniri degildir; kural
+    burada duruyor ki yeni bir ekran eklendiginde sessizce kaybolmasin.
+
+    Personel (admin/calisan) muaftir: varligi zaten PUT ile duzenleyebiliyorlar,
+    burada kisitlamak yalnizca ayni isi iki yoldan yapmayi engellerdi."""
+    if baglam.etkin_rol is UserRole.saha_calisani:
+        gorev = assignment_crud.aktif_gorev_bilgisi(db, asset_id)
+        if gorev is None or gorev["worker_id"] != user.id:
+            raise HTTPException(
+                status_code=403, detail="Bu iş size atanmamış"
+            )
+
     row = crud.update_asset(db, asset_id, AssetUpdate(status=AssetStatus.iyi), actor=user)
     if row is None:
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")

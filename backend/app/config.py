@@ -1,7 +1,22 @@
+from pathlib import Path
+
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Uygulama ayarlari.
+
+    SIR NITELIGINDEKI alanlarin (istemci secret'i, ilk admin parolasi)
+    VARSAYILANI YOKTUR ve bos birakilamaz: eksik birakildiklarinda uygulama
+    aciliste okunakli bir hatayla durur. Bunlara "gelistirme icin yeterli" bir
+    varsayilan vermek, ortam degiskeni ulasmadiginda sistemin herkesin bildigi
+    bir parolayla sessizce ayaga kalkmasi demekti - bu bir kez gerceklesti
+    (compose backend'e DEFAULT_ADMIN_PASSWORD'u hic gecirmiyordu, dolayisiyla
+    ilk admin `.env` ne yazarsa yazsin sabit varsayilanla aciliyordu). Gurultulu
+    basarisizlik, sessiz zayifliktan iyidir.
+    """
+
     database_url: str
     frontend_origin: str = "http://localhost:5173"
 
@@ -20,7 +35,8 @@ class Settings(BaseSettings):
     keycloak_internal_url: str = "http://keycloak:8080"
     keycloak_realm: str = "greenasset"
     keycloak_client_id: str = "greenasset-bff"
-    keycloak_client_secret: str = "gelistirme-icin-degistir-bu-secreti"
+    # Zorunlu: realm JSON'undaki `secret` ile ayni olmali. Varsayilani YOK.
+    keycloak_client_secret: str = Field(min_length=8)
 
     # --- Oturum (BFF) ---
     # Tarayici yalnizca bu cookie'yi gorur; Keycloak token'lari sunucuda kalir.
@@ -34,10 +50,19 @@ class Settings(BaseSettings):
 
     # Yerel satirla eslesecek ilk admin hesabinin e-postasi (parola Keycloak'ta).
     default_admin_email: str = "admin@greenasset.com"
-    default_admin_password: str = "admin1234"
+    # Zorunlu: bu parolayla Keycloak'ta ilk admin acilir. Varsayilani YOK.
+    default_admin_password: str = Field(min_length=8)
 
     # Yuklenen dosyalarin (ihbar fotograflari) kaydedilecegi dizin.
     media_dir: str = "media"
+
+    # Suresi gecmis oturum satirlarinin temizlenme araligi (saat). Temizlik bir
+    # arka plan gorevidir, okuma uclarina ILISTIRILMEZ - bkz. main.py.
+    oturum_temizleme_saat: int = 6
+
+    @property
+    def media_yolu(self) -> Path:
+        return Path(self.media_dir)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
