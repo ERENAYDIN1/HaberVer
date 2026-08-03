@@ -53,6 +53,7 @@ import ReportDetayModal from "./components/ReportDetayModal";
 import SahaEkipleri from "./components/SahaEkipleri";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
+import { useKatmanlar } from "./hooks/useKatmanlar";
 import {
   ASSET_STATUS_LABELS,
   ASSET_STATUSES,
@@ -154,88 +155,20 @@ function sekilNoktalari(
   return tip === "cizgi" ? noktalar : halkalariAc(noktalar);
 }
 
-/** Bir alt-filtrenin "hepsi acik" baslangici. Elle yazilan liste tur sozlugu
- *  buyudukce bayatliyordu (13 turden yalnizca 3'u isaretliydi); anahtarlar
- *  sozlugun kendisinden turetilince yeni tur eklemek yetiyor. */
-function hepsi<K extends string>(anahtarlar: readonly K[]): Record<K, boolean> {
-  return Object.fromEntries(anahtarlar.map((a) => [a, true])) as Record<K, boolean>;
-}
-
 /** Acilis (ve "Temizle") degerleri tek yerde: hem useState baslangiclari hem
- *  sifirla() bunlari kullanir, boylece ikisi birbirinden ayrisamaz. */
+ *  sifirla() bunlari kullanir, boylece ikisi birbirinden ayrisamaz.
+ *
+ *  Not: KATMAN/lejant baslangiclari burada DEGIL, `hooks/useKatmanlar.ts`
+ *  icindeki `KATMAN_BASLANGIC`'ta - o durumun tamami (state + yazicilar +
+ *  sifirlama) tek modulde tutuluyor. */
 const BASLANGIC = {
   filtreler: { source: "kayitli" } as AssetFilters,
   sekme: "liste" as Sekme,
   ihbarDurum: "onaylandi" as IhbarGorunumu,
-  /** Varsayilan olarak varliklar + ihbarlar + saha ekipleri gorunur; kayitli
-   *  bolgeler/guzergahlar gizli (kullanici lejanttan veya Bolgeler sekmesinden
-   *  acar). Panel acilista KAPALI oldugu icin (`panelAcik=false` -> `aktifSekme`
-   *  null) sekme->katman efekti bu secimi ezmez; kullanici bir sekme secene
-   *  kadar boyle kalir. */
-  katmanlar: {
-    varliklar: true,
-    ihbarlar: true,
-    bolgeler: false,
-    guzergahlar: false,
-    ekipler: true,
-  } as Record<KatmanAnahtari, boolean>,
-  katmanTurleri: hepsi(ASSET_TYPES),
-  /** Acilista yalnizca "Bakim Lazim" isaretli: ilk bakista is bekleyen
-   *  varliklar gorunur, saglam envanter haritayi doldurmaz. */
-  katmanVarlikDurumlari: {
-    iyi: false,
-    bakim_lazim: true,
-  } as Record<AssetStatus, boolean>,
-  /** Ihbarlarda da ayni mantik: acilista onaylanmis (yani ise donusmus)
-   *  ihbarlar isaretli gelir. */
-  katmanDurumlari: {
-    beklemede: false,
-    onaylandi: true,
-    reddedildi: false,
-    tamir: false,
-  } as Record<IhbarGorunumu, boolean>,
   cizimRengi: "#059669",
   /** Harita acilis gorunumu (Istanbul merkezi + zoom 11). */
   zoom: 11,
 } as const;
-
-/** "Temizle" sonrasi lejant: hicbir katman secili degil, yani harita bombos
- *  kalir. Acilistaki `BASLANGIC.katmanlar`'dan bilincli olarak farklidir:
- *  Temizle "her seyi kaldir" demektir, "varsayilana don" degil. Kullanici sol
- *  panelden bir sekme sectiginde lejant yine ona gore kurulur. */
-const BOS_KATMANLAR: Record<KatmanAnahtari, boolean> = {
-  varliklar: false,
-  ihbarlar: false,
-  bolgeler: false,
-  guzergahlar: false,
-  ekipler: false,
-};
-
-/** "Temizle" sonrasi ihbar durum alt-filtresi: UCU DE isaretli. Ana katman
- *  kapali oldugu icin haritaya bir sey dusmez; ama kullanici katmani actiginda
- *  (ya da rozete baktiginda) elenmis degil, TOPLAM ihbar sayisini gorur.
- *  Acilistaki `BASLANGIC.katmanDurumlari` yalnizca "onaylandi" isaretlidir. */
-const TUM_IHBAR_DURUMLARI: Record<IhbarGorunumu, boolean> = {
-  beklemede: true,
-  onaylandi: true,
-  reddedildi: true,
-  tamir: true,
-};
-
-/** Alt-filtre kutucuklarini TEKIL bir secime gore kuran setState guncelleyicisi:
- *  bir secim varsa YALNIZCA onu isaretler, yoksa ("Tüm tipler" gibi) hepsini
- *  isaretler. Sol paneldeki acilirlar (tekil) ile lejant kutucuklari (coklu) ayni
- *  state'i paylastigi icin acilirin yazma yolu budur. Sonuc oncekiyle ayniysa
- *  ayni nesne dondurulur - gereksiz render (ve harita katman guncellemesi)
- *  tetiklenmez. */
-function yalnizca<K extends string>(anahtarlar: readonly K[], secili: K | undefined | null) {
-  return (onceki: Record<K, boolean>): Record<K, boolean> => {
-    const yeni = Object.fromEntries(
-      anahtarlar.map((a) => [a, secili ? a === secili : true])
-    ) as Record<K, boolean>;
-    return anahtarlar.every((a) => onceki[a] === yeni[a]) ? onceki : yeni;
-  };
-}
 
 /** Sol paneldeki sekmeler. Ozet/Gecmis/Personel artik burada degil; ust
  *  bardaki butonlardan modal olarak aciliyor (bkz. UstModal). */
@@ -300,53 +233,27 @@ export default function App() {
   const [aktifStilId, setAktifStilId] = useState<HaritaStilId>(VARSAYILAN_STIL);
   // Sol kenar cubugu genis (etiketli) mi - header'daki menu dugmesiyle degisir.
   const [kenarAcik, setKenarAcik] = useState(true);
-  // Haritadaki uc genel-bakis katmaninin (varlik/ihbar/saha ekibi) gorunurlugu -
-  // sag-ustteki KatmanKontrolu'nden bagimsizca acilip kapatilir. Sekmelerden
-  // bagimsizdir: kullanici istedigi kombinasyonu ayni anda gorebilir.
-  const [katmanlar, setKatmanlar] = useState<Record<KatmanAnahtari, boolean>>(
-    BASLANGIC.katmanlar
-  );
-  const katmanDegistir = useCallback((anahtar: KatmanAnahtari) => {
-    setKatmanlar((k) => ({ ...k, [anahtar]: !k[anahtar] }));
-  }, []);
-  // Varlik tur/durum filtresi - TEK KAYNAK. Hem haritayi (lejant kutucuklari)
-  // hem sol paneldeki listeyi/ozeti besler; sol paneldeki acilirlar da ayni
-  // state'i yazar. Eskiden iki ayri filtre vardi: panel acilirlari SORGUYU
-  // daraltiyor (`AssetFilters.type/status`), lejant ise gelen veriyi suzuyordu.
-  // Tek yonlu senkronla panel her degisiminde lejant kutucuklari sifirdan
-  // kuruluyor, ustelik daraltilmis sorgu yuzunden lejanttan yeni bir tur acmak
-  // haritaya HICBIR SEY eklemiyordu (o kayitlar hic getirilmemisti). Artik
-  // sorgu tur/durum bilmez, tum filtreleme burada yapilir; iki yuzey de ayni
-  // durumun gorunumu oldugundan biri digerini ezemez.
-  const [katmanTurleri, setKatmanTurleri] = useState<Record<AssetType, boolean>>(
-    BASLANGIC.katmanTurleri
-  );
-  const katmanTuruDegistir = useCallback((anahtar: string) => {
-    setKatmanTurleri((t) => ({ ...t, [anahtar]: !t[anahtar as AssetType] }));
-  }, []);
-  // Tur filtresiyle VE olarak uygulanir: "bakima muhtac agaclar" gibi.
-  const [katmanVarlikDurumlari, setKatmanVarlikDurumlari] = useState<
-    Record<AssetStatus, boolean>
-  >(BASLANGIC.katmanVarlikDurumlari);
-  const katmanVarlikDurumuDegistir = useCallback((anahtar: string) => {
-    setKatmanVarlikDurumlari((d) => ({ ...d, [anahtar]: !d[anahtar as AssetStatus] }));
-  }, []);
-  // Sol paneldeki acilirlarin yazma yolu: tekil secim = yalnizca o kutucuk,
-  // bos secim ("Tüm tipler") = hepsi.
-  const panelTuruSec = useCallback((tur: AssetType | null) => {
-    setKatmanTurleri(yalnizca(ASSET_TYPES, tur));
-  }, []);
-  const panelDurumuSec = useCallback((durum: AssetStatus | null) => {
-    setKatmanVarlikDurumlari(yalnizca(ASSET_STATUSES, durum));
-  }, []);
-  // Ihbar katmaninin durum alt-filtresi - varsayilan yalniz onaylanmis ihbarlar
-  // (bekleyen/reddedilen genel bakisi kalabalik yapmasin, istenirse acilir).
-  const [katmanDurumlari, setKatmanDurumlari] = useState<Record<IhbarGorunumu, boolean>>(
-    BASLANGIC.katmanDurumlari
-  );
-  const katmanDurumuDegistir = useCallback((anahtar: string) => {
-    setKatmanDurumlari((d) => ({ ...d, [anahtar]: !d[anahtar as IhbarGorunumu] }));
-  }, []);
+  // Harita katmanlarinin gorunurlugu + varlik tur/durum ve ihbar durum
+  // alt-filtreleri. Tamami `useKatmanlar`'da: hem sag-ustteki lejant hem sol
+  // paneldeki acilirlar AYNI state'i yazar (bkz. hook'taki "tek kaynak"
+  // notu). Sekmelerden bagimsizdir - kullanici istedigi kombinasyonu ayni
+  // anda gorebilir.
+  const {
+    katmanlar,
+    katmanTurleri,
+    katmanVarlikDurumlari,
+    katmanDurumlari,
+    katmanDegistir,
+    katmanTuruDegistir,
+    katmanVarlikDurumuDegistir,
+    katmanDurumuDegistir,
+    panelTuruSec,
+    panelDurumuSec,
+    katmaniAc,
+    yalnizVarlikVeyaIhbar,
+    ihbarDurumunuSec,
+    sifirla: katmanlariSifirla,
+  } = useKatmanlar();
 
   // Panel kapalıyken hiçbir sekme "aktif" sayılmaz (harita sade kalır; ihbar
   // noktaları gizlenir, boş haritaya tıklama Ekle formuna düşmez).
@@ -391,10 +298,7 @@ export default function App() {
     // varlik, ihbar ve saha ekibi isaretcileri haritadan kalkar. ALT filtrelerin
     // ise hepsi isaretli birakilir (ihbar durumlari dahil): kullanici bir katmani
     // tekrar actiginda elenmis degil, toplam sayiyi/tam listeyi gorur.
-    setKatmanlar(BOS_KATMANLAR);
-    setKatmanTurleri(BASLANGIC.katmanTurleri);
-    setKatmanVarlikDurumlari(hepsi(ASSET_STATUSES));
-    setKatmanDurumlari(TUM_IHBAR_DURUMLARI);
+    katmanlariSifirla();
     setCizimModu(false);
     setCizimNoktalari([]);
     setCizimRengi(BASLANGIC.cizimRengi);
@@ -908,7 +812,7 @@ export default function App() {
     // Gizliyse gorunur yap - kullanici "git" dedigi seyi haritada gormeli
     // (hem kendi turunun katman anahtari hem o kaydin tekil gizlemesi acilir).
     const katman: KatmanAnahtari = bolge.tip === "cizgi" ? "guzergahlar" : "bolgeler";
-    setKatmanlar((k) => (k[katman] ? k : { ...k, [katman]: true }));
+    katmaniAc(katman);
     setGizliBolgeler((g) => {
       if (!g.has(bolge.id)) return g;
       const yeni = new Set(g);
@@ -1269,24 +1173,19 @@ export default function App() {
   // lejant yeniden o sekmeye gore kurulur.
   useEffect(() => {
     if (aktifSekme === "ihbarlar") {
-      setKatmanlar((k) =>
-        !k.varliklar && k.ihbarlar ? k : { ...k, varliklar: false, ihbarlar: true }
-      );
-      setKatmanDurumlari(yalnizca(IHBAR_GORUNUMLERI, ihbarDurum));
+      yalnizVarlikVeyaIhbar("ihbarlar");
+      ihbarDurumunuSec(ihbarDurum);
     } else if (aktifSekme === "liste") {
-      setKatmanlar((k) =>
-        k.varliklar && !k.ihbarlar ? k : { ...k, varliklar: true, ihbarlar: false }
-      );
+      yalnizVarlikVeyaIhbar("varliklar");
     } else if (bolgeSekmesi(aktifSekme)) {
       // Bölgeler/Güzergâhlar paneli acilinca YALNIZCA o sekmenin katmani acilir -
       // aksi halde panelde listelenenler haritada gorunmuyor gibi durur. Diger
       // katmanlara dokunulmaz: bunlar bir "genel bakis" degil, varliklarin
       // ustune binen baglam katmanlaridir.
-      const katman = BOLGE_SEKMELERI[aktifSekme].katman;
-      setKatmanlar((k) => (k[katman] ? k : { ...k, [katman]: true }));
+      katmaniAc(BOLGE_SEKMELERI[aktifSekme].katman);
     }
     // "ekle" sekmesinde ve panel kapaliyken katmanlara dokunulmaz.
-  }, [aktifSekme, ihbarDurum]);
+  }, [aktifSekme, ihbarDurum, yalnizVarlikVeyaIhbar, ihbarDurumunuSec, katmaniAc]);
 
   // (Panel tur/durum filtresi -> lejant senkronu KALDIRILDI: ikisi artik ayni
   //  state'i paylasiyor, senkronlanacak iki taraf yok. Bkz. `katmanTurleri`.)
