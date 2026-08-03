@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAsset } from "./api/assets";
 import { bolgeler as bolgeleriGetir } from "./api/bolgeler";
 import { bolgeGuncelle } from "./api/bolgeler";
-import { alanTamponu } from "./api/geo";
 import { reopenReport } from "./api/reports";
 import { ekipGorevleri as ekipGorevleriGetir } from "./api/saha";
 import { useAuth } from "./auth/AuthContext";
@@ -54,6 +53,7 @@ import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
 import { useAlanSecimi } from "./hooks/useAlanSecimi";
 import { useIhbarGorunumleri } from "./hooks/useIhbarGorunumleri";
+import { useSekilDuzenleme } from "./hooks/useSekilDuzenleme";
 import { useKatmanlar } from "./hooks/useKatmanlar";
 import {
   ASSET_STATUS_LABELS,
@@ -75,7 +75,7 @@ import type {
   AssetType,
 } from "./types/asset";
 import type { TamamlananAlan } from "./types/alan";
-import type { Bolge, BolgeTipi, SekilDuzenleme } from "./types/bolge";
+import type { Bolge } from "./types/bolge";
 import {
   IHBAR_DURUM_RENGI,
   IHBAR_GORUNUMLERI,
@@ -86,11 +86,7 @@ import type {
   ReportFeature,
   ReportFeatureCollection,
 } from "./types/report";
-import {
-  halkalariAc,
-  mesafeEtiketi,
-  poligonSinirKutusu,
-} from "./utils/geo";
+import { mesafeEtiketi, poligonSinirKutusu } from "./utils/geo";
 import { ISTANBUL_MERKEZI } from "./utils/istanbulMaskesi";
 
 /** Katman filtresindeki tur rengi icin ortak palet kullanilir (types/asset.ts
@@ -115,17 +111,6 @@ const VARLIK_DURUM_RENGI: Record<AssetStatus, string> = {
 /** "İyi" swatch'inin dilimleri: "tur rengiyle cizilir" demek icin gruplarin
  *  gercek renkleri (bkz. types/asset.ts `GRUP_RENGI`). */
 const IYI_SWATCH_RENKLERI = TIP_GRUPLARI.map((g) => GRUP_RENGI[g]);
-
-/** Sekil duzenlemede kullanilacak nokta listesi: alanlarda backend'in KAPALI
- *  dondurdugu halkalarin son (tekrar eden) noktasi atilir - aksi halde ilk ve
- *  son kosede ust uste iki tutamak olur ve biri suruklenince sekil bozulur.
- *  Cizgilerde dokunulmaz (bir guzergahin ucu ucuna gelmesi mesru olabilir). */
-function sekilNoktalari(
-  tip: BolgeTipi,
-  noktalar: [number, number][][]
-): [number, number][][] {
-  return tip === "cizgi" ? noktalar : halkalariAc(noktalar);
-}
 
 /** Acilis (ve "Temizle") degerleri tek yerde: hem useState baslangiclari hem
  *  sifirla() bunlari kullanir, boylece ikisi birbirinden ayrisamaz.
@@ -331,8 +316,7 @@ export default function App() {
     setDetayBolge(null);
     setSeciliBolgeId(null);
     // Yarim kalan sekil duzenlemesi de birakilir (kaydedilmemis taslak gider).
-    setSekilDuzenleme(null);
-    setSekilHatasi(null);
+    sekilDuzenlemeKapat();
     // Kaydedilmis bolgeler SILINMEZ (kalici kullanici verisi): BOS_KATMANLAR
     // zaten "Bölgeler" katmanini kapatiyor, yani haritadan kalkiyorlar.
     // Tek tek yapilmis gizlemeler ise varsayilana (hepsi gorunur) doner -
@@ -358,10 +342,6 @@ export default function App() {
   const [seciliBolgeId, setSeciliBolgeId] = useState<string | null>(null);
   // Sekli haritada duzenlenen kayit: taslak geometri burada tutulur, "Kaydet"e
   // basilana kadar backend'e yazilmaz.
-  const [sekilDuzenleme, setSekilDuzenleme] = useState<SekilDuzenleme | null>(null);
-  const [sekilHatasi, setSekilHatasi] = useState<string | null>(null);
-  const [sekilKaydediliyor, setSekilKaydediliyor] = useState(false);
-  const [sekilGenisletiliyor, setSekilGenisletiliyor] = useState(false);
 
 
   const sorgu = useAssets(filters);
@@ -586,83 +566,25 @@ export default function App() {
   );
 
   // --- Sekil (geometri) duzenleme ----------------------------------------
-  // Kayit YERINDE guncellenir: id'si, atamasi ve gecmisi korunur - bir sinirin
-  // birkac metre kaydirilmasi yeni bir bolge acmayi gerektirmesin.
-  const sekilDuzenlemeBaslat = useCallback((bolge: Bolge) => {
+  const {
+    duzenleme: sekilDuzenleme,
+    hata: sekilHatasi,
+    kaydediliyor: sekilKaydediliyor,
+    genisletiliyor: sekilGenisletiliyor,
+    degismis: sekilDegismis,
+    baslat: sekilDuzenlemeBaslat,
+    kapat: sekilDuzenlemeKapat,
+    degisti: sekilDegisti,
+    sekliSifirla: sekilSifirla,
+    kaydet: sekilKaydet,
+    genislet: sekilGenislet,
+  } = useSekilDuzenleme({
+    bolgeler: bolgeSorgu.data,
+    bolgeyeGit,
     // Cizim/olcum ile ayni alt paneli ve ayni harita tiklamalarini paylasir;
     // ikisi ayni anda acik olamaz.
-    cizimVeOlcumuKapat();
-    setSekilHatasi(null);
-    setSekilDuzenleme({
-      id: bolge.id,
-      ad: bolge.ad,
-      tip: bolge.tip,
-      renk: bolge.renk,
-      noktalar: sekilNoktalari(bolge.tip, bolge.noktalar),
-    });
-    bolgeyeGit(bolge);
-  }, [bolgeyeGit, cizimVeOlcumuKapat]);
-
-  const sekilDegisti = useCallback((noktalar: [number, number][][]) => {
-    setSekilDuzenleme((s) => (s ? { ...s, noktalar } : s));
-  }, []);
-
-  /** Taslagi kaydin son kaydedilmis geometrisine dondurur. */
-  const sekilSifirla = () => {
-    const kayitli = bolgeSorgu.data?.find((b) => b.id === sekilDuzenleme?.id);
-    if (!kayitli) return;
-    setSekilHatasi(null);
-    setSekilDuzenleme((s) =>
-      s ? { ...s, noktalar: sekilNoktalari(kayitli.tip, kayitli.noktalar) } : s
-    );
-  };
-
-  const sekilKaydet = async () => {
-    if (!sekilDuzenleme) return;
-    setSekilKaydediliyor(true);
-    setSekilHatasi(null);
-    try {
-      await bolgeGuncelle(sekilDuzenleme.id, { noktalar: sekilDuzenleme.noktalar });
-      queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
-      setSekilDuzenleme(null);
-    } catch (e) {
-      setSekilHatasi((e as Error).message);
-    } finally {
-      setSekilKaydediliyor(false);
-    }
-  };
-
-  /** Alani her yonunde `mesafeM` metre buyutur/kucultur (PostGIS ST_Buffer).
-   *  Koseleri tek tek surukleyerek yapilamayacak olan "biraz genislet" istegi. */
-  const sekilGenislet = async (mesafeM: number) => {
-    if (!sekilDuzenleme || sekilDuzenleme.tip !== "alan") return;
-    setSekilGenisletiliyor(true);
-    setSekilHatasi(null);
-    try {
-      const sonuc = await alanTamponu(sekilDuzenleme.noktalar, mesafeM);
-      setSekilDuzenleme((s) =>
-        s ? { ...s, noktalar: sekilNoktalari("alan", sonuc.noktalar) } : s
-      );
-    } catch (e) {
-      setSekilHatasi((e as Error).message);
-    } finally {
-      setSekilGenisletiliyor(false);
-    }
-  };
-
-  /** Taslak, kaydedilmis geometriden farkli mi (Kaydet/Geri al icin). */
-  const sekilDegismis = useMemo(() => {
-    if (!sekilDuzenleme) return false;
-    const kayitli = bolgeSorgu.data?.find((b) => b.id === sekilDuzenleme.id);
-    if (!kayitli) return true;
-    // Kayitli hali kapali halkalarla gelir; karsilastirma taslakla ayni
-    // normalde (acik halka) yapilmali, yoksa hicbir sey degismeden "değişti"
-    // gorunur ve Kaydet hep etkin kalir.
-    return (
-      JSON.stringify(sekilNoktalari(kayitli.tip, kayitli.noktalar)) !==
-      JSON.stringify(sekilDuzenleme.noktalar)
-    );
-  }, [sekilDuzenleme, bolgeSorgu.data]);
+    onBaslarken: cizimVeOlcumuKapat,
+  });
 
   /** Tamamlanmis bir alani "görev bölgesi" olarak kaydetme formunu acar. */
   const alanKaydetIste = useCallback((alan: TamamlananAlan, sira: number) => {
@@ -1246,10 +1168,7 @@ export default function App() {
         <BolgeSekilPaneli
           duzenleme={sekilDuzenleme}
           degisti={sekilDegismis}
-          onVazgec={() => {
-            setSekilDuzenleme(null);
-            setSekilHatasi(null);
-          }}
+          onVazgec={sekilDuzenlemeKapat}
           onKaydet={sekilKaydet}
           kaydediliyor={sekilKaydediliyor}
           hata={sekilHatasi}
