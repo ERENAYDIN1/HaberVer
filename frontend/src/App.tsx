@@ -2,13 +2,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { assetsWithin, getAsset } from "./api/assets";
+import { getAsset } from "./api/assets";
 import { bolgeler as bolgeleriGetir } from "./api/bolgeler";
 import { bolgeGuncelle } from "./api/bolgeler";
-import { alanOzeti, alanTamponu, type AlanOzeti } from "./api/geo";
+import { alanTamponu } from "./api/geo";
 import { listReports, reopenReport } from "./api/reports";
 import { ekipGorevleri as ekipGorevleriGetir } from "./api/saha";
-import { ilceSiniri, mahalleSiniri } from "./api/sinirlar";
 import { useAuth } from "./auth/AuthContext";
 import AssetDetayModal from "./components/AssetDetayModal";
 import AssetForm from "./components/AssetForm";
@@ -53,6 +52,7 @@ import ReportDetayModal from "./components/ReportDetayModal";
 import SahaEkipleri from "./components/SahaEkipleri";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
+import { useAlanSecimi } from "./hooks/useAlanSecimi";
 import { useKatmanlar } from "./hooks/useKatmanlar";
 import {
   ASSET_STATUS_LABELS,
@@ -72,8 +72,6 @@ import type {
   AssetFilters,
   AssetStatus,
   AssetType,
-  MultiPolygonGeometry,
-  PolygonGeometry,
 } from "./types/asset";
 import type { TamamlananAlan } from "./types/alan";
 import type { Bolge, BolgeTipi, SekilDuzenleme } from "./types/bolge";
@@ -93,16 +91,9 @@ import type {
 import {
   halkalariAc,
   mesafeEtiketi,
-  poligonAlaniM2,
   poligonSinirKutusu,
-  toplamMesafeMetre,
 } from "./utils/geo";
 import { ISTANBUL_MERKEZI } from "./utils/istanbulMaskesi";
-
-/** Il/ilce sinir secimi de bir "tamamlanan alan" olarak temsil edilir; bu sabit
- *  id sayesinde yeni bir il/ilce secilince oncekinin yerine gecer. */
-const IDARI_ALAN_ID = "idari-sinir";
-const IDARI_ALAN_RENK = "#0891b2";
 
 /** Katman filtresindeki tur rengi icin ortak palet kullanilir (types/asset.ts
  *  `TIP_RENGI`); durum renkleri asagida.
@@ -126,23 +117,6 @@ const VARLIK_DURUM_RENGI: Record<AssetStatus, string> = {
 /** "İyi" swatch'inin dilimleri: "tur rengiyle cizilir" demek icin gruplarin
  *  gercek renkleri (bkz. types/asset.ts `GRUP_RENGI`). */
 const IYI_SWATCH_RENKLERI = TIP_GRUPLARI.map((g) => GRUP_RENGI[g]);
-
-/** Halka listesinden (MultiPolygon parcalari) backend'e gonderilecek GeoJSON
- *  geometrisini uretir. Tek halkalı alanlarda (kullanicinin cizdigi alanlar)
- *  duz bir Polygon, birden fazla halkalı alanlarda (orn. Bogaz'la ikiye
- *  bolunmus il siniri) bir MultiPolygon dondurur. */
-function halkalarGeometrisi(
-  halkalar: [number, number][][]
-): PolygonGeometry | MultiPolygonGeometry {
-  if (halkalar.length === 1) {
-    const halka = halkalar[0];
-    return { type: "Polygon", coordinates: [[...halka, halka[0]]] };
-  }
-  return {
-    type: "MultiPolygon",
-    coordinates: halkalar.map((halka) => [[...halka, halka[0]]]),
-  };
-}
 
 /** Sekil duzenlemede kullanilacak nokta listesi: alanlarda backend'in KAPALI
  *  dondurdugu halkalarin son (tekrar eden) noktasi atilir - aksi halde ilk ve
@@ -269,6 +243,60 @@ export default function App() {
     setPanelAcik(true);
   };
 
+  const [ucusHedefi, setUcusHedefi] = useState<UcusHedefi | null>(null);
+  const [haritaGorunumu, setHaritaGorunumu] = useState<
+    [[number, number], [number, number]] | null
+  >(null);
+
+  /** Harita uzerindeki alan secimi: cizim, olcum, secili alanlarin varlik
+   *  sonuclari ve ilce/mahalle sinir secimi. Hepsi ayni `tamamlananAlanlar`
+   *  listesini besledigi icin tek hook'ta duruyor (bkz. useAlanSecimi). */
+  const {
+    cizimModu,
+    cizimNoktalari,
+    cizimRengi,
+    setCizimRengi,
+    alanM2,
+    alanHatasi,
+    alanYukleniyor,
+    cizimNoktaEkle,
+    alanSecimiBaslat,
+    alanSecimiIptal,
+    alanSecimiTamamla,
+    olcumModu,
+    olcumNoktalari,
+    olcumMesafeM,
+    olcumNoktaEkle,
+    olcumBaslat,
+    olcumIptal,
+    olcumBitir,
+    olcumTemizle,
+    tamamlananAlanlar,
+    birlesikAlanSonucu,
+    alanOlculeri,
+    alanOzetiSonuc,
+    alanKaldir,
+    alanlariTemizle,
+    tumAlanlariTemizle,
+    ilceKodu,
+    mahalleKodu,
+    ilceSec,
+    mahalleSec,
+    idariHatasi,
+    idariSinirKutusu,
+    cizimVeOlcumuKapat,
+    sifirla: alanSeciminiSifirla,
+  } = useAlanSecimi({
+    filters,
+    varsayilanRenk: BASLANGIC.cizimRengi,
+    ucur: setUcusHedefi,
+    // Yeni bir alan cizilirken varlik secimi birakilir - secili isaretci
+    // cizimin altinda kalmasin.
+    onCizimBasladi: () => setSeciliId(null),
+    // Alan bitince sonuclarin listelendigi sekmeye gec.
+    onAlanTamamlandi: () => setSekme("liste"),
+  });
+
   // "Temizle": tüm çalışma durumunu (seçimler, panel filtreleri, lejant/katman
   // seçimleri, çizim/ölçüm, ilçe/mahalle, açık panel ve modal) sitenin ilk
   // açıldığı hale döndürür ve haritayı İstanbul başlangıç görünümüne (merkez +
@@ -299,14 +327,8 @@ export default function App() {
     // ise hepsi isaretli birakilir (ihbar durumlari dahil): kullanici bir katmani
     // tekrar actiginda elenmis degil, toplam sayiyi/tam listeyi gorur.
     katmanlariSifirla();
-    setCizimModu(false);
-    setCizimNoktalari([]);
-    setCizimRengi(BASLANGIC.cizimRengi);
-    setAlanHatasi(null);
-    setAlanYukleniyor(false);
-    setOlcumModu(false);
-    setOlcumNoktalari([]);
-    setTamamlananAlanlar([]);
+    // Cizim/olcum kapanir, secili alanlar ve ilce/mahalle secimi sifirlanir.
+    alanSeciminiSifirla();
     setBolgeTaslagi(null);
     setDetayBolge(null);
     setSeciliBolgeId(null);
@@ -318,10 +340,6 @@ export default function App() {
     // Tek tek yapilmis gizlemeler ise varsayilana (hepsi gorunur) doner -
     // katman tekrar acildiginda kullanici eksik bir liste gormesin.
     setGizliBolgeler(new Set());
-    setIlceKodu(null);
-    setMahalleKodu(null);
-    setIdariHatasi(null);
-    setIdariSinirKutusu(null);
     setUcusHedefi({
       anahtar: crypto.randomUUID(),
       tip: "nokta",
@@ -329,18 +347,6 @@ export default function App() {
       zoom: BASLANGIC.zoom,
     });
   };
-
-  // --- Alan (poligon) secimi - birden fazla alan ayni anda acik kalabilir ---
-  const [cizimModu, setCizimModu] = useState(false);
-  const [cizimNoktalari, setCizimNoktalari] = useState<[number, number][]>([]);
-  const [cizimRengi, setCizimRengi] = useState<string>(BASLANGIC.cizimRengi);
-  const [tamamlananAlanlar, setTamamlananAlanlar] = useState<TamamlananAlan[]>([]);
-  const [alanHatasi, setAlanHatasi] = useState<string | null>(null);
-  const [alanYukleniyor, setAlanYukleniyor] = useState(false);
-
-  // --- Mesafe olcum araci ---
-  const [olcumModu, setOlcumModu] = useState(false);
-  const [olcumNoktalari, setOlcumNoktalari] = useState<[number, number][]>([]);
 
   // --- Kaydedilmis bolgeler (gorev bolgeleri / guzergahlar) ---------------
   // Haritada GIZLENMIS olanlarin id'leri; varsayilan olarak hepsi gorunur.
@@ -359,38 +365,9 @@ export default function App() {
   const [sekilKaydediliyor, setSekilKaydediliyor] = useState(false);
   const [sekilGenisletiliyor, setSekilGenisletiliyor] = useState(false);
 
-  // --- Ilce/mahalle sinirina gore filtreleme + harita arama (proje kapsami
-  //     Istanbul ile sinirli oldugundan il secimi yok; once ilceye, ilce
-  //     secilince kademeli olarak mahalleye kadar filtrelenebilir) ---
-  const [ilceKodu, setIlceKodu] = useState<string | null>(null);
-  const [mahalleKodu, setMahalleKodu] = useState<string | null>(null);
-  const [idariHatasi, setIdariHatasi] = useState<string | null>(null);
-  const [ucusHedefi, setUcusHedefi] = useState<UcusHedefi | null>(null);
-  const [haritaGorunumu, setHaritaGorunumu] = useState<
-    [[number, number], [number, number]] | null
-  >(null);
-  /** Secili ilcenin sinir kutusu; verilince arama bu bolgeyle SINIRLANIR
-   *  (sadece oncelik degil) - "GOP secip Kucukkoy aradiginda Besiktas cikmasin". */
-  const [idariSinirKutusu, setIdariSinirKutusu] = useState<
-    [[number, number], [number, number]] | null
-  >(null);
-
-  const alanM2 = useMemo(() => poligonAlaniM2(cizimNoktalari), [cizimNoktalari]);
-  const olcumMesafeM = useMemo(
-    () => toplamMesafeMetre(olcumNoktalari),
-    [olcumNoktalari]
-  );
 
   const sorgu = useAssets(filters);
   // Tamamlanmis alanlar varsa liste/ozet, birlestirilmis (tekilleştirilmiş) sonucu gosterir.
-  const birlesikAlanSonucu = useMemo<AssetFeatureCollection | null>(() => {
-    if (tamamlananAlanlar.length === 0) return null;
-    const gorulen = new Map<string, AssetFeature>();
-    for (const alan of tamamlananAlanlar) {
-      for (const f of alan.sonuc.features) gorulen.set(f.properties.id, f);
-    }
-    return { type: "FeatureCollection", features: [...gorulen.values()] };
-  }, [tamamlananAlanlar]);
   const gosterilen = birlesikAlanSonucu ?? sorgu.data;
 
   // Onaylanmis ihbarlardan olusan varliklar - "İhbarlar > Onaylandı" sekmesi
@@ -487,219 +464,6 @@ export default function App() {
     rapordanVarliga: new Map<string, string>(),
     varliktanRapora: new Map<string, string>(),
   });
-
-  const cizimNoktaEkle = useCallback((nokta: [number, number]) => {
-    setCizimNoktalari((n) => [...n, nokta]);
-  }, []);
-
-  const olcumNoktaEkle = useCallback((nokta: [number, number]) => {
-    setOlcumNoktalari((n) => [...n, nokta]);
-  }, []);
-
-  const alanSecimiBaslat = () => {
-    if (olcumModu) olcumIptal();
-    setCizimModu(true);
-    setCizimNoktalari([]);
-    setAlanHatasi(null);
-    setSeciliId(null);
-  };
-
-  const alanSecimiIptal = () => {
-    setCizimModu(false);
-    setCizimNoktalari([]);
-  };
-
-  const alanKaldir = (id: string) => {
-    setTamamlananAlanlar((a) => a.filter((alan) => alan.id !== id));
-    if (id === IDARI_ALAN_ID) {
-      setIlceKodu(null);
-      setMahalleKodu(null);
-    }
-  };
-
-  const tumAlanlariTemizle = () => {
-    setTamamlananAlanlar([]);
-    setIlceKodu(null);
-    setMahalleKodu(null);
-  };
-
-  // Ilce degisince mahalle secimini sifirla (eski mahalle baska ilceden kalmasin).
-  const ilceSec = (kod: string | null) => {
-    setIlceKodu(kod);
-    setMahalleKodu(null);
-  };
-
-  const alanSecimiTamamla = async () => {
-    if (cizimNoktalari.length < 3) return;
-    setAlanYukleniyor(true);
-    setAlanHatasi(null);
-    try {
-      const sonuc = await assetsWithin({
-        polygon: halkalarGeometrisi([cizimNoktalari]),
-        ...filters,
-      });
-      setTamamlananAlanlar((a) => [
-        ...a,
-        {
-          id: crypto.randomUUID(),
-          noktalar: [cizimNoktalari],
-          renk: cizimRengi,
-          sonuc,
-        },
-      ]);
-      // Bu alan bitti; cizimi sifirla ki kullanici hemen bir sonrakine baslayabilsin.
-      setCizimModu(false);
-      setCizimNoktalari([]);
-      setSekme("liste");
-    } catch (e) {
-      setAlanHatasi((e as Error).message);
-    } finally {
-      setAlanYukleniyor(false);
-    }
-  };
-
-  // Filtreler degistiginde, tamamlanmis alanlarin da uzerinde durdugu sorgu
-  // sonuclarini yeniden getir - aksi halde alan secildikten sonra filtreler
-  // donmus (alan tamamlandigi andaki) sonuclara bakmaya devam eder.
-  const filtreIstekSirasiRef = useRef(0);
-  useEffect(() => {
-    if (tamamlananAlanlar.length === 0) return;
-    const siraNo = ++filtreIstekSirasiRef.current;
-
-    Promise.all(
-      tamamlananAlanlar.map(async (alan) => {
-        const sonuc = await assetsWithin({
-          polygon: halkalarGeometrisi(alan.noktalar),
-          ...filters,
-        });
-        return { ...alan, sonuc };
-      })
-    )
-      .then((guncellenmis) => {
-        // Bu sirada baska bir filtre degisikligi baslamissa, eski sonucu yoksay.
-        if (filtreIstekSirasiRef.current === siraNo) setTamamlananAlanlar(guncellenmis);
-      })
-      .catch((e) => {
-        if (filtreIstekSirasiRef.current === siraNo) setAlanHatasi((e as Error).message);
-      });
-    // tamamlananAlanlar kasitli olarak bagimlilik disi: yeni alan eklendiginde
-    // zaten guncel filtreyle sorgulaniyor, burada sadece filtre degisince tetiklenmeli.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
-
-  // --- Secili alanlarin cakismayi hesaba katan olcusu ---------------------
-  // Yerel (shoelace) hesap TEK bir poligon icin dogru, ama iki alan ust uste
-  // bindiginde ayni yeri iki kez sayar - "aynı alanın üstünden tekrar geçince
-  // m² artmasın" istegi bu yuzden backend'de (PostGIS) cozuluyor: her alanin
-  // kendisinden ONCEKILERLE cakismayan net katkisi ve bunlarin toplami
-  // (= birlesim alani) donuyor.
-  const [alanOzetiSonuc, setAlanOzetiSonuc] = useState<AlanOzeti | null>(null);
-  const olcuIstekSirasiRef = useRef(0);
-  /** Yalnizca GEOMETRI degisince yeniden olculsun: filtre degisince
-   *  tamamlananAlanlar yeni nesnelerle degisiyor ama sekiller ayni kaliyor. */
-  const alanGeometriImzasi = useMemo(
-    () =>
-      tamamlananAlanlar
-        .map(
-          (a) =>
-            `${a.id}:${a.noktalar.length}:${a.noktalar[0]?.length ?? 0}:` +
-            `${a.noktalar[0]?.[0]?.join(",") ?? ""}`
-        )
-        .join("|"),
-    [tamamlananAlanlar]
-  );
-  useEffect(() => {
-    if (tamamlananAlanlar.length === 0) {
-      setAlanOzetiSonuc(null);
-      return;
-    }
-    const siraNo = ++olcuIstekSirasiRef.current;
-    alanOzeti(tamamlananAlanlar.map((a) => ({ id: a.id, noktalar: a.noktalar })))
-      .then((ozet) => {
-        if (olcuIstekSirasiRef.current === siraNo) setAlanOzetiSonuc(ozet);
-      })
-      .catch(() => {
-        // Olcum alinamazsa panel yerel (cakismayi gormeyen) toplama duser -
-        // alan secimi calismaya devam etsin.
-        if (olcuIstekSirasiRef.current === siraNo) setAlanOzetiSonuc(null);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alanGeometriImzasi]);
-
-  const alanOlculeri = useMemo(() => {
-    if (!alanOzetiSonuc) return undefined;
-    return Object.fromEntries(alanOzetiSonuc.alanlar.map((a) => [a.id, a]));
-  }, [alanOzetiSonuc]);
-
-  // Ilce/mahalle secimi degisince aktif idari sinir geometrisini getirir,
-  // mevcut alan altyapisina (tamamlananAlanlar) idari-sinir-id'siyle ekler/
-  // degistirir ve haritayi o bolgeye ucurur. Aktif sinir: bir mahalle secildiyse
-  // mahalle (daha ince), yoksa ilce, yoksa hicbiri. Filtreler degisince zaten
-  // yukaridaki efekt bu girdiyi de yeniden sorgular (noktalar uzerinden).
-  useEffect(() => {
-    if (!ilceKodu && !mahalleKodu) {
-      setTamamlananAlanlar((a) => a.filter((alan) => alan.id !== IDARI_ALAN_ID));
-      setIdariSinirKutusu(null);
-      return;
-    }
-    let iptal = false;
-    setIdariHatasi(null);
-
-    (async () => {
-      try {
-        const sinir = mahalleKodu
-          ? await mahalleSiniri(mahalleKodu)
-          : await ilceSiniri(ilceKodu!);
-        if (iptal) return;
-        const sonuc = await assetsWithin({
-          polygon: halkalarGeometrisi(sinir.noktalar),
-          ...filters,
-        });
-        if (iptal) return;
-        setTamamlananAlanlar((a) => [
-          ...a.filter((alan) => alan.id !== IDARI_ALAN_ID),
-          {
-            id: IDARI_ALAN_ID,
-            noktalar: sinir.noktalar,
-            renk: IDARI_ALAN_RENK,
-            sonuc,
-            etiket: sinir.ad,
-          },
-        ]);
-        const kutu = poligonSinirKutusu(sinir.noktalar.flat());
-        setIdariSinirKutusu(kutu);
-        setUcusHedefi({ anahtar: crypto.randomUUID(), tip: "sinir", bounds: kutu });
-      } catch (e) {
-        if (!iptal) setIdariHatasi((e as Error).message);
-      }
-    })();
-
-    return () => {
-      iptal = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ilceKodu, mahalleKodu]);
-
-  const olcumBaslat = () => {
-    if (cizimModu) alanSecimiIptal();
-    setOlcumModu(true);
-    setOlcumNoktalari([]);
-  };
-
-  const olcumIptal = () => {
-    setOlcumModu(false);
-    setOlcumNoktalari([]);
-  };
-
-  const olcumBitir = () => {
-    if (olcumNoktalari.length < 2) return;
-    setOlcumModu(false);
-  };
-
-  const olcumTemizle = () => {
-    setOlcumModu(false);
-    setOlcumNoktalari([]);
-  };
 
   // --- Bildirimler (header zili) ------------------------------------------
   // Yalniz admin/calisan ihbarlari yonetir; saha_calisani ihbar gormez.
@@ -837,9 +601,7 @@ export default function App() {
   const sekilDuzenlemeBaslat = useCallback((bolge: Bolge) => {
     // Cizim/olcum ile ayni alt paneli ve ayni harita tiklamalarini paylasir;
     // ikisi ayni anda acik olamaz.
-    setCizimModu(false);
-    setCizimNoktalari([]);
-    setOlcumModu(false);
+    cizimVeOlcumuKapat();
     setSekilHatasi(null);
     setSekilDuzenleme({
       id: bolge.id,
@@ -849,7 +611,7 @@ export default function App() {
       noktalar: sekilNoktalari(bolge.tip, bolge.noktalar),
     });
     bolgeyeGit(bolge);
-  }, [bolgeyeGit]);
+  }, [bolgeyeGit, cizimVeOlcumuKapat]);
 
   const sekilDegisti = useCallback((noktalar: [number, number][][]) => {
     setSekilDuzenleme((s) => (s ? { ...s, noktalar } : s));
@@ -1194,7 +956,7 @@ export default function App() {
   // gec (kayitli -> Varliklar, ihbardan gelen -> İhbarlar > Onaylandı), sec
   // ve haritayi oraya ucur.
   const bildirimVarligaGit = useCallback((asset: AssetFeature) => {
-    setTamamlananAlanlar([]);
+    alanlariTemizle();
     if (asset.properties.source === "ihbar") {
       setSekme("ihbarlar");
       // Tamir edilmis varlik artik "Onaylandı"da degil "Tamir Edildi"de listelenir.
@@ -1213,7 +975,7 @@ export default function App() {
       merkez: asset.geometry.coordinates,
       zoom: 16,
     });
-  }, []);
+  }, [alanlariTemizle]);
 
   // Bir ihbar bildirimine tiklaninca İhbarlar sekmesini ac, ihbari sec, ucur.
   const bildirimIhbaraGit = useCallback((report: ReportFeature) => {
@@ -1734,7 +1496,7 @@ export default function App() {
                   ilceKodu={ilceKodu}
                   onIlceSec={ilceSec}
                   mahalleKodu={mahalleKodu}
-                  onMahalleSec={setMahalleKodu}
+                  onMahalleSec={mahalleSec}
                   idariHatasi={idariHatasi}
                   ekipler={ekipSorgu.data}
                 />
