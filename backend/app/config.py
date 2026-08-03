@@ -43,10 +43,10 @@ class Settings(BaseSettings):
     session_cookie_name: str = "greenasset_session"
     session_cookie_secure: bool = False  # production'da mutlaka True (HTTPS)
     session_max_hours: int = 12
-    # Rolleri Keycloak'tan en fazla bu araliklarla tazele (yetki degisikliginin
-    # yansima suresi); arada access token yenilenir, iptal edilmis oturum
-    # yenilenemedigi icin burada yakalanir.
-    session_yenileme_dakika: int = 5
+    # Not: burada bir `session_yenileme_dakika` ayari vardi ama HICBIR YERDEN
+    # okunmuyordu - yaniltici bir ayar dugmesiydi. Rol tazeleme araligi aslinda
+    # access token'in KEYCLOAK'TA tanimli omruyle belirlenir (crud/session.py
+    # token suresi dolunca yeniler); uygulama tarafinda ayarlanacak bir sey yok.
 
     # Yerel satirla eslesecek ilk admin hesabinin e-postasi (parola Keycloak'ta).
     default_admin_email: str = "admin@greenasset.com"

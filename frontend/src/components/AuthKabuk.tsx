@@ -43,8 +43,8 @@ export default function AuthKabuk({
   );
 }
 
-export const authInputClass =
-  "w-full border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500";
-export const authLabelClass = "block text-sm font-medium text-slate-700 mb-1";
+// Not: `authInputClass` / `authLabelClass` kaldirildi. Giris artik Keycloak'in
+// kendi ekraninda yapiliyor, bu sayfalarda form alani kalmadi - geriye yalnizca
+// akisi baslatan dugme kaldi.
 export const authButtonClass =
   "w-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400";

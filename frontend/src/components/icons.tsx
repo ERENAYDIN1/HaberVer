@@ -73,10 +73,6 @@ export function IconMarkaLogo({ className }: IconProps) {
   );
 }
 
-export function IconLamp({ className }: IconProps) {
-  return <TipGlifi ic={TIP_GLIF_PATH.direk} className={className} />;
-}
-
 /** Yol tarifi / navigasyon - yonlu ok. */
 export function IconRoute({ className }: IconProps) {
   return (
@@ -84,11 +80,6 @@ export function IconRoute({ className }: IconProps) {
       <path d="M3 11l18-8-8 18-2-8-8-2z" />
     </svg>
   );
-}
-
-/** Sulama sistemi - su damlasi. */
-export function IconDrop({ className }: IconProps) {
-  return <TipGlifi ic={TIP_GLIF_PATH.sulama} className={className} />;
 }
 
 export function IconPin({ className }: IconProps) {
