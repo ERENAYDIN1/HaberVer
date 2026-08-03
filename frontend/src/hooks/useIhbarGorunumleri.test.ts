@@ -1,0 +1,115 @@
+import { describe, expect, it } from "vitest";
+
+import { ihbar, varlik } from "../test/yardimcilar";
+import { gorunumlereAyir, onayliEslemeKur } from "./useIhbarGorunumleri";
+
+/** Ihbar gorunumu turetmesi ve onayli ihbar <-> varlik eslemesi.
+ *
+ *  Ikisi de gecmiste bir kez gercekten bozulmustu: "Onaylandı" sekmesinde
+ *  haritadan bir ihbar secmek panelde hicbir satiri vurgulamiyordu (ayri
+ *  id'ler), ve acilista varlik sorgusu yuklenmeden siniflama yapilinca her sey
+ *  bir an "Tamir Edildi"ye dusup geri ziplıyordu. */
+
+describe("onayliEslemeKur", () => {
+  it("iki yonlu eslemeyi kurar", () => {
+    const v = varlik({ status: "bakim_lazim", source: "ihbar" });
+    const r = ihbar({ status: "onaylandi", created_asset_id: v.properties.id });
+    const { rapordanVarliga, varliktanRapora } = onayliEslemeKur([r]);
+    expect(rapordanVarliga.get(r.properties.id)).toBe(v.properties.id);
+    expect(varliktanRapora.get(v.properties.id)).toBe(r.properties.id);
+  });
+
+  it("varlik olusturmamis ihbari atlar", () => {
+    const r = ihbar({ status: "onaylandi", created_asset_id: null });
+    const { rapordanVarliga, varliktanRapora } = onayliEslemeKur([r]);
+    expect(rapordanVarliga.size).toBe(0);
+    expect(varliktanRapora.size).toBe(0);
+  });
+});
+
+describe("gorunumlereAyir", () => {
+  const acikIs = varlik({ status: "bakim_lazim", source: "ihbar" });
+  const tamirEdilmis = varlik({ status: "iyi", source: "ihbar" });
+  const acikIhbar = ihbar({
+    status: "onaylandi",
+    created_asset_id: acikIs.properties.id,
+  });
+  const tamirIhbari = ihbar({
+    status: "onaylandi",
+    created_asset_id: tamirEdilmis.properties.id,
+  });
+  const silinmisVarliginIhbari = ihbar({
+    status: "onaylandi",
+    created_asset_id: "00000000-0000-4000-8000-999999999999",
+  });
+  const bekleyen = ihbar({ status: "beklemede" });
+  const reddedilen = ihbar({ status: "reddedildi" });
+
+  const adlar = (liste: { properties: { id: string } }[]) =>
+    liste.map((f) => f.properties.id);
+
+  it("onaylanmislari varligin durumuna gore ikiye ayirir", () => {
+    const g = gorunumlereAyir(
+      {
+        beklemede: [bekleyen],
+        onaylandi: [acikIhbar, tamirIhbari],
+        reddedildi: [reddedilen],
+      },
+      [acikIs, tamirEdilmis]
+    );
+    expect(adlar(g.onaylandi)).toEqual([acikIhbar.properties.id]);
+    expect(adlar(g.tamir)).toEqual([tamirIhbari.properties.id]);
+    expect(adlar(g.beklemede)).toEqual([bekleyen.properties.id]);
+    expect(adlar(g.reddedildi)).toEqual([reddedilen.properties.id]);
+  });
+
+  it("varligi artik olmayan onayli ihbar 'tamir' sayilir", () => {
+    // Tamir edilen varliklar TAMIR_SAKLAMA_GUN sonunda otomatik silinir; ihbar
+    // kaydi kalir. "Varlik yok" = is bitmis demektir, acik is degil.
+    const g = gorunumlereAyir(
+      { beklemede: [], onaylandi: [silinmisVarliginIhbari], reddedildi: [] },
+      [acikIs]
+    );
+    expect(adlar(g.tamir)).toEqual([silinmisVarliginIhbari.properties.id]);
+    expect(g.onaylandi).toHaveLength(0);
+  });
+
+  it("varlik sorgusu YUKLENMEDEN siniflama yapmaz", () => {
+    // Regresyon: undefined ile bos dizi ayni sayilirsa acilista her onayli
+    // ihbar bir an "Tamir Edildi"ye duser, veri gelince geri ziplar.
+    const g = gorunumlereAyir(
+      { beklemede: [], onaylandi: [acikIhbar, tamirIhbari], reddedildi: [] },
+      undefined
+    );
+    expect(g.tamir).toHaveLength(0);
+    expect(adlar(g.onaylandi)).toEqual([
+      acikIhbar.properties.id,
+      tamirIhbari.properties.id,
+    ]);
+  });
+
+  it("her kayda properties.gorunum yazar (harita pin rengi bunu okur)", () => {
+    const g = gorunumlereAyir(
+      { beklemede: [], onaylandi: [tamirIhbari], reddedildi: [] },
+      [tamirEdilmis]
+    );
+    expect(g.tamir[0].properties.gorunum).toBe("tamir");
+  });
+
+  it("kaynak nesneleri DEGISTIRMEZ (kopya uzerine yazar)", () => {
+    gorunumlereAyir(
+      { beklemede: [], onaylandi: [tamirIhbari], reddedildi: [] },
+      [tamirEdilmis]
+    );
+    expect(tamirIhbari.properties.gorunum).toBeUndefined();
+  });
+
+  it("henuz cekilmemis durumlari (undefined) sessizce atlar", () => {
+    const g = gorunumlereAyir(
+      { beklemede: undefined, onaylandi: undefined, reddedildi: undefined },
+      []
+    );
+    expect(g.beklemede).toHaveLength(0);
+    expect(g.onaylandi).toHaveLength(0);
+  });
+});

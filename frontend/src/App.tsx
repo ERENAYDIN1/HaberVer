@@ -1,12 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { getAsset } from "./api/assets";
 import { bolgeler as bolgeleriGetir } from "./api/bolgeler";
 import { bolgeGuncelle } from "./api/bolgeler";
 import { alanTamponu } from "./api/geo";
-import { listReports, reopenReport } from "./api/reports";
+import { reopenReport } from "./api/reports";
 import { ekipGorevleri as ekipGorevleriGetir } from "./api/saha";
 import { useAuth } from "./auth/AuthContext";
 import AssetDetayModal from "./components/AssetDetayModal";
@@ -53,6 +53,7 @@ import SahaEkipleri from "./components/SahaEkipleri";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
 import { useAlanSecimi } from "./hooks/useAlanSecimi";
+import { useIhbarGorunumleri } from "./hooks/useIhbarGorunumleri";
 import { useKatmanlar } from "./hooks/useKatmanlar";
 import {
   ASSET_STATUS_LABELS,
@@ -79,14 +80,11 @@ import {
   IHBAR_DURUM_RENGI,
   IHBAR_GORUNUMLERI,
   REPORT_STATUS_LABELS,
-  REPORT_STATUSES,
-  ihbarGorunumu,
 } from "./types/report";
 import type {
   IhbarGorunumu,
   ReportFeature,
   ReportFeatureCollection,
-  ReportStatus,
 } from "./types/report";
 import {
   halkalariAc,
@@ -370,11 +368,20 @@ export default function App() {
   // Tamamlanmis alanlar varsa liste/ozet, birlestirilmis (tekilleştirilmiş) sonucu gosterir.
   const gosterilen = birlesikAlanSonucu ?? sorgu.data;
 
-  // Onaylanmis ihbarlardan olusan varliklar - "İhbarlar > Onaylandı" sekmesi
-  // bunu kendi listesi olarak gosterir (bkz. IhbarPaneli). Yalnizca o panele
-  // aittir: haritadaki VARLIK katmanini ve lejant sayaclarini ETKILEMEZ (ihbar
-  // alt-sekmesi degistikce varlik sayilarinin oynamasina yol aciyordu).
-  const ihbarVarlikSorgu = useAssets({ source: "ihbar" });
+  // Yalniz admin/calisan ihbarlari yonetir; saha_calisani ihbar gormez.
+  const personel = user?.role === "admin" || user?.role === "calisan";
+
+  /** Ihbarlar ve GORUNUM turetmesi (onaylanmis bir ihbar, varligi tamir
+   *  edilince "Tamir Edildi"ye duser). Secim callback'lerinden ONCE cagrilir:
+   *  onlar `onayliEsleme`yi dogrudan okuyabilsin diye - eskiden sira tersti ve
+   *  deger bir ref uzerinden tasiniyordu. */
+  const {
+    ihbarVarlikSorgu,
+    bekleyenIhbarSorgu,
+    bekleyenIhbarSayisi,
+    onayliEsleme,
+    gorunumler: ihbarGorunumleri,
+  } = useIhbarGorunumleri({ personel });
 
   // NOT: Ihbar secimi sekme degisiminde BILINCLI olarak temizlenmez - haritada
   // secilen bir isaretci, panel kapaliyken de (ve baska bir sekmede de) secili
@@ -421,9 +428,9 @@ export default function App() {
         return;
       }
       // Ihbardan olusan bir varlik secildiyse KAYNAK IHBAR da birlikte secilir
-      // (bkz. onayliEslemeRef): haritadaki isaretci ham ihbar noktasidir, panel
-      // ise ondan olusan varligi listeler - iki taraf ayni secimi gostermeli.
-      setSeciliIhbarId(onayliEslemeRef.current.varliktanRapora.get(id) ?? null);
+      // haritadaki isaretci ham ihbar noktasidir, panel ise ondan olusan
+      // varligi listeler - iki taraf ayni secimi gostermeli.
+      setSeciliIhbarId(onayliEsleme.varliktanRapora.get(id) ?? null);
       setDetayRapor(null);
       setSeciliBolgeId(null);
       // "İhbarlar > Onaylandı" ve "> Tamir Edildi" zaten ihbardan olusan
@@ -432,7 +439,7 @@ export default function App() {
         sekme === "ihbarlar" && (ihbarDurum === "onaylandi" || ihbarDurum === "tamir");
       if (panelAcik && !ihbarVarlikSekmesi) setSekme("liste");
     },
-    [seciliId, panelAcik, sekme, ihbarDurum]
+    [seciliId, panelAcik, sekme, ihbarDurum, onayliEsleme]
   );
 
   // Ham ihbar secimi - hem listeden hem haritadan cagrilir.
@@ -449,34 +456,17 @@ export default function App() {
       // panelde ("İhbarlar > Onaylandı" listesi varliklardan olusur) hicbir
       // satir vurgulanmiyordu - "seciliyor ama secilmiyor" gorunumunun sebebi
       // buydu. Artik ondan olusan varlik da secili sayilir.
-      setSeciliId(onayliEslemeRef.current.rapordanVarliga.get(id) ?? null);
+      setSeciliId(onayliEsleme.rapordanVarliga.get(id) ?? null);
       setDetayAsset(null);
       setSeciliBolgeId(null);
       if (panelAcik) setSekme("ihbarlar");
     },
-    [seciliIhbarId, panelAcik]
+    [seciliIhbarId, panelAcik, onayliEsleme]
   );
 
-  /** Onaylanmis ihbar <-> ondan olusan varlik eslesmesi. Yukaridaki secim
-   *  callback'leri bunu okur; kaynak sorgu (onaylananIhbarSorgu) hook sirasi
-   *  geregi asagida tanimlandigi icin deger bir ref uzerinden tasinir. */
-  const onayliEslemeRef = useRef({
-    rapordanVarliga: new Map<string, string>(),
-    varliktanRapora: new Map<string, string>(),
-  });
-
   // --- Bildirimler (header zili) ------------------------------------------
-  // Yalniz admin/calisan ihbarlari yonetir; saha_calisani ihbar gormez.
-  const personel = user?.role === "admin" || user?.role === "calisan";
   // Bakim bekleyen varliklar (her iki kaynaktan) - ana listeden bagimsiz sorgu.
   const bakimSorgu = useAssets({ status: "bakim_lazim" });
-  // Bekleyen ihbarlar - yalniz personel icin cekilir.
-  const bekleyenIhbarSorgu = useQuery({
-    queryKey: ["reports", "beklemede"],
-    queryFn: () => listReports("beklemede"),
-    enabled: personel,
-  });
-  const bekleyenIhbarSayisi = bekleyenIhbarSorgu.data?.features.length ?? 0;
 
   // Canli saha ekibi konumlari + kendilerine dusen aktif gorevler - yalniz
   // personel icin. Haritada marker + tiklayinca gorev popup'i, ayrica varlik
@@ -696,87 +686,6 @@ export default function App() {
     });
   };
 
-  // Onaylanan/reddedilen ihbarlar. Ihbar katmani KAPALIYKEN de cekilir: lejanttaki
-  // rozet/alt-filtre sayaclari katmanin acik olup olmamasindan bagimsiz olarak
-  // gercek toplami gostermeli (eskiden katman kapaliyken bu ikisi hic cekilmedigi
-  // icin toplam eksik gorunuyordu). Bekleyen ihbarlar zaten yukarida (bildirim
-  // zili icin) cekiliyor.
-  const onaylananIhbarSorgu = useQuery({
-    queryKey: ["reports", "onaylandi"],
-    queryFn: () => listReports("onaylandi"),
-    enabled: personel,
-  });
-  const reddedilenIhbarSorgu = useQuery({
-    queryKey: ["reports", "reddedildi"],
-    queryFn: () => listReports("reddedildi"),
-    enabled: personel,
-  });
-  // Onaylanmis ihbar <-> ondan olusan varlik eslesmesi (created_asset_id).
-  const onayliEsleme = useMemo(() => {
-    const rapordanVarliga = new Map<string, string>();
-    const varliktanRapora = new Map<string, string>();
-    for (const f of onaylananIhbarSorgu.data?.features ?? []) {
-      const varlikId = f.properties.created_asset_id;
-      if (!varlikId) continue;
-      rapordanVarliga.set(f.properties.id, varlikId);
-      varliktanRapora.set(varlikId, f.properties.id);
-    }
-    return { rapordanVarliga, varliktanRapora };
-  }, [onaylananIhbarSorgu.data]);
-
-  // Secim callback'leri (varlikSecildi/ihbarSecildi) yukarida, bu sorgudan once
-  // tanimlandigi icin eslesmeye ref uzerinden erisir.
-  useEffect(() => {
-    onayliEslemeRef.current = onayliEsleme;
-  }, [onayliEsleme]);
-
-  const ihbarDurumSorgusu: Record<ReportStatus, typeof bekleyenIhbarSorgu> = {
-    beklemede: bekleyenIhbarSorgu,
-    onaylandi: onaylananIhbarSorgu,
-    reddedildi: reddedilenIhbarSorgu,
-  };
-
-  /** Cekilen tum ihbarlar GORUNUME gore gruplanir: onaylanmislar, olusturduklari
-   *  varlik hala bakim bekliyorsa "onaylandi" (acik is), tamir edildiyse (ya da
-   *  varlik silindiyse) "tamir" olur. Hem harita katmani, hem lejant sayaclari,
-   *  hem panelin alt-sekme senkronu tek bu kaynagi okur; ayrim uc yerde ayri
-   *  ayri hesaplanmaz. Her ihbar nesnesine
-   *  `properties.gorunum` yazilir (harita pin rengi bunu okur). */
-  const ihbarGorunumleri = useMemo(() => {
-    const varlikDurumu = new Map<string, "iyi" | "bakim_lazim">();
-    for (const a of ihbarVarlikSorgu.data?.features ?? []) {
-      varlikDurumu.set(a.properties.id, a.properties.status);
-    }
-    const varlikBilgisiVar = ihbarVarlikSorgu.data !== undefined;
-    const gruplar = {
-      onaylandi: [] as ReportFeature[],
-      tamir: [] as ReportFeature[],
-      beklemede: [] as ReportFeature[],
-      reddedildi: [] as ReportFeature[],
-    } satisfies Record<IhbarGorunumu, ReportFeature[]>;
-    for (const durum of REPORT_STATUSES) {
-      for (const f of ihbarDurumSorgusu[durum].data?.features ?? []) {
-        const g = ihbarGorunumu(
-          f.properties.status,
-          f.properties.created_asset_id
-            ? varlikDurumu.get(f.properties.created_asset_id)
-            : undefined,
-          varlikBilgisiVar
-        );
-        gruplar[g].push({
-          ...f,
-          properties: { ...f.properties, gorunum: g },
-        });
-      }
-    }
-    return gruplar;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    ihbarVarlikSorgu.data,
-    bekleyenIhbarSorgu.data,
-    onaylananIhbarSorgu.data,
-    reddedilenIhbarSorgu.data,
-  ]);
 
   // --- Harita katman verileri (sag-ustteki KatmanKontrolu'ne bagli) --------
   // Sekmelerden bagimsiz: kullanici varlik/ihbar/saha ekibi katmanlarini istedigi
@@ -1144,7 +1053,7 @@ export default function App() {
    *  ihbar detayina duser. */
   const ihbarVarligiYonet = useCallback(
     (raporId: string) => {
-      const varlikId = onayliEslemeRef.current.rapordanVarliga.get(raporId);
+      const varlikId = onayliEsleme.rapordanVarliga.get(raporId);
       const varlik = ihbarVarlikSorgu.data?.features.find(
         (f) => f.properties.id === varlikId
       );
