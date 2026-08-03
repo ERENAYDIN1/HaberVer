@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -5,6 +6,14 @@ const PROXY_HEDEFI = process.env.VITE_PROXY_TARGET ?? "http://localhost:8000";
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+    // Testler kaynak agacinin yaninda durur (`*.test.ts(x)`), ayri bir
+    // dizinde degil: tasinan bir modulun testi de onunla birlikte tasinsin.
+    include: ["src/**/*.test.{ts,tsx}"],
+  },
   server: {
     host: true,
     port: 5173,
