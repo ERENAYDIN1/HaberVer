@@ -1,10 +1,11 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from .. import keycloak
 from ..models.log import LogAction
+from ..models.session import Session as SessionRow
 from ..models.user import User, UserRole
 from .log import add_log
 
@@ -63,6 +64,18 @@ def get(db: Session, user_id: uuid.UUID) -> User | None:
     return db.get(User, user_id)
 
 
+def aktif_admin_sayisi(db: Session) -> int:
+    """Devre disi birakma korumasi icin: sistemde en az bir aktif yonetici
+    kalmali, yoksa hesap acacak/geri acacak kimse olmaz."""
+    return (
+        db.execute(
+            select(func.count())
+            .select_from(User)
+            .where(User.role == UserRole.admin, User.is_active.is_(True))
+        ).scalar_one()
+    )
+
+
 def list_users(db: Session) -> list[User]:
     return list(db.execute(select(User).order_by(User.created_at.desc())).scalars())
 
@@ -112,6 +125,45 @@ def create_user(
             detail=role.value,
         )
 
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def set_active(db: Session, user: User, aktif: bool, actor: User) -> User:
+    """Hesabi acar/kapatir. Uc yerde birden etkili olmasi gerekir, cunku her biri
+    ayri bir kapiyi tutuyor:
+
+      1. **Keycloak** - kapali hesap yeni token ALAMAZ (giris ekrani reddeder).
+      2. **`users.is_active`** - `security.py` her istekte bunu okur, yani
+         elde gecerli bir token kalmis olsa bile API 401 doner.
+      3. **`sessions` satirlari** - BFF'de token tarayicida degil bizde durur;
+         satir silinmezse kullanici, access token'i suresi dolana kadar (5 dk)
+         calismaya devam ederdi. Ele gecirilmis bir hesabi ANINDA kesmek bu
+         ucuncu adima bagli.
+
+    Sira bilincli: once Keycloak. Oraya yazamazsak yerel satira hic dokunmayiz
+    ve 502 doneriz - "kapattim sandim ama giris yapabiliyor" durumu olusmaz.
+    Tersi yonde (acarken) bir adim yarida kalirsa hesap KAPALI kalir, yani her
+    iki yonde de hata guvenli tarafa duser."""
+    if user.keycloak_id is not None:
+        keycloak.kullanici_durumu(str(user.keycloak_id), aktif)
+
+    user.is_active = aktif
+    if not aktif:
+        # Acik oturumlari dusur: token bizde durdugu icin satiri silmek, o
+        # oturumu gercek anlamda iptal etmektir.
+        db.execute(delete(SessionRow).where(SessionRow.user_id == user.id))
+
+    add_log(
+        db,
+        action=LogAction.user_updated,
+        actor=actor,
+        entity_type="user",
+        entity_id=user.id,
+        entity_name=user.email,
+        detail="Hesap açıldı" if aktif else "Hesap devre dışı bırakıldı",
+    )
     db.commit()
     db.refresh(user)
     return user

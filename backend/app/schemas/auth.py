@@ -24,9 +24,17 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    """Admin tarafindan mevcut bir hesabin guncellenmesi (su an yalnizca yaka)."""
+    """Admin tarafindan mevcut bir hesabin guncellenmesi.
+
+    Alanlar OPSIYONELDIR ve `exclude_unset` ile ayirt edilir: `yaka: null`
+    gondermek "yakayi temizle" demektir, alani HIC gondermemek "yakaya dokunma".
+    Ikisi ayni sey olsaydi hesabi devre disi birakmak, ekibin kadro yakasini da
+    sessizce silerdi."""
 
     yaka: Yaka | None = None
+    # False: hesap kapatilir - Keycloak'ta devre disi birakilir VE acik
+    # oturumlari dusurulur (bkz. crud/user.py::set_active).
+    is_active: bool | None = None
 
 
 class OturumBilgi(BaseModel):

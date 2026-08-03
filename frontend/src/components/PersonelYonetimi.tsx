@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { createUser, listUsers, updateUserYaka } from "../api/auth";
+import { createUser, listUsers, updateUserAktif, updateUserYaka } from "../api/auth";
+import { useAuth } from "../auth/AuthContext";
 import {
   USER_ROLE_LABELS,
   type User,
@@ -14,6 +15,7 @@ import { inputClass, labelClass } from "../utils/formSiniflari";
 const OLUSTURULABILIR_ROLLER: UserRole[] = ["calisan", "saha_calisani", "admin"];
 
 export default function PersonelYonetimi() {
+  const { user: benim } = useAuth();
   const [kullanicilar, setKullanicilar] = useState<User[]>([]);
   const [ad, setAd] = useState("");
   const [email, setEmail] = useState("");
@@ -26,6 +28,11 @@ export default function PersonelYonetimi() {
   const [gonderiliyor, setGonderiliyor] = useState(false);
   // Yakasi su an guncellenen kullanicinin id'si (select'i kilitlemek icin).
   const [yakaDegisen, setYakaDegisen] = useState<string | null>(null);
+  // Aktifligi su an degisen kullanici + kapatma onayi bekleyen kullanici.
+  // Kapatma iki adimli: hesabi kesmek acik oturumlari da dusurur, geri
+  // alinabilir ama kullanici o an disari atilir - tek tikla olmamali.
+  const [aktifDegisen, setAktifDegisen] = useState<string | null>(null);
+  const [kapatmaOnayi, setKapatmaOnayi] = useState<string | null>(null);
 
   const yukle = () => {
     listUsers()
@@ -53,6 +60,30 @@ export default function PersonelYonetimi() {
       setHata((err as Error).message);
     } finally {
       setYakaDegisen(null);
+    }
+  };
+
+  /** Hesabi acar/kapatir. Kapatma acik oturumlari da dusurdugu icin onaydan
+   *  gecer; acmak geri donusu olmayan bir sey yapmadigindan dogrudan calisir. */
+  const aktifDegistir = async (u: User, aktif: boolean) => {
+    setAktifDegisen(u.id);
+    setHata(null);
+    setBasari(null);
+    try {
+      const guncel = await updateUserAktif(u.id, aktif);
+      setKullanicilar((onceki) =>
+        onceki.map((x) => (x.id === guncel.id ? guncel : x)),
+      );
+      setBasari(
+        `${u.full_name || u.email}: ${
+          aktif ? "hesap yeniden açıldı" : "hesap devre dışı bırakıldı, oturumları kapatıldı"
+        }`,
+      );
+    } catch (err) {
+      setHata((err as Error).message);
+    } finally {
+      setAktifDegisen(null);
+      setKapatmaOnayi(null);
     }
   };
 
@@ -207,19 +238,30 @@ export default function PersonelYonetimi() {
         </h2>
         <ul className="divide-y divide-slate-100 border border-slate-200">
           {kullanicilar.map((u) => (
-            <li key={u.id} className="px-3 py-2">
+            <li key={u.id} className={`px-3 py-2 ${u.is_active ? "" : "bg-slate-50"}`}>
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="truncate text-sm text-slate-800">
+                  <p
+                    className={`truncate text-sm ${
+                      u.is_active ? "text-slate-800" : "text-slate-400 line-through"
+                    }`}
+                  >
                     {u.full_name || u.email}
                   </p>
                   {u.full_name && (
                     <p className="truncate text-xs text-slate-400">{u.email}</p>
                   )}
                 </div>
-                <span className="shrink-0 border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
-                  {USER_ROLE_LABELS[u.role]}
-                </span>
+                <div className="flex shrink-0 items-center gap-1">
+                  {!u.is_active && (
+                    <span className="border border-red-200 bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-700">
+                      Kapalı
+                    </span>
+                  )}
+                  <span className="border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
+                    {USER_ROLE_LABELS[u.role]}
+                  </span>
+                </div>
               </div>
               {/* Saha ekiplerinin kadro yakasi buradan degistirilir; otomatik
                   atama yalnizca ayni yakadaki isleri yonlendirir. */}
@@ -245,6 +287,53 @@ export default function PersonelYonetimi() {
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* Hesabi ac/kapat. Kendi hesabini kapatmak backend'de de
+                  engelli (kendini disari kilitleme); dugme o yuzden hic
+                  gosterilmez - reddedilecek bir islem sunmanin anlami yok. */}
+              {benim?.id !== u.id && (
+                <div className="mt-1.5 flex items-center gap-2">
+                  {!u.is_active ? (
+                    <button
+                      type="button"
+                      disabled={aktifDegisen === u.id}
+                      onClick={() => aktifDegistir(u, true)}
+                      className="border border-emerald-300 px-2 py-0.5 text-[11px] font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50"
+                    >
+                      {aktifDegisen === u.id ? "Açılıyor…" : "Hesabı Aç"}
+                    </button>
+                  ) : kapatmaOnayi === u.id ? (
+                    <>
+                      <span className="text-[11px] text-slate-500">
+                        Oturumları kapatılsın mı?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setKapatmaOnayi(null)}
+                        className="border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 transition hover:bg-slate-50"
+                      >
+                        Vazgeç
+                      </button>
+                      <button
+                        type="button"
+                        disabled={aktifDegisen === u.id}
+                        onClick={() => aktifDegistir(u, false)}
+                        className="border border-red-300 bg-red-600 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {aktifDegisen === u.id ? "Kapatılıyor…" : "Evet, kapat"}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setKapatmaOnayi(u.id)}
+                      className="border border-red-300 px-2 py-0.5 text-[11px] font-medium text-red-700 transition hover:bg-red-50"
+                    >
+                      Devre Dışı Bırak
+                    </button>
+                  )}
                 </div>
               )}
             </li>

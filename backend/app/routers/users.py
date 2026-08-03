@@ -52,6 +52,9 @@ def create_user(
     return UserOut.model_validate(user)
 
 
+
+
+
 @router.patch("/{user_id}", response_model=UserOut)
 def update_user(
     user_id: uuid.UUID,
@@ -59,16 +62,44 @@ def update_user(
     admin_user: User = Depends(require_role(UserRole.admin)),
     db: Session = Depends(get_db),
 ):
-    """Admin bir saha ekibinin kadro yakasini ayarlar/temizler. Yaka None
-    birakilirsa ekibin yakasi son bildirdigi konumdan turetilir."""
+    """Admin bir hesabi gunceller: kadro yakasi ve/veya aktiflik.
+
+    Hangi alanin GONDERILDIGI `exclude_unset` ile ayirt edilir; alani hic
+    gondermemek "dokunma" demektir (bkz. schemas/auth.py::UserUpdate)."""
     user = crud.get(db, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="Kullanici bulunamadi")
-    if user.role != UserRole.saha_calisani:
-        raise HTTPException(
-            status_code=409, detail="Yaka yalnizca saha ekipleri icin tanimlanir"
+
+    gonderilen = data.model_dump(exclude_unset=True)
+
+    if "is_active" in gonderilen:
+        aktif = bool(gonderilen["is_active"])
+        # Admin kendi hesabini kapatamaz: kendini disari kilitlemenin en kolay
+        # yolu bu olurdu ve geri almak icin veritabanina elle girmek gerekirdi.
+        if user.id == admin_user.id and not aktif:
+            raise HTTPException(
+                status_code=409, detail="Kendi hesabinizi devre disi birakamazsiniz"
+            )
+        # Son aktif admin'i dusurmek sistemi yonetilemez birakir - hicbir admin
+        # kalmadiginda hesap acacak/geri acacak kimse olmaz.
+        if not aktif and user.role is UserRole.admin and crud.aktif_admin_sayisi(db) <= 1:
+            raise HTTPException(
+                status_code=409, detail="Sistemde en az bir aktif yonetici kalmali"
+            )
+        try:
+            user = crud.set_active(db, user, aktif, actor=admin_user)
+        except keycloak.KeycloakHatasi as e:
+            # Keycloak'a yazamadik: yerel satira DOKUNMADIK, yoksa "kapattim
+            # sandim ama giris yapabiliyor" durumu olusurdu.
+            raise HTTPException(status_code=502, detail=f"Keycloak: {e}")
+
+    if "yaka" in gonderilen:
+        if user.role != UserRole.saha_calisani:
+            raise HTTPException(
+                status_code=409, detail="Yaka yalnizca saha ekipleri icin tanimlanir"
+            )
+        user = crud.set_yaka(
+            db, user, data.yaka.value if data.yaka else None, actor=admin_user
         )
-    user = crud.set_yaka(
-        db, user, data.yaka.value if data.yaka else None, actor=admin_user
-    )
+
     return UserOut.model_validate(user)

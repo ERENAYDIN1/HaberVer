@@ -48,10 +48,21 @@ export function createUser(data: {
   });
 }
 
-/** Admin: bir saha ekibinin kadro yakasini ayarlar (null: konumdan turet). */
+/** Admin: bir saha ekibinin kadro yakasini ayarlar (null: konumdan turet).
+ *  Yalnizca `yaka` gonderilir - backend gonderilmeyen alanlara dokunmaz. */
 export function updateUserYaka(user_id: string, yaka: Yaka | null) {
   return istek<User>(`/users/${user_id}`, {
     method: "PATCH",
     body: JSON.stringify({ yaka }),
+  });
+}
+
+/** Admin: hesabi acar/kapatir. Kapatmak yalnizca bir bayrak degildir - hesap
+ *  Keycloak'ta da devre disi birakilir ve ACIK OTURUMLARI ANINDA DUSER, yani
+ *  ele gecirilmis bir hesabi kesmenin yoludur (bkz. crud/user.py::set_active). */
+export function updateUserAktif(user_id: string, is_active: boolean) {
+  return istek<User>(`/users/${user_id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_active }),
   });
 }
