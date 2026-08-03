@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..crud import asset as asset_crud
@@ -30,6 +30,14 @@ from ..security import personel, require_role
 router = APIRouter(prefix="/api/saha", tags=["saha"])
 
 
+# Havuz dagitimini tetiklemek icin gereken en kucuk yer degistirme (metre).
+# Konum ~30 sn'de bir bildiriliyor; her ping'te dagitim yapmak, ekip yerinde
+# dursa bile havuzdaki HER is icin ayri sorgu demekti (ekip sayisi x is sayisi,
+# dakikada iki kez). Bu esik altindaki hareket atama sonucunu degistiremeyecek
+# kadar kucuktur - menzil siniri 5 km (MAKS_ATAMA_MESAFE_M).
+KONUM_DAGITIM_ESIGI_M = 250
+
+
 @router.post("/konum", status_code=status.HTTP_204_NO_CONTENT)
 def konum_guncelle(
     data: KonumGuncelle,
@@ -38,13 +46,29 @@ def konum_guncelle(
 ):
     """Saha calisaninin son konumunu gunceller (tarayici geolocation'i periyodik
     olarak cagirir)."""
-    user.last_location = func.ST_SetSRID(
+    yeni_konum = func.ST_SetSRID(
         func.ST_MakePoint(data.longitude, data.latitude), 4326
     )
+
+    # Ekip, yeni konumuyla havuzda bekleyen bir isin menziline girmis OLABILIR.
+    # Ama bu ancak KAYDA DEGER bir yer degistirmede mumkun: duran bir ekip icin
+    # dagitimi tekrar calistirmak ayni sonucu ureten saf bir maliyettir.
+    # Konumu hic yoksa (ilk bildirim) her zaman dagitilir - ekip o ana kadar
+    # atama icin hic uygun degildi.
+    if user.last_location is None:
+        dagit = True
+    else:
+        mesafe = db.execute(
+            select(func.ST_DistanceSphere(User.last_location, yeni_konum)).where(
+                User.id == user.id
+            )
+        ).scalar_one()
+        dagit = mesafe is not None and mesafe >= KONUM_DAGITIM_ESIGI_M
+
+    user.last_location = yeni_konum
     user.last_seen_at = datetime.now(timezone.utc)
-    # Ekip yeni konumuyla havuzda bekleyen bir isin menziline girmis olabilir;
-    # bekleyen gorevleri yeniden dagit (kapasite/mesafe uygunsa otomatik atanir).
-    crud.bekleyen_gorevleri_dagit(db)
+    if dagit:
+        crud.bekleyen_gorevleri_dagit(db)
     db.commit()
 
 

@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
+from .crud import asset as asset_crud
 from .crud import session as oturum_crud
 from .database import SessionLocal
 from .routers import (
@@ -26,15 +27,21 @@ from .routers import (
 logger = logging.getLogger(__name__)
 
 
-async def _oturum_temizleyici() -> None:
-    """Suresi gecmis oturum satirlarini periyodik olarak siler.
+async def _bakim_dongusu() -> None:
+    """Zamana bagli temizlik isleri: suresi gecmis oturumlar + tamir edilip
+    saklama suresi dolmus ihbar varliklari.
 
-    Neden ayri bir gorev: `crud/session.py::temizle` yazilmisti ama HICBIR YERDEN
-    cagrilmiyordu, dolayisiyla `sessions` tablosu (icindeki refresh token'larla
-    birlikte) sinirsiz buyuyordu. Bunu bir okuma ucuna ilistirmek kolay olurdu
-    ama o desen projede zaten sorun cikariyor (bkz. asset listelemedeki tembel
-    temizlik): GET'ler yazma yapmaya baslar, es zamanli okuyucular ayni satirlar
-    icin yarisir. Temizlik zamana bagli bir bakim isidir, okumaya degil."""
+    **Neden okuma uclarinda degil.** Ikisi de bir zamanlar (ya da hic) yanlis
+    yerdeydi: `session.temizle` HICBIR YERDEN cagrilmiyordu, `asset.purge_
+    expired_repaired` ise her `GET /api/assets` ve `POST /within` icinde
+    calisiyordu. Ikincisi GET'i yazma islemine cevirir - frontend bu uclari
+    duzenli olarak yokladigi icin her poll bir DELETE + COMMIT uretiyordu, es
+    zamanli okuyucular ayni satirlar icin yarisiyor ve okuma gecikmesi
+    silinecek kayit sayisina bagli hale geliyordu. Ikisinin de dogru yeri
+    burasi: is zamana bagli, isteklere degil.
+
+    Sikligin hassas olmasi gerekmiyor - saklama suresi 5 GUN (`TAMIR_SAKLAMA_
+    GUN`), yani birkac saatlik gecikme davranisi degistirmez."""
     aralik = max(1, settings.oturum_temizleme_saat) * 3600
     while True:
         try:
@@ -43,17 +50,23 @@ async def _oturum_temizleyici() -> None:
                 silinen = oturum_crud.temizle(db)
                 if silinen:
                     logger.info("Suresi gecmis %d oturum silindi", silinen)
+                temizlenen = asset_crud.purge_expired_repaired(db)
+                if temizlenen:
+                    logger.info(
+                        "Tamir sonrasi saklama suresi dolan %d varlik silindi",
+                        temizlenen,
+                    )
             finally:
                 db.close()
         except Exception:  # bakim isi uygulamayi dusurmemeli
-            logger.exception("Oturum temizligi basarisiz")
+            logger.exception("Bakim dongusu basarisiz")
         await asyncio.sleep(aralik)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.media_yolu.mkdir(parents=True, exist_ok=True)
-    gorev = asyncio.create_task(_oturum_temizleyici())
+    gorev = asyncio.create_task(_bakim_dongusu())
     try:
         yield
     finally:

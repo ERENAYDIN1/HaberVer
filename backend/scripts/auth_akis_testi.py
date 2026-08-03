@@ -29,6 +29,23 @@ def ic(url: str) -> str:
     return url.replace(PUBLIC, INTERNAL)
 
 
+def admin_bilgileri() -> tuple[str, str]:
+    """Admin kimligi: komut satirindan `[email] [parola]`, verilmezse ayarlardan.
+
+    TEK konvansiyon: dort test script'i de bunu kullanir. Bir donem her biri
+    argumanlari farkli sirayla okuyordu (birinde argv[1]=e-posta, digerlerinde
+    argv[1]=parola) ve ayni komut kimisinde calisip kimisinde "kimlik hatasi"
+    veriyordu."""
+    email = sys.argv[1] if len(sys.argv) > 1 else settings.default_admin_email
+    parola = sys.argv[2] if len(sys.argv) > 2 else settings.default_admin_password
+    return email, parola
+
+
+def admin_girisi():
+    """Ayarlardan (ya da komut satirindan) okunan admin ile giris yapmis istemci."""
+    return giris(*admin_bilgileri())
+
+
 def giris(email: str, parola: str) -> httpx.Client:
     istemci = httpx.Client(follow_redirects=False, timeout=15.0)
 
@@ -68,8 +85,7 @@ def main() -> None:
     # "admin1234" yaziyordu ve admin parolasi degistiginde test, uygulamada
     # bir sorun varmis gibi patliyordu. Ayni sinif hata (bir parolanin kodda
     # sabitlenmesi) A1'in de sebebiydi.
-    email = sys.argv[1] if len(sys.argv) > 1 else settings.default_admin_email
-    parola = sys.argv[2] if len(sys.argv) > 2 else settings.default_admin_password
+    email, parola = admin_bilgileri()
 
     # Cookie'siz erisim reddedilmeli.
     anonim = httpx.get(f"{API}/api/auth/me", timeout=10.0)

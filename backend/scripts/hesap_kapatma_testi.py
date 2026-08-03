@@ -7,7 +7,7 @@ kullanici access token'i suresi dolana kadar (5 dk) calismaya devam ederdi.
 Bu dosya tam olarak onu olcer: kapatma ANINDA etkili mi?
 
 Kullanim (backend container icinde):
-    python scripts/hesap_kapatma_testi.py [admin_parolasi]
+    python scripts/hesap_kapatma_testi.py [admin_eposta] [admin_parola]
 """
 import sys
 from pathlib import Path
@@ -17,8 +17,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.config import settings  # noqa: E402
-from auth_akis_testi import API, giris  # noqa: E402
+from auth_akis_testi import API, admin_girisi, giris  # noqa: E402
 
 ORIGIN = {"Origin": "http://localhost:5173"}
 KURBAN = "sahaekibi3@greenasset.com"
@@ -26,10 +25,7 @@ KURBAN_PAROLA = "saha1234"
 
 
 def main() -> None:
-    admin = giris(
-        settings.default_admin_email,
-        sys.argv[1] if len(sys.argv) > 1 else settings.default_admin_password,
-    )
+    admin = admin_girisi()
 
     kurban_id = next(
         u["id"] for u in admin.get(f"{API}/api/users").json() if u["email"] == KURBAN

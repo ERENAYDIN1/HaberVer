@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..crud import bolge as crud
+from ..crud.session import OturumBaglami
 from ..database import get_db
 from ..models.bolge import BolgeTipi
 from ..models.user import User, UserRole
@@ -14,7 +15,7 @@ from ..schemas.bolge import (
     BolgeGuncelle,
     BolgeTamamlama,
 )
-from ..security import personel, require_role, saha_dahil
+from ..security import get_context, personel, require_role, saha_dahil
 
 router = APIRouter(prefix="/api/bolgeler", tags=["bolgeler"])
 
@@ -117,6 +118,13 @@ def bolge_tamamla(
     bolge_id: uuid.UUID,
     data: BolgeTamamlama,
     user: User = Depends(saha_dahil),
+    # Rol `user.role` KOLONUNDAN degil, token'dan cozulen etkin rolden okunur.
+    # `security.py` bunu acikca yasakliyor: o kolon SQL sorgulari icin tutulan
+    # bir AYNADIR (istek basinda token'dan tazelenir), yetki dayanagi degil.
+    # Burasi projede kuralin delindigi tek yerdi - senkron sayesinde pratikte
+    # dogru sonuc veriyordu, ama bayat bir kolonun yetki karari vermesine bir
+    # adim kalmisti. `saha_dahil` de ayni baglama dayandigi icin ek sorgu yok.
+    baglam: OturumBaglami = Depends(get_context),
     db: Session = Depends(get_db),
 ):
     """Bolgeyi/guzergahi tamamlandi isaretler; tamamlandi=false geri alir.
@@ -126,7 +134,7 @@ def bolge_tamamla(
     mevcut = crud.get_bolge(db, bolge_id)
     if mevcut is None:
         raise HTTPException(status_code=404, detail="Bolge bulunamadi")
-    if user.role is UserRole.saha_calisani and mevcut.worker_id != user.id:
+    if baglam.etkin_rol is UserRole.saha_calisani and mevcut.worker_id != user.id:
         raise HTTPException(status_code=403, detail="Bu bolge size atanmamis")
 
     return crud.tamamla(db, bolge_id, data.tamamlandi, actor=user)

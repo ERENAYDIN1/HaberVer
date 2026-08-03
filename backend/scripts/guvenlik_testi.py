@@ -5,7 +5,7 @@ saldiri yollarinin KAPALI oldugunu dogrular. Her test, duzeltmeden ONCE gecen
 somut bir istegi tekrarlar ve artik reddedildigini gosterir.
 
 Kullanim (backend container icinde):
-    python scripts/guvenlik_testi.py
+    python scripts/guvenlik_testi.py [admin_eposta] [admin_parola]
 """
 import sys
 import uuid
@@ -15,17 +15,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))       # auth_akis_testi
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # app paketi
-from app.config import settings  # noqa: E402
-from auth_akis_testi import API, giris  # noqa: E402
-
-
-def admin_girisi():
-    """Admin oturumu. Parola SABIT YAZILMAZ, ayarlardan okunur (bkz.
-    auth_akis_testi.py'deki ayni notu)."""
-    return giris(
-        settings.default_admin_email,
-        sys.argv[1] if len(sys.argv) > 1 else settings.default_admin_password,
-    )
+from auth_akis_testi import API, admin_girisi, giris  # noqa: E402
 
 ORIGIN = {"Origin": "http://localhost:5173"}
 

@@ -46,8 +46,13 @@ def _apply_filters(
 
 def purge_expired_repaired(db: Session) -> int:
     """TAMIR_SAKLAMA_GUN gunden uzun sure once tamir edilmis (durum 'iyi') ihbar
-    kaynakli varliklari otomatik siler. Ayri bir zamanlayici olmadigindan liste
-    uclarinda tembel olarak cagirilir (her okuma once suresi dolanlari temizler)."""
+    kaynakli varliklari otomatik siler.
+
+    **Cagiran: `main.py::_bakim_dongusu` (periyodik arka plan gorevi).** Eskiden
+    `list_assets`/`assets_within` icinden "tembel" olarak cagriliyordu; bu, her
+    GET'i bir DELETE + COMMIT'e cevirdigi icin okuma uclarini yazma yoluna
+    sokuyordu (frontend bu uclari duzenli yokluyor). Bu fonksiyonu bir OKUMA
+    yolundan tekrar cagirmayin."""
     esik = datetime.now(timezone.utc) - timedelta(days=TAMIR_SAKLAMA_GUN)
     expired = (
         db.execute(
@@ -83,7 +88,6 @@ def list_assets(
     status: AssetStatus | None = None,
     source: AssetSource | None = None,
 ):
-    purge_expired_repaired(db)
     stmt = _apply_filters(_select_with_coords(), asset_type, status, source)
     return db.execute(stmt.order_by(Asset.created_at.desc())).all()
 
@@ -99,7 +103,6 @@ def assets_within(
 
     Geometri sutunundaki GiST indeksi sayesinde sorgu indeksten faydalanir.
     """
-    purge_expired_repaired(db)
     polygon = func.ST_SetSRID(func.ST_GeomFromGeoJSON(polygon_geojson), 4326)
     stmt = _select_with_coords().where(func.ST_Within(Asset.geometry, polygon))
     stmt = _apply_filters(stmt, asset_type, status, source)

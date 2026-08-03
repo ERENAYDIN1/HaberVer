@@ -115,6 +115,26 @@ def bekleyen_gorevleri_dagit(db: Session) -> int:
         .scalars()
         .all()
     )
+    if not bekleyenler:
+        return 0
+
+    # Kapasitesi olan hicbir ekip yoksa hicbir is atanamaz: her varlik icin
+    # ayri ayri en_yakin_uygun_ekip cagirmak (varlik basina 1 yaka sorgusu +
+    # 1 ekip sorgusu) bu durumda tamamen bosa gider. Tek sorgulik bir on
+    # kontrol, havuz kalabalikken tum donguyu atlar.
+    musait_var = db.execute(
+        select(User.id)
+        .where(
+            User.role == UserRole.saha_calisani,
+            User.is_active.is_(True),
+            User.last_location.isnot(None),
+            _aktif_sayi_subq() < MAKS_AKTIF_GOREV,
+        )
+        .limit(1)
+    ).first()
+    if musait_var is None:
+        return 0
+
     dagitilan = 0
     for asset in bekleyenler:
         ekip = en_yakin_uygun_ekip(db, asset.geometry)
@@ -133,6 +153,12 @@ def ata(
     """Varligi bir ekibe atar. Varlikta zaten aktif gorev varsa onu 'iptal' edip
     yenisini acar (yeniden yonlendirme). commit CAGIRMAZ - cagiran taraf commit
     eder. Kapasite doluysa ValueError firlatir."""
+    # Ekip satirini kilitle: "say, sonra ekle" arasinda baska bir islem (ornegin
+    # bir ihbar onayindaki otomatik atama ile personelin elle atamasi) ayni
+    # kontrolu gecip ekibi MAKS_AKTIF_GOREV'in uzerine cikarabiliyordu. Kismi
+    # tekil indeks yalnizca "bir varlik = tek aktif gorev"i korur, ekip basina
+    # kotayi degil - o yalnizca burada uygulaniyor.
+    db.execute(select(User.id).where(User.id == worker.id).with_for_update())
     if aktif_gorev_sayisi(db, worker.id) >= MAKS_AKTIF_GOREV:
         raise ValueError(
             f"{worker.full_name or worker.email} ekibinin kuyrugu dolu "
