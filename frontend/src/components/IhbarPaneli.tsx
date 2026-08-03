@@ -81,6 +81,8 @@ interface IhbarPaneliProps {
    *  atama/atanan ekibi degistirme yapilabilsin diye (haritadaki isaretcinin
    *  "Yönet" dugmesiyle ayni yetenek). */
   ekipler?: EkipOzet[];
+  /** Detay modalindaki "Konuma Git" - haritayi varligin konumuna ucurur. */
+  onVarligaGit?: (asset: AssetFeature) => void;
 }
 
 export default function IhbarPaneli({
@@ -94,6 +96,7 @@ export default function IhbarPaneli({
   seciliVarlikId,
   onVarlikSec,
   ekipler,
+  onVarligaGit,
 }: IhbarPaneliProps) {
   const { user } = useAuth();
   const tamCrudYetkisi = user?.role !== "saha_calisani";
@@ -106,6 +109,7 @@ export default function IhbarPaneli({
   const yonetim = useVarlikYonetimi({
     ekipler,
     onDuzenle: setDuzenlenen,
+    onGit: onVarligaGit,
     detayKapat: () => setDetayAsset(null),
   });
 

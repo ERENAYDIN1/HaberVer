@@ -1157,19 +1157,34 @@ export default function App() {
     [ihbarVarlikSorgu.data, seciliRapor]
   );
 
+  /** Detay modalindeki "Konuma Git": haritayi varligin konumuna ucurur.
+   *  BILINCLI olarak `seciliId`'ye dokunmaz - secim efekti (MapView) yalnizca
+   *  varlik o an haritadaki koleksiyonda VARSA uctugu icin, "Ihbar Edilen"
+   *  sekmesi kapaliyken ihbardan dogan bir varlikta sessizce hicbir sey
+   *  olmuyordu. Ucus artik koleksiyondan bagimsiz, tek ve acik bir yol. */
+  const varligaGit = useCallback((asset: AssetFeature) => {
+    setUcusHedefi({
+      anahtar: crypto.randomUUID(),
+      tip: "nokta",
+      merkez: asset.geometry.coordinates,
+      zoom: 16,
+    });
+  }, []);
+
   /** Haritadaki ekip popup'inda bir is satirina tiklanmasi: o varligin detay
    *  modali acilir - "Tamir Edildi", ekibe (yeniden) atama, duzenleme ve silme
    *  hepsi orada (bkz. AssetDetayModal). Varlik ekrandaki listelerde olmayabilir
    *  (baska sekme/filtre acik olabilir) ve durumu taze olmali, bu yuzden her
    *  zaman API'den cekilir. Varlik silinmisse (tamir sonrasi otomatik silme)
-   *  kullaniciya sebebi soylenir. */
+   *  kullaniciya sebebi soylenir.
+   *  Harita OYNATILMAZ: modali acmak bir gezinme degildir; konuma gitmek
+   *  isteyen kullanici modaldaki "Konuma Git" dugmesini kullanir. */
   const ekipGoreviAcildi = useCallback(async (assetId: string) => {
     try {
       const varlik = await getAsset(assetId);
       setDetayRapor(null);
       setDetayBolge(null);
       setDetayAsset(varlik);
-      setSeciliId(assetId);
     } catch (e) {
       window.alert(`Varlık açılamadı: ${(e as Error).message}`);
     }
@@ -1499,6 +1514,7 @@ export default function App() {
                   onMahalleSec={mahalleSec}
                   idariHatasi={idariHatasi}
                   ekipler={ekipSorgu.data}
+                  onVarligaGit={varligaGit}
                 />
               )}
 
@@ -1530,6 +1546,7 @@ export default function App() {
                   seciliVarlikId={seciliId}
                   onVarlikSec={varlikSecildi}
                   ekipler={ekipSorgu.data}
+                  onVarligaGit={varligaGit}
                 />
               )}
 
@@ -1582,6 +1599,7 @@ export default function App() {
           setDetayAsset(null);
           setSeciliId(null);
         }}
+        onGit={varligaGit}
       />
       <ReportDetayModal
         report={detayRapor}

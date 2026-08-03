@@ -74,6 +74,8 @@ interface AssetListProps {
   /** Saha ekipleri - bakim bekleyen bir varligin detayindan ekibe yonlendirme
    *  yapilabilsin diye ("İhbarlar > Onaylandı" panelindeki ayni yetenek). */
   ekipler?: EkipOzet[];
+  /** Detay modalindaki "Konuma Git" - haritayi varligin konumuna ucurur. */
+  onVarligaGit?: (asset: AssetFeature) => void;
 }
 
 export default function AssetList({
@@ -94,6 +96,7 @@ export default function AssetList({
   onMahalleSec,
   idariHatasi,
   ekipler,
+  onVarligaGit,
 }: AssetListProps) {
   const { user } = useAuth();
   const tamCrudYetkisi = user?.role !== "saha_calisani";
@@ -107,6 +110,7 @@ export default function AssetList({
   const yonetim = useVarlikYonetimi({
     ekipler,
     onDuzenle,
+    onGit: onVarligaGit,
     detayKapat: () => setDetayAsset(null),
   });
 

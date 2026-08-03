@@ -39,6 +39,11 @@ interface AssetDetayModalProps {
   /** Verilirse "Sil" cikar; silme bu modalin icinde yapilir, basarili olunca
    *  cagrilir (ust bilesen modali kapatip secimi birakir). */
   onSilindi?: () => void;
+  /** Verilirse "Konuma Git" cikar: modal kapanir ve harita varligin konumuna
+   *  ucar. Ucus BILINCLI olarak yalnizca bu dugmeye baglidir - modali acmak
+   *  (orn. ekip popup'indaki bir gorev satiri) haritayi kendiliginden
+   *  oynatmaz. */
+  onGit?: (asset: AssetFeature) => void;
 }
 
 /** Bir varligin bu modaldan yonetilebilmesi icin ust bilesenlerin gecmesi
@@ -52,6 +57,7 @@ export interface VarlikYonetimProplari {
   onAtandi: () => void;
   onDuzenle?: (asset: AssetFeature) => void;
   onSilindi: () => void;
+  onGit?: (asset: AssetFeature) => void;
 }
 
 /** Yukaridaki kumeyi tek yerde uretir; "Varlıklar" ve "İhbarlar > Onaylandı"
@@ -60,11 +66,15 @@ export interface VarlikYonetimProplari {
 export function useVarlikYonetimi({
   ekipler,
   onDuzenle,
+  onGit,
   detayKapat,
 }: {
   ekipler?: EkipOzet[];
   /** Duzenleme formunu acan ust bilesen isi (yoksa "Düzenle" cikmaz). */
   onDuzenle?: (asset: AssetFeature) => void;
+  /** Haritayi varligin konumuna ucuran ust bilesen isi (yoksa "Konuma Git"
+   *  cikmaz). */
+  onGit?: (asset: AssetFeature) => void;
   detayKapat: () => void;
 }): VarlikYonetimProplari {
   const { user } = useAuth();
@@ -82,6 +92,7 @@ export function useVarlikYonetimi({
           }
         : undefined,
     onSilindi: detayKapat,
+    onGit,
   };
 }
 
@@ -96,6 +107,7 @@ export default function AssetDetayModal({
   onAtandi,
   onDuzenle,
   onSilindi,
+  onGit,
 }: AssetDetayModalProps) {
   const koord = asset ? asset.geometry.coordinates : null;
   const { data: konum } = useKonumCozumu(koord ? koord[1] : null, koord ? koord[0] : null);
@@ -106,7 +118,7 @@ export default function AssetDetayModal({
   /** Islem seridi, modal NEREDEN acilirsa acilsin ayni: liste satirindaki
    *  kisayollar (Detay/Tamir/Düzenle/Sil) ile haritadaki popup ayni modale
    *  ciktigi icin ikisinde de tam takim gorunur. */
-  const islemModu = Boolean(onDuzenle || onSilindi);
+  const islemModu = Boolean(onDuzenle || onSilindi || onGit);
   const tamCrudYetkisi = user?.role !== "saha_calisani";
 
   const [seciliEkip, setSeciliEkip] = useState("");
@@ -285,6 +297,16 @@ export default function AssetDetayModal({
             cikar (bkz. useVarlikYonetimi). */}
         {islemModu && (
           <AksiyonSeridi>
+            {onGit && (
+              <AksiyonButonu
+                onClick={() => {
+                  onGit(asset);
+                  onKapat();
+                }}
+              >
+                Konuma Git
+              </AksiyonButonu>
+            )}
             {bakim && (
               <AksiyonButonu
                 tur="birincil"
