@@ -48,11 +48,29 @@ export function cikisiBaslat(): void {
 }
 
 /** Keycloak giris ekranina gider. state/nonce/PKCE'yi backend uretir; giris
- *  bitince kullanici `donus` yoluna geri doner. */
-export function girisBaslat(donus: string = window.location.pathname): void {
+ *  bitince kullanici `donus` yoluna geri doner.
+ *
+ *  `yontem`:
+ *  - `"push"` (varsayilan, kullanicinin "Giriş Yap" dugmesine BILINCLI
+ *    tikladigi durum): normal `location.href` atamasidir, gecmise (history)
+ *    YENI bir durak ekler. Geri tusuna basinca kullanici tikladigi /giris
+ *    sayfasina doner - guvenli, donen bir kapi.
+ *  - `"replace"` (RequireRole'un OTOMATIK, kullanici hic bir sey tiklamadan
+ *    baslattigi yonlendirmesi icin): `location.replace` kullanir, gecmise
+ *    yeni durak EKLEMEZ. Boylece butun giris zinciri (Keycloak + callback)
+ *    kullaniciyi korumali sayfaya getirmeden ONCEKI durakla yer degistirir;
+ *    geri tusu tum giris akisini ATLAYIP kullanicinin GERCEKTEN nereden
+ *    geldigine (baska bir site, arama motoru, ya da hicbir yere) doner -
+ *    kendi backend'imizin /callback'ine tekrar dusup hataya dusmez.*/
+export function girisBaslat(
+  donus: string = window.location.pathname,
+  yontem: "push" | "replace" = "push"
+): void {
   if (cikisSuruyor) return;
   sessionStorage.setItem(DENEME_ANAHTARI, String(Date.now()));
-  window.location.href = `${BASE_URL}/auth/login?next=${encodeURIComponent(donus)}`;
+  const hedef = `${BASE_URL}/auth/login?next=${encodeURIComponent(donus)}`;
+  if (yontem === "replace") window.location.replace(hedef);
+  else window.location.href = hedef;
 }
 
 /** Keycloak'in KAYIT ekranina gider (vatandas oz-kaydi orada yapilir). */

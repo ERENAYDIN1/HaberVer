@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -46,6 +47,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => setUser(null))
       .finally(() => setYukleniyor(false));
+  }, []);
+
+  // Ekranda GORUNEN kimligi tutar; asagidaki dinleyici React'in render
+  // dongusunun disinda (tarayici olayinda) calistigi icin state'i degil bunu
+  // okur.
+  const kullaniciRef = useRef<User | null>(null);
+  kullaniciRef.current = user;
+
+  // GERI TUSU / ILERI TUSU ile geri gelinen sayfa "yeniden yuklenmis" olmak
+  // zorunda degildir: tarayicilar sayfayi bfcache'ten (back/forward cache)
+  // OLDUGU GIBI - JavaScript bellegi, React state'i ve react-query onbellegi
+  // dahil - geri getirir. Hicbir istek atilmaz, dolayisiyla `/auth/me` de
+  // yeniden calismaz. Sonuc: A hesabindan cikip B ile girdikten sonra geri
+  // tusuyla A'nin ekranina donulebilir ve A'nin o an bellekte duran verileri
+  // (ad/rol, listeler, harita katmanlari) gorunur. Cookie artik B'ye ait
+  // oldugu icin bu ekrandan yapilan HER istek B olarak gider - yani A'nin
+  // yetkileri ele gecmez - ama A'nin ekranda kalan verisi tek basina bir
+  // gizlilik sorunudur ve kullaniciya "hala A'yim" izlenimi verir.
+  //
+  // `pageshow`in `persisted` bayragi tam olarak bu geri getirmeyi bildirir.
+  // Kimligi sunucuya yeniden sorar, degistiyse (ya da oturum bittiyse)
+  // sayfayi TAM YENILERIZ: bayat ekrani yamamak yerine bellegi (React state +
+  // react-query onbellegi) tumden atmak tek guvenli yol.
+  useEffect(() => {
+    const geriGelindi = (olay: PageTransitionEvent) => {
+      // Bellekte gosterilecek bir kimlik yoksa korunacak veri de yok.
+      if (!olay.persisted || !kullaniciRef.current) return;
+      const oncekiId = kullaniciRef.current.id;
+      authApi
+        .me()
+        .then((gelen) => {
+          if (gelen.id !== oncekiId) window.location.reload();
+        })
+        // Oturum tamamen bitmis (cikis yapilmis, suresi dolmus): bu ekran
+        // artik kimseye ait degil.
+        .catch(() => window.location.reload());
+    };
+    window.addEventListener("pageshow", geriGelindi);
+    return () => window.removeEventListener("pageshow", geriGelindi);
   }, []);
 
   const cikisYap = async () => {

@@ -18,7 +18,7 @@ import json
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -63,6 +63,45 @@ def _cookie_yaz(response: Response, ad: str, deger: str, omur: int) -> None:
     )
 
 
+def _yonlendirme(hedef: str, *, no_store: bool = False) -> RedirectResponse:
+    """`RedirectResponse` uretir; `no_store=True` ise tarayiciya bu yaniti
+    ONBELLEKLEMEMESINI soyler. /login ve /callback GERCEK sayfa gezintileri
+    (tarayici adres cubugu oraya gider), bu yuzden gezinti geri tusuyla tekrar
+    ziyaret edilebilir; onbellek olmadan tarayici o an gercekten NE OLDUGUNU
+    (akis cookie'si silinmis / kod zaten kullanilmis) sunucuya sorup taze bir
+    cevap alir, donuk (stale) bir yaniti tekrar oynatmaz."""
+    yanit = RedirectResponse(hedef, status_code=status.HTTP_302_FOUND)
+    if no_store:
+        yanit.headers["Cache-Control"] = "no-store"
+    return yanit
+
+
+def _hata_yonlendir(kod: str) -> RedirectResponse:
+    """Giris/callback sirasinda KURTARILABILIR bir hata olustugunda kullanici
+    ham bir JSON hata sayfasinda (backend'in dogrudan URL'sinde) kalmasin diye
+    uygulamanin kendi giris ekranina doner. Callback her zaman tarayicinin
+    ADRES CUBUGUNDA calisan tam sayfa bir gezinti oldugundan (fetch/XHR degil)
+    burada `HTTPException` atmak, kullaniciya "Okunakli hale getir" dugmesiyle
+    ciplak {"detail": ...} govdesi gosterilen bir sayfa acar - normal
+    kullanicinin ne yapacagini bilemeyecegi bir cikmaz. `Giris.tsx` zaten
+    `?hata=` parametresini okuyup tekrar deneme dugmesi gosteriyor.
+
+    Gecerli bir oturumu olan kullaniciyi buradan sessizce uygulamaya geri
+    ALMAYIZ; bayat bir giris adresi ziyaret edildiginde (tipik olarak GERI
+    TUSU) her zaman bu ekran gosterilir. Buyuk saglayicilarin (ornegin
+    Microsoft hesap girisi) davranisi da budur: giris akisinin duraklari
+    "tekrar oynatilabilir" sayfalar degildir, tekrar ziyaret edilirlerse
+    kullaniciya akisi bastan baslatmasi soylenir. Sessiz kurtarma, giris
+    zincirini gecmiste ileri-geri gezilebilen bir yol haline getirir - bunun
+    bedeli hesap degistirmis bir kullanicinin geri tusuyla eski adimlar
+    arasinda dolasabilmesidir."""
+    yanit = _yonlendirme(f"/giris?hata={kod}", no_store=True)
+    # Basarisiz akisin cookie'si (varsa) burada da temizlenir: bir sonraki
+    # "Giris Yap" denemesi baska bir cookie kalintisiyla degil temiz baslasin.
+    yanit.delete_cookie(AKIS_COOKIE, path="/")
+    return yanit
+
+
 @router.get("/login")
 def login(next: str | None = None, kayit: bool = False):
     """Kullaniciyi Keycloak'a yonlendirir. `kayit=true` ise dogrudan kayit
@@ -71,9 +110,14 @@ def login(next: str | None = None, kayit: bool = False):
     nonce = base64.urlsafe_b64encode(os.urandom(24)).decode().rstrip("=")
     verifier, challenge = keycloak.pkce_uret()
 
-    yanit = RedirectResponse(
+    # no_store: bu yanit her cagrildiginda YENI bir state/nonce/verifier
+    # uretip AKIS_COOKIE'yi UZERINE YAZAR. Tarayici bunu onbellekten servis
+    # ederse (geri tusu / bfcache) kullanicinin dondugu Keycloak URL'sindeki
+    # eski `state` ile o sirada cookie'de duran YENI state karsi karsiya
+    # gelebilir - callback'te "Giris dogrulamasi basarisiz" olarak cikar.
+    yanit = _yonlendirme(
         keycloak.giris_url(state=state, nonce=nonce, challenge=challenge, kayit=kayit),
-        status_code=status.HTTP_302_FOUND,
+        no_store=True,
     )
     # Akis durumu httpOnly cookie'de tasinir: sunucuda ayri bir tablo tutmaya
     # gerek kalmaz. Icerigi gizli degildir; guvenlik donen `state`in buradaki
@@ -104,40 +148,50 @@ def callback(
     error: str | None = None,
     db: Session = Depends(get_db),
 ):
+    """`/callback` HER ZAMAN tarayicinin ADRES CUBUGUNDA calisan tam sayfa bir
+    gezintidir (Keycloak'in kendisi buraya yonlendirir) - fetch/XHR ile
+    cagrilmaz. Bu yuzden burada asla ciplak `HTTPException` atilmaz: kurtarma
+    yolu olmayan (Keycloak'a hic ulasilamadi gibi) durumlar disindaki HER
+    hata `_hata_yonlendir` ile `/giris?hata=...`e doner - aksi halde kullanici
+    {"detail": "..."} govdesiyle bas basa kalir ("Okunakli hale getir"
+    dugmesiyle acilan o sayfa). Bu uc ayrica GERI TUSUYLA tekrar ziyaret
+    edilebilir (basarili girisin ardindan bile) - o zaman `code`/`state` zaten
+    kullanilmis/silinmis olur; asagidaki kontroller bunu da kapsar."""
     if error:
-        raise HTTPException(status_code=400, detail=f"Keycloak hatasi: {error}")
+        return _hata_yonlendir("keycloak")
     if not code or not state:
-        raise HTTPException(status_code=400, detail="Eksik yetkilendirme yaniti")
+        return _hata_yonlendir("eksik")
 
     ham = request.cookies.get(AKIS_COOKIE)
     if not ham:
-        raise HTTPException(
-            status_code=400, detail="Giris akisi bulunamadi, tekrar deneyin"
-        )
+        # Akis cookie'si yok: ya dogrudan bu URL'ye gelindi ya da (tipik
+        # sebep) geri tusuyla BASARILI bir girisin callback adresine geri
+        # donuldu - o girisin sonunda cookie zaten silinmisti.
+        return _hata_yonlendir("oturum")
     try:
         akis = json.loads(base64.urlsafe_b64decode(ham.encode()))
     except (ValueError, json.JSONDecodeError):
-        raise HTTPException(status_code=400, detail="Giris akisi cozulemedi")
+        return _hata_yonlendir("oturum")
 
     # CSRF: donen `state`, girise baslarken uretilenle ayni olmali.
     if akis.get("state") != state:
-        raise HTTPException(status_code=400, detail="Giris dogrulamasi basarisiz")
+        return _hata_yonlendir("oturum")
 
     try:
         token = keycloak.kod_degistir(code, akis["verifier"])
-    except keycloak.KeycloakHatasi as e:
-        raise HTTPException(status_code=502, detail=str(e))
+    except keycloak.KeycloakHatasi:
+        # Kod tek kullanimliktir; geri tusuyla ayni koda tekrar gelinmesi de
+        # (state cookie'yle eslesse bile) burada Keycloak'tan hata olarak
+        # doner - kullaniciya ham 502 govdesi yerine yeniden deneme sunulur.
+        return _hata_yonlendir("keycloak")
 
     # Nonce yalnizca id_token'da bulunur; access token'da yoksa kontrol atlanir.
     if token.claims.get("nonce") not in (None, akis.get("nonce")):
-        raise HTTPException(status_code=400, detail="Giris dogrulamasi basarisiz")
+        return _hata_yonlendir("oturum")
 
     email = token.claims.get("email")
     if not email:
-        raise HTTPException(
-            status_code=400,
-            detail="Keycloak kullanicisinda e-posta yok; hesaba e-posta ekleyin",
-        )
+        return _hata_yonlendir("eposta")
 
     user = crud.keycloak_eslestir(
         db,
@@ -147,13 +201,11 @@ def callback(
         role=oturum_crud.rolu_coz(keycloak.rolleri_oku(token.claims)),
     )
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="Hesap devre disi")
+        return _hata_yonlendir("devre_disi")
 
     oturum = oturum_crud.olustur(db, token, user)
 
-    yanit = RedirectResponse(
-        _guvenli_donus(akis.get("next")), status_code=status.HTTP_302_FOUND
-    )
+    yanit = _yonlendirme(_guvenli_donus(akis.get("next")), no_store=True)
     _cookie_yaz(
         yanit,
         settings.session_cookie_name,
@@ -182,11 +234,12 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
                 id_token = oturum.id_token
                 oturum_crud.sil(db, oturum_id)
     response.delete_cookie(settings.session_cookie_name, path="/")
-    # Cikista uygulama koku DEGIL /giris'e donulur: kok rota girisi kendisi
-    # baslattigi icin (bkz. frontend RequireRole) kullanici cikar cikmaz
-    # dogrudan Keycloak giris formuna atilir ve "cikamiyorum" izlenimi olusur.
-    # /giris kendiliginden yonlendirmeyen tek sayfadir.
-    donus = f"{settings.app_base_url.rstrip('/')}/giris"
+    # Cikista /giris'e DEGIL, dogrudan /api/auth/login'e donulur: kullanici
+    # cikar cikmaz araya bir "Giris Yap" dugmesi girmeden Keycloak'in kendi
+    # giris formuna dusar. Bu uc kendisi Keycloak'a 302 attigi icin donguye
+    # girmez (login ucu her zaman yonlendirir, /giris gibi bekleyen bir sayfa
+    # degil); tum roller icin gecerlidir.
+    donus = f"{settings.app_base_url.rstrip('/')}/api/auth/login?next=%2F"
     return {"cikis_url": keycloak.cikis_url(id_token, donus)}
 
 

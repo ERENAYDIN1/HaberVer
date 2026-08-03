@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
 import type { UserRole } from "../types/auth";
@@ -40,8 +40,24 @@ export default function RequireRole({ roller, children }: RequireRoleProps) {
   // kullaniciya duran bir sayfa goster (bkz. auth/token.ts).
   const dongu = girisiz && girisDongusuVarMi();
 
+  // StrictMode gelistirme modunda bu effect'i (temizleme fonksiyonu
+  // olmadigi icin) art arda IKI KEZ calistirir. Korumasiz birakilirsa
+  // /auth/login'e iki ayri istek gider; her istek backend'de FARKLI bir
+  // state/nonce uretip AKIS_COOKIE'yi ustune yazdigindan, hangi yanitin
+  // cerezi en son yazdigi ile taraycinin fiilen hangi yonlendirmeyi takip
+  // ettigi arasinda yaris olusur - Keycloak'tan donen state cerezle
+  // eslesmeyip "Giris dogrulamasi basarisiz" hatasi cikabilir. Ref, ayni
+  // mount icinde girisBaslat'in yalnizca bir kez cagrilmasini garanti eder.
+  const baslatildiRef = useRef(false);
   useEffect(() => {
-    if (girisiz && !dongu) girisBaslat(konum.pathname + konum.search);
+    if (girisiz && !dongu && !baslatildiRef.current) {
+      baslatildiRef.current = true;
+      // "replace": bu yonlendirmeyi kullanici degil biz baslatiyoruz, bu
+      // yuzden gecmise yeni bir durak eklemez - bkz. token.ts::girisBaslat.
+      // Aksi halde geri tusu, kullanicinin nereden geldigine bakmaksizin
+      // hep bu korumali sayfaya (ve oradan yeniden giris zincirine) doner.
+      girisBaslat(konum.pathname + konum.search, "replace");
+    }
   }, [girisiz, dongu, konum.pathname, konum.search]);
 
   if (yukleniyor) return <Bekleme metin="Yükleniyor…" />;
