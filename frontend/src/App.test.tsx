@@ -4,24 +4,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ihbar, koleksiyon, PERSONEL, sarmala, varlik } from "./test/yardimcilar";
 
-/** App.tsx'in REFACTOR SIRASINDA BOZULABILECEK davranislari.
- *
- *  Buradaki iki senaryo da gecmiste bir kez gercekten bozulmustu (CLAUDE.md
- *  ikisini de anlatiyor) ve ikisi de `useKatmanlar` / `useIhbarGorunumleri`
- *  cikarilirken dogrudan risk altinda:
- *
- *    1. Tur/durum filtresi TEK state'ten beslenir - paneldeki acilir ile
- *       sag-ustteki lejant birbirini ezmemeli, lejant sayaclari gercek
- *       toplami gostermeli.
- *    2. Onaylanan ihbar ile ondan olusan varlik AYNI SECIMDIR - biri
- *       secilince digeri de secilmeli (ayri id'ler oldugu icin bu elle
- *       kurulan bir eslemedir).
+/** App.tsx'in refactor sirasinda bozulabilecek iki davranisi (ikisi de daha
+ *  once bir kez gercekten bozuldu):
+ *    1. Tur/durum filtresi tek state'ten beslenir - panel acilirlari ile
+ *       lejant birbirini ezmemeli, sayaclar gercek toplami gostermeli.
+ *    2. Onaylanan ihbar ile ondan olusan varlik ayni secimdir.
  *
  *  Ag katmani sahte, bilesen agaci gercek. */
 
-// Iki bakim varligi (acilista GORUNUR) + bir saglam varlik (acilista GIZLI):
-// App acilista yalnizca "Bakım Lazım"i isaretli getirir, saglam envanter
-// haritayi doldurmaz (BASLANGIC.katmanVarlikDurumlari).
+// Iki bakim varligi (acilista gorunur) + bir saglam varlik (acilista gizli):
+// acilista yalnizca "Bakım Lazım" isaretlidir.
 const AGAC = varlik({ name: "Cinar Agaci", type: "agac", status: "bakim_lazim" });
 const DIREK = varlik({ name: "Aydinlatma Diregi", type: "direk", status: "bakim_lazim" });
 const SAGLAM_BANK = varlik({ name: "Saglam Bank", type: "bank", status: "iyi" });
@@ -53,8 +45,8 @@ vi.mock("./auth/AuthContext", () => ({
 
 vi.mock("./api/assets", () => ({
   listAssets: vi.fn(async (filtre: { source?: string; status?: string } = {}) => {
-    // Backend'in davranisini taklit eder: `source`/`status` sorguyu daraltir,
-    // tur/durum filtresi ARTIK SORGUDA DEGILDIR (client-side yapilir).
+    // Backend gibi davranir: `source`/`status` sorguyu daraltir; tur filtresi
+    // sorguda degildir, client-side uygulanir.
     let hepsi = [AGAC, DIREK, SAGLAM_BANK, IHBAR_VARLIGI];
     if (filtre.source) {
       hepsi = hepsi.filter((v) => v.properties.source === filtre.source);
@@ -104,8 +96,7 @@ vi.mock("./api/geo", () => ({
 vi.mock("./api/sinirlar", () => ({
   ilceSiniri: vi.fn(),
   mahalleSiniri: vi.fn(),
-  // MapView Istanbul maskesi icin il sinirini cekiyor; bos halka listesi
-  // yeterli (harita zaten cizilmiyor).
+  // MapView maske icin il sinirini cekiyor; bos halka listesi yeterli.
   ilSiniri: vi.fn(async () => ({ kod: "34", ad: "Istanbul", noktalar: [] })),
   konumCozumle: vi.fn(async () => ({ ilce: null, mahalle: null })),
   konumCozumleToplu: vi.fn(async () => []),
@@ -121,22 +112,19 @@ beforeEach(async () => {
   ({ default: App } = await import("./App"));
 });
 
-/** Ekranda gorunen varlik adlari. SENKRON olmali: icinde `findBy*` (1000 ms
- *  bekleyen) bir cagri olsaydi, disaridaki `waitFor`un zaman asimini yer ve
- *  assertion hic calismadan test duserdi - ilk yazimda tam olarak bu oldu. */
+/** Ekranda gorunen varlik adlari. Senkron olmali: icinde bekleyen bir `findBy*`
+ *  olsaydi disaridaki `waitFor`un zaman asimini yerdi. */
 function gorunenAdlar(): string[] {
   return [AGAC, DIREK, SAGLAM_BANK, IHBAR_VARLIGI]
     .map((v) => v.properties.name)
     .filter((ad) => screen.queryAllByText(ad).length > 0);
 }
 
-/** App acilista sol paneli KAPALI gosterir (bkz. App.tsx BASLANGIC yorumu:
- *  `panelAcik=false` -> aktif sekme yok, boylece sekme->katman efekti
- *  baslangic katman secimini ezmez). Varlik listesini gorebilmek icin kenar
+/** App acilista sol paneli kapali gosterir; listeyi gormek icin kenar
  *  cubugundan "Varlıklar" sekmesi acilmali. */
 async function varlikPaneliniAc(kullanici: ReturnType<typeof userEvent.setup>) {
-  // Lejanttaki katman dugmesi de "Varlıklar" ile BASLAR ("Varlıklar1"), bu
-  // yuzden tam eslesme sart.
+  // Lejanttaki katman dugmesi de "Varlıklar" ile basliyor ("Varlıklar1"),
+  // bu yuzden tam eslesme aranir.
   const dugme = screen
     .getAllByRole("button")
     .find((b) => b.textContent?.trim() === "Varlıklar");
@@ -155,9 +143,7 @@ describe("App - tur/durum filtresi tek kaynaktan beslenir", () => {
     sarmala(<App />);
     await varlikPaneliniAc(kullanici);
     // Regresyon: BASLANGIC.katmanTurleri bir donem elle yazilmis 3 turle
-    // (agac/direk/sulama) bayatlamisti; 13 turun 10'u ilk render'da haritadan
-    // dusuyor, sonra bir senkron efekti sessizce duzeltiyordu. Iki farkli
-    // turun (agac + direk) birlikte gorunmesi bunu caker.
+    // bayatlamisti ve turlerin cogu ilk render'da haritadan dusuyordu.
     await waitFor(() => {
       const adlar = gorunenAdlar();
       expect(adlar).toContain("Cinar Agaci");
@@ -169,8 +155,8 @@ describe("App - tur/durum filtresi tek kaynaktan beslenir", () => {
     const kullanici = userEvent.setup();
     sarmala(<App />);
     await varlikPaneliniAc(kullanici);
-    // BASLANGIC.katmanVarlikDurumlari: saglam envanter haritayi doldurmasin
-    // diye acilista yalnizca bakim bekleyenler isaretlidir.
+    // Saglam envanter haritayi doldurmasin diye acilista yalnizca bakim
+    // bekleyenler isaretlidir.
     await waitFor(() => expect(gorunenAdlar()).toContain("Cinar Agaci"));
     expect(gorunenAdlar()).not.toContain("Saglam Bank");
   });
@@ -192,8 +178,7 @@ describe("App - tur/durum filtresi tek kaynaktan beslenir", () => {
     });
 
     // "Tüm tipler"e donunce hepsi geri gelmeli. Regresyon: sorgu bir donem
-    // tur/durum ile DARALTILIYORDU, dolayisiyla lejanttan baska bir turu
-    // acmak haritaya hicbir sey eklemiyordu (o kayitlar hic getirilmemisti).
+    // tur/durum ile daraltiliyordu ve o kayitlar hic getirilmiyordu.
     await kullanici.selectOptions(tipSecici(), "");
     await waitFor(() => {
       const adlar = gorunenAdlar();
@@ -217,7 +202,7 @@ describe("App - tur/durum filtresi tek kaynaktan beslenir", () => {
       expect(gorunenAdlar()).not.toContain("Aydinlatma Diregi")
     );
 
-    // Sorgu artik tur/durum BILMEZ; yalnizca `source` degisince yeniden gider.
+    // Sorgu tur/durum bilmez; yalnizca `source` degisince yeniden gider.
     expect(vi.mocked(listAssets).mock.calls.length).toBe(oncekiCagri);
   });
 });
@@ -230,8 +215,7 @@ describe("App - onaylanan ihbar ile olusan varlik ayni secimdir", () => {
     await waitFor(() =>
       expect(gorunenAdlar()).toContain("Cinar Agaci")
     );
-    // Esleme verisi testin varsayimidir; bozulursa asagidaki senaryo anlamsiz
-    // olur - bu yuzden acikca cakiliyor.
+    // Esleme testin varsayimi; bozulursa senaryo anlamsizlasir.
     expect(ONAYLI_IHBAR.properties.created_asset_id).toBe(
       IHBAR_VARLIGI.properties.id
     );

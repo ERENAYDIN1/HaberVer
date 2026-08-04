@@ -28,11 +28,9 @@ from ..security import get_context
 
 router = APIRouter(prefix=f"/{settings.media_dir}", tags=["media"])
 
-# Dosya adi yalnizca "kaydettigimiz sekilde" olabilir: UUID4 + izinli uzanti.
-# Bu, yolun kullanicidan gelen kismini tamamen kapatir - `..`, egik cizgi, ters
-# bolü, NUL, mutlak yol gibi hicbir sey bu desenden gecemez, dolayisiyla dizin
-# disina cikilamaz. Yol birlestirmesini "temizlemeye" calismak yerine kabul
-# edilen bicimi tanimlamak, bu tur hatalarin klasik kaynagini kurutur.
+# Dosya adi yalnizca kaydettigimiz bicimde olabilir: UUID4 + izinli uzanti.
+# Yolu "temizlemek" yerine kabul edilen bicimi tanimlamak, dizin disina cikma
+# denemelerini (`..`, egik cizgi, NUL, mutlak yol) tumden kapatir.
 DOSYA_DESENI = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$"
 )
@@ -76,14 +74,13 @@ def ihbar_fotografi(
     if not yol.is_file():
         raise HTTPException(status_code=404, detail="Dosya bulunamadi")
 
-    # media_type ELLE verilir: uzantidan turetilen sabit bir deger, dosyanin
-    # icerigine ya da istemcinin sozune bagli degil (yukleme tarafinda ayrica
-    # sihirli bayt kontrolu var, bkz. routers/reports.py::_imza_uyuyor).
+    # media_type uzantidan turetilen sabit bir degerdir; dosya icerigine ya da
+    # istemcinin sozune bagli degil.
     return FileResponse(
         yol,
         media_type=MEDIA_TIPLERI[yol.suffix],
         headers={
-            # Yetkiye bagli bir kaynak: paylasimli onbelleklerde tutulmamali.
+            # Yetkiye bagli kaynak: paylasimli onbellege girmemeli.
             "Cache-Control": "private, max-age=300",
             "X-Content-Type-Options": "nosniff",
         },

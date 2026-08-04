@@ -1,9 +1,8 @@
-"""Gorev (assignment) atama mantigi: en yakin uygun ekibi bulma, atama/yeniden
-atama, gorev tamamlama ve ekip/kuyruk ozetleri. 'Ekip' = saha_calisani hesabi.
+"""Gorev atama mantigi: en yakin uygun ekibi bulma, atama, tamamlama ve
+ekip/kuyruk ozetleri. "Ekip" = bir saha_calisani hesabi.
 
-Bu modul yalnizca modelleri import eder (asset/report crud'unu DEGIL); boylece
-report.approve_report ve asset.update_asset buradan cagirdiginda dongusel import
-olusmaz."""
+Yalnizca modelleri import eder (asset/report crud'unu degil): report ve asset
+modulleri buradan cagirdigi icin aksi halde dongusel import olusur."""
 
 import uuid
 from datetime import datetime, timezone
@@ -18,19 +17,15 @@ from ..models.user import User, UserRole
 from . import yaka as yaka_crud
 from .log import add_log
 
-# Bir saha ekibine ayni anda dusebilecek en fazla aktif gorev sayisi.
+# Bir ekibe ayni anda dusebilecek en fazla aktif gorev.
 MAKS_AKTIF_GOREV = 3
 
-# Otomatik atamada bir bakim varligini bir ekibe baglamak icin izin verilen azami
-# mesafe (metre, ~5 km). Bundan uzaktaki tek uygun (bos) ekip bile olsa varlik
-# atanmaz; havuzda bekler ve menzildeki bir ekibin kapasitesi acildiginda ona
-# yonlendirilir. Elle atamada (personel) bu sinir uygulanmaz - personel yetkisi
-# istedigi ekibe (menzil disi olsa da) atayabilir.
+# Otomatik atamada izin verilen azami mesafe (metre). Bundan uzaktaki bos bir
+# ekip bile olsa varlik atanmaz, havuzda bekler. Elle atamada uygulanmaz.
 MAKS_ATAMA_MESAFE_M = 5000
 
-# Ekip basina "son tamamlanan is" sayisi (GET /saha/ekip-gorevleri). Haritadaki
-# ekip popup'i dar oldugu icin kisa tutulur: amac tam gecmis degil, "bu ekip en
-# son neyi tamir etti" sorusuna bakisla cevap vermek.
+# Ekip basina dondurulen "son tamamlanan is" sayisi; haritadaki ekip popup'i
+# dar oldugu icin kisa tutulur.
 SON_TAMAMLANAN_SAYISI = 3
 
 
@@ -62,15 +57,12 @@ def _aktif_sayi_subq():
 
 
 def en_yakin_uygun_ekip(db: Session, asset_geom) -> User | None:
-    """Konumu bilinen, aktif, kapasitesi (aktif gorev < MAKS) olan, varlikla AYNI
-    YAKADA bulunan ve varliga en fazla MAKS_ATAMA_MESAFE_M mesafede olan saha
-    calisanlari arasindan en yakin olani dondurur. Uygun ekip yoksa None (varlik
-    atanmadan havuzda bekler; personel elle yonlendirebilir ya da bir ekip menzile
-    girip/kapasite acilinca otomatik yonlendirilir).
+    """Varliga en yakin uygun ekibi dondurur: konumu bilinen, aktif, kapasitesi
+    olan, varlikla ayni yakada ve en fazla MAKS_ATAMA_MESAFE_M mesafedeki saha
+    calisanlari arasindan. Uygun ekip yoksa None doner ve varlik havuzda bekler.
 
-    Yaka kisiti mesafe esiginin yerine degil, USTUNE gelir: Bogaz'in iki yakasi
-    kus ucusu 2 km olabilir ama arac ile ancak koprüden (~25 km) gecilir, yani
-    hicbir mesafe esigi tek basina 'karsiya gecme' kuralini kuramaz."""
+    Yaka kisiti mesafe esiginin yerine degil ustune gelir: Bogaz'in iki yakasi
+    kus ucusu yakin gorunse de arac ancak kopruden gecer."""
     asset_yaka = yaka_crud.yaka_bul(db, asset_geom)
     cnt = _aktif_sayi_subq().label("cnt")
     mesafe = func.ST_DistanceSphere(User.last_location, asset_geom)
@@ -80,8 +72,8 @@ def en_yakin_uygun_ekip(db: Session, asset_geom) -> User | None:
         User.last_location.isnot(None),
         mesafe <= MAKS_ATAMA_MESAFE_M,
     ]
-    # asset_yaka None ise (yakalar tablosu bos) kisit uygulanmaz - sistem eski
-    # davranisina duser, sessizce hicbir sey atanmamasindansa.
+    # asset_yaka None ise (yakalar tablosu bos) kisit uygulanmaz; sessizce
+    # hicbir sey atanmamasindansa mesafe kuralina duselim.
     if asset_yaka is not None:
         kosullar.append(yaka_crud.ekip_yakasi_ifadesi() == asset_yaka)
     rows = db.execute(select(User, cnt).where(*kosullar).order_by(mesafe.asc())).all()
@@ -92,12 +84,10 @@ def en_yakin_uygun_ekip(db: Session, asset_geom) -> User | None:
 
 
 def bekleyen_gorevleri_dagit(db: Session) -> int:
-    """Havuzda bekleyen (durumu 'bakim_lazim' ve aktif gorevi olmayan) varliklari,
-    en eski once (FIFO) olacak sekilde, mesafe sinirini saglayan en yakin uygun
-    ekiplere otomatik dagitir. Bir ekibin kapasitesi acildiginda (gorev
-    tamamlaninca) veya bir ekip menzile girecek sekilde konumunu guncelledginde
-    cagirilir. Atanan gorev sayisini dondurur. commit CAGIRMAZ - cagiran commit
-    eder."""
+    """Havuzda bekleyen varliklari (bakim_lazim + aktif gorevi olmayan) FIFO
+    sirayla en yakin uygun ekiplere dagitir. Bir gorev tamamlaninca ya da bir
+    ekip menzile girecek sekilde konum bildirince cagrilir. Atanan gorev
+    sayisini dondurur; commit cagirmaz."""
     atanmis = select(Assignment.asset_id).where(
         Assignment.status == AssignmentStatus.atandi
     )
@@ -108,8 +98,7 @@ def bekleyen_gorevleri_dagit(db: Session) -> int:
                 Asset.status == AssetStatus.bakim_lazim,
                 Asset.id.not_in(atanmis),
             )
-            # Havuza giris (bakima dusme/olusma) sirasina gore FIFO: updated_at
-            # varlik bakim_lazim'a cekildiginde tazelenir, en uzun bekleyen once.
+            # FIFO: updated_at varlik bakima cekilince tazelenir.
             .order_by(Asset.updated_at.asc())
         )
         .scalars()
@@ -118,10 +107,8 @@ def bekleyen_gorevleri_dagit(db: Session) -> int:
     if not bekleyenler:
         return 0
 
-    # Kapasitesi olan hicbir ekip yoksa hicbir is atanamaz: her varlik icin
-    # ayri ayri en_yakin_uygun_ekip cagirmak (varlik basina 1 yaka sorgusu +
-    # 1 ekip sorgusu) bu durumda tamamen bosa gider. Tek sorgulik bir on
-    # kontrol, havuz kalabalikken tum donguyu atlar.
+    # Kapasitesi olan ekip yoksa donguye hic girme: her varlik icin ayri ayri
+    # en_yakin_uygun_ekip cagirmak bosa iki sorgu demek olurdu.
     musait_var = db.execute(
         select(User.id)
         .where(
@@ -150,14 +137,11 @@ def ata(
     worker: User,
     assigned_by: User | None = None,
 ) -> Assignment:
-    """Varligi bir ekibe atar. Varlikta zaten aktif gorev varsa onu 'iptal' edip
-    yenisini acar (yeniden yonlendirme). commit CAGIRMAZ - cagiran taraf commit
-    eder. Kapasite doluysa ValueError firlatir."""
-    # Ekip satirini kilitle: "say, sonra ekle" arasinda baska bir islem (ornegin
-    # bir ihbar onayindaki otomatik atama ile personelin elle atamasi) ayni
-    # kontrolu gecip ekibi MAKS_AKTIF_GOREV'in uzerine cikarabiliyordu. Kismi
-    # tekil indeks yalnizca "bir varlik = tek aktif gorev"i korur, ekip basina
-    # kotayi degil - o yalnizca burada uygulaniyor.
+    """Varligi bir ekibe atar; varlikta aktif gorev varsa onu iptal edip yenisini
+    acar. Kapasite doluysa ValueError firlatir; commit cagirmaz."""
+    # Ekip satiri kilitlenir: "say, sonra ekle" arasinda araya giren baska bir
+    # atama ekibi kotanin uzerine cikarabiliyordu. Kismi tekil indeks yalnizca
+    # "bir varlik = tek aktif gorev"i korur, ekip kotasi burada uygulanir.
     db.execute(select(User.id).where(User.id == worker.id).with_for_update())
     if aktif_gorev_sayisi(db, worker.id) >= MAKS_AKTIF_GOREV:
         raise ValueError(
@@ -199,8 +183,8 @@ def ata(
 
 
 def gorev_tamamla(db: Session, asset_id: uuid.UUID, actor: User | None = None) -> None:
-    """Varligin aktif gorevini 'tamamlandi' yapar (varlik 'iyi'ye cekilince
-    cagirilir). Aktif gorev yoksa sessizce gecer. commit cagirmaz."""
+    """Varligin aktif gorevini 'tamamlandi' yapar (varlik 'iyi'ye cekilince).
+    Aktif gorev yoksa sessizce gecer; commit cagirmaz."""
     gorev = db.execute(
         select(Assignment).where(
             Assignment.asset_id == asset_id,
@@ -221,15 +205,13 @@ def gorev_tamamla(db: Session, asset_id: uuid.UUID, actor: User | None = None) -
         entity_name=asset.name if asset else None,
         detail="Görev tamamlandı (tamir edildi)",
     )
-    # Bu ekibin kapasitesi acildi: havuzda bekleyen varliklari yeniden dagit.
+    # Kapasite acildi: havuzdaki isleri yeniden dagit.
     bekleyen_gorevleri_dagit(db)
 
 
 def geri_al(db: Session, asset_id: uuid.UUID, actor: User | None = None) -> bool:
-    """Varligin aktif gorevini 'iptal' edip varligi havuza dondurur (personel
-    elle atamayi geri alir). Aktif gorev yoksa False. Otomatik yeniden dagitim
-    TETIKLEMEZ - amac bilincli olarak varligi havuzda beklemeye almaktir; kontenjan
-    acildiginda / personel elle atadiginda tekrar yonlendirilir. commit cagirmaz."""
+    """Aktif gorevi iptal edip varligi havuza dondurur; aktif gorev yoksa False.
+    Otomatik yeniden dagitim tetiklemez - amac varligi beklemeye almaktir."""
     gorev = db.execute(
         select(Assignment).where(
             Assignment.asset_id == asset_id,
@@ -294,12 +276,11 @@ def gorevlerim(db: Session, worker_id: uuid.UUID):
 
 
 def tamamlananlarim(db: Session, worker_id: uuid.UUID, limit: int = 30):
-    """Bir ekibin GERI ALINABILIR tamamlanmis gorevlerini dondurur: yalnizca hala
-    'iyi' (tamir edilmis) durumdaki varliklar ve VARLIK BASINA yalnizca en son
-    tamamlanan gorev. Boylece ayni varlik icin birden fazla tamamlanmis kayit
-    listeye dusup, ikisini birden geri alinca aktif gorev tekil kisitini (bir
-    varlik = tek aktif gorev) ihlal etmez. En son tamamlanan once."""
-    # Once varlik basina en son tamamlanan gorevi sec (DISTINCT ON asset_id).
+    """Ekibin geri alinabilir tamamlanmis gorevleri: yalnizca hala 'iyi'
+    durumdaki varliklar ve varlik basina yalnizca en son tamamlanan gorev.
+    Aksi halde ayni varligin iki kaydi birden geri alinip "bir varlik = tek
+    aktif gorev" kisitini ihlal edebilirdi."""
+    # Varlik basina en son tamamlanan gorev (DISTINCT ON asset_id).
     en_son = (
         select(Assignment.id.label("aid"))
         .join(Asset, Asset.id == Assignment.asset_id)
@@ -328,10 +309,9 @@ def tamamlananlarim(db: Session, worker_id: uuid.UUID, limit: int = 30):
 
 
 def son_tamamlananlar(db: Session, kisi_basi: int = SON_TAMAMLANAN_SAYISI):
-    """Her ekibin EN SON tamamladigi gorevleri (ekip basina `kisi_basi` tane)
-    dondurur; haritadaki ekip popup'indaki kisa "Son Tamir Edilenler" listesi
-    bunu basar. Ekip sayisi kadar ayri sorgu atmak yerine tek sorguda pencere
-    fonksiyonuyla (row_number) kirpilir."""
+    """Her ekibin en son tamamladigi `kisi_basi` gorev (ekip popup'indaki "Son
+    Tamir Edilenler" listesi). Ekip basina ayri sorgu yerine tek sorguda
+    pencere fonksiyonuyla kirpilir."""
     sira = (
         func.row_number()
         .over(
@@ -357,12 +337,9 @@ def son_tamamlananlar(db: Session, kisi_basi: int = SON_TAMAMLANAN_SAYISI):
 def tamamlanani_geri_al(
     db: Session, assignment_id: uuid.UUID, worker_id: uuid.UUID
 ) -> Asset | None:
-    """Ekibin yanlislikla tamamladigi bir gorevi geri alir: gorevi tekrar 'atandi'
-    yapar ve varligi 'bakim_lazim'a dondurur. Bu ekibin kapasitesi dolmus olsa bile
-    (arada havuzdan yeni is dusmus olabilir) izin verilir - nadir bir durum oldugu
-    icin ekip gecici olarak MAKS_AKTIF_GOREV'i asabilir. commit cagirmaz.
-
-    Gorev bu ekibe ait ve 'tamamlandi' degilse None doner."""
+    """Yanlislikla tamamlanan gorevi geri alir: gorev tekrar 'atandi', varlik
+    'bakim_lazim' olur. Nadir bir durum oldugu icin kapasite dolu olsa bile izin
+    verilir. Gorev bu ekibe ait ve tamamlanmis degilse None doner."""
     gorev = db.get(Assignment, assignment_id)
     if (
         gorev is None
@@ -374,9 +351,8 @@ def tamamlanani_geri_al(
     if asset is None:
         return None
 
-    # Varlik bu arada yeniden bakima dusup baska bir goreve atanmis olabilir; o
-    # zaman geri alma "bir varlik = tek aktif gorev" tekil kisitini ihlal eder.
-    # Boyle bir durumda 500 yerine temiz bir "bulunamadi/cakisti" (None) donduru.
+    # Varlik bu arada baska bir goreve atanmis olabilir; tekil kisiti ihlal edip
+    # 500 vermek yerine None donulur.
     zaten_aktif = db.execute(
         select(Assignment.id).where(
             Assignment.asset_id == asset.id,
@@ -434,7 +410,7 @@ def havuz_varliklari(db: Session):
             yaka_crud.nokta_yakasi_ifadesi(Asset.geometry).label("yaka"),
         )
         .where(Asset.status == AssetStatus.bakim_lazim, Asset.id.not_in(atanmis))
-        # En uzun bekleyen once (updated_at = bakima dusme/olusma zamani).
+        # En uzun bekleyen once (updated_at = bakima dusme zamani).
         .order_by(Asset.updated_at.asc())
     )
     return db.execute(stmt).all()

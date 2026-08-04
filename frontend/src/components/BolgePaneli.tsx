@@ -9,9 +9,8 @@ import { alanEtiketi, mesafeEtiketi } from "../utils/geo";
 import { RENK_PALETI } from "./CizimPaneli";
 import { IconCheck, IconLasso, IconRoute, IconUsers, IconX } from "./icons";
 
-/** Panelin hangi kayit turunu listeledigi: gorev bolgeleri (alan) ya da
- *  guzergahlar (cizgi). Ikisi sol kenar cubugunda AYRI sekmelerdir ve haritada
- *  ayri katman anahtarlariyla acilip kapanir. */
+/** Panelin listeledigi kayit turu: gorev bolgesi (alan) ya da guzergah
+ *  (cizgi). Ikisi ayri sekme ve ayri harita katmanidir. */
 export type BolgePanelTipi = "alan" | "cizgi";
 
 /** Tipe bagli tum metin/gorunum farklari tek yerde. */
@@ -55,43 +54,31 @@ const TIP_GORUNUMU: Record<
 };
 
 interface BolgePaneliProps {
-  /** Bu panelin listeledigi kayit turu (alan = gorev bolgesi, cizgi = guzergah). */
   tip: BolgePanelTipi;
-  /** Atama listesini besleyen saha ekipleri (App'teki ekipSorgu). */
+  /** Atama listesini besleyen saha ekipleri. */
   ekipler?: EkipOzet[];
-  /** Haritada GIZLENMIS bolgelerin id'leri (varsayilan: hepsi gorunur). */
+  /** Haritada gizlenmis bolgelerin id'leri (varsayilan: hepsi gorunur). */
   gizliler: Set<string>;
   onGorunurlukDegis: (id: string) => void;
-  /** Gosterilecek/gizlenecek id'ler panelin KENDI (tipe suzulmus) listesinden
-   *  gecirilir - App'te ayri bir kopya tutulup bayatlamasin ve diger tipin
-   *  gorunurlugune dokunulmasin. */
+  /** Id'ler panelin kendi (tipe suzulmus) listesinden gecirilir; App'te ayri
+   *  bir kopya bayatlamasin ve diger turun gorunurlugu bozulmasin. */
   onTumunuGoster: (idler: string[]) => void;
   onTumunuGizle: (idler: string[]) => void;
-  /** Bu tipin harita katmani acik mi (sag-ustteki lejant). Kapaliyken
-   *  gizle/goster tek tek anlamsiz kalir, panel bunu soyler. */
+  /** Bu turun harita katmani acik mi; kapaliyken panel uyari gosterir. */
   katmanAcik?: boolean;
   onKatmaniAc?: () => void;
-  /** Bir bolgenin uzerine ucmak icin (App fitBounds'a cevirir). */
   onBolgeyeGit: (bolge: Bolge) => void;
-  /** Kaydin SEKLINI haritada duzenlemeye baslar (koseleri surukle/ekle/sil,
-   *  alani metre cinsinden genislet-daralt). Panelde degil harita uzerinde
-   *  yapildigi icin App'e devredilir. */
+  /** Sekil duzenleme harita uzerinde yapildigi icin App'e devredilir. */
   onSekilDuzenle?: (bolge: Bolge) => void;
-  /** O an sekli duzenlenen kaydin id'si - karti isaretlemek icin. */
   sekilDuzenlenenId?: string | null;
-  /** Haritada secili olan kaydin id'si: karti vurgular ve gorunur alana
-   *  kaydirir - kullanici haritadan sectigi alani/guzergahi paneli sonradan
-   *  actiginda bulabilsin (varlik listesindeki davranisin aynisi). */
+  /** Haritada secili kayit: karti vurgular ve gorunur alana kaydirir. */
   seciliId?: string | null;
-  /** Kaydin detay kartini acar (haritadaki popup'taki "Detay" ile ayni modal). */
   onDetay?: (bolge: Bolge) => void;
 }
 
-/** Kaydedilmis gorev bolgeleri / guzergahlar paneli: listeler, ozellestirir
- *  (ad/renk/aciklama), siler ve bir saha ekibine atar - alan "gorev bolgesi",
- *  cizgi "guzergah" olarak. Atanan kayit ekibin kendi saha ekraninda gorunur;
- *  ekip bitirince burada "Tamamlandı" rozetiyle isaretlenir. Ayni bilesen iki
- *  sekmeyi de besler; hangi turu listeledigini `tip` belirler. */
+/** Kaydedilmis bolgeler/guzergahlar paneli: listeler, ad/renk/aciklama
+ *  duzenler, siler ve bir saha ekibine atar. Atanan kayit ekibin kendi
+ *  ekraninda gorunur, bitirince burada "Tamamlandı" rozeti alir. */
 export default function BolgePaneli({
   tip,
   ekipler,
@@ -114,8 +101,7 @@ export default function BolgePaneli({
   const [hata, setHata] = useState<string | null>(null);
   const seciliRef = useRef<HTMLLIElement>(null);
 
-  // Haritadan secim yapildiginda (ya da panel secili bir kayitla acildiginda)
-  // ilgili karti gorunur alana kaydir.
+  // Haritadan secim yapilinca ilgili karti gorunur alana kaydir.
   useEffect(() => {
     seciliRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [seciliId]);
@@ -142,7 +128,7 @@ export default function BolgePaneli({
     onError: (e: Error) => setHata(e.message),
   });
 
-  // Panel yalnizca kendi turunu listeler; diger tur komsu sekmede durur.
+  // Panel yalnizca kendi turunu listeler.
   const gorunum = TIP_GORUNUMU[tip];
   const bolgeler = (sorgu.data ?? []).filter((b) => b.tip === tip);
 
@@ -241,8 +227,7 @@ export default function BolgePaneli({
   );
 }
 
-/** Bolum basligi renkleri - Tailwind JIT sablon dizgileri taramadigi icin
- *  siniflar acik yazilir. */
+/** Bolum renkleri; Tailwind JIT sablon dizgilerini taramadigi icin aciktir. */
 const BOLUM_RENKLERI = {
   violet: {
     rozet: "bg-violet-600 text-white shadow-violet-600/30",
@@ -256,9 +241,7 @@ const BOLUM_RENKLERI = {
   },
 };
 
-/** Panelin iki ana bolumu (Gorev Bolgeleri / Guzergahlar). Baslik bilincli
- *  olarak belirgin: renkli ikon rozeti + kalin ad + alt aciklama + sayac, ve
- *  altinda bolumun rengini tasiyan bir ayirici cizgi. */
+/** Bolum kabugu: renkli ikon rozeti + baslik + sayac + ayirici cizgi. */
 function Bolum({
   baslik,
   altBaslik,
@@ -430,8 +413,7 @@ const BolgeKarti = forwardRef<HTMLLIElement, KartProps>(function BolgeKarti(
           >
             {duzenleniyor ? "Kapat" : "Düzenle"}
           </button>
-          {/* Sekil duzenleme haritada yapilir: kayit yerinde guncellenir,
-              atamasi ve gecmisi korunur (yeni bir bolge acmaya gerek yok). */}
+          {/* Sekil harita uzerinde duzenlenir; kayit yerinde guncellenir. */}
           {onSekilDuzenle && (
             <button
               onClick={onSekilDuzenle}
@@ -507,9 +489,8 @@ const BolgeKarti = forwardRef<HTMLLIElement, KartProps>(function BolgeKarti(
   );
 });
 
-/** Ad / aciklama / renk ozellestirmesi. Sekil (geometri) burada degil, karttaki
- *  "Şekli düzenle" ile HARITA UZERINDE degistirilir - bir sinir formdan degil,
- *  koseleri surukleyerek duzeltilir. */
+/** Ad / aciklama / renk formu. Geometri burada degil, harita uzerinde
+ *  "Şekli düzenle" ile degistirilir. */
 function DuzenleFormu({ bolge, onBitti }: { bolge: Bolge; onBitti: () => void }) {
   const [ad, setAd] = useState(bolge.ad);
   const [aciklama, setAciklama] = useState(bolge.aciklama ?? "");

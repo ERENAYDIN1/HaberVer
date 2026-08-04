@@ -34,11 +34,7 @@ export function IconTree({ className }: IconProps) {
   return <TipGlifi ic={TIP_GLIF_PATH.agac} className={className} />;
 }
 
-/**
- * Marka logosu: sehir silueti (skyline) + tabanda iki yaprak. "Akilli sehir" +
- * "yesil/green" fikrini tek isarette birlestirir. Tum parcalar currentColor ile
- * dolu; yaprak damarlari koyu yesil ince cizgiyle vurgulanir.
- */
+/** Marka logosu: sehir silueti + tabanda iki yaprak; parcalar currentColor. */
 export function IconMarkaLogo({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
@@ -101,9 +97,8 @@ export function IconLayers({ className }: IconProps) {
   );
 }
 
-/** Harita lejanti: renk noktalari + karsilarinda aciklama satirlari. Katman
- *  kartinin basliginda kullanilir - IconLayers sag-alttaki harita cesidi
- *  seciciye ait oldugundan ikisi kasitli olarak farklidir. */
+/** Harita lejanti ikonu (katman kartinin basligi). IconLayers'tan bilincli
+ *  olarak farklidir: o, harita cesidi seciciye ait. */
 export function IconLegend({ className }: IconProps) {
   return (
     <svg {...temelOzellikler} className={className}>
@@ -256,13 +251,8 @@ export function IconWarning({ className }: IconProps) {
   );
 }
 
-/**
- * GreenAsset marka amblemi (renkli, seffaf zeminli, olceklenebilir SVG).
- * Kullanicinin urettigi logonun vektorel karsiligi: yesil halka + tepede
- * cozulen noktalar, ic kisimda sehir silueti (pencereli binalar), onunde
- * buyuk bir yaprak, tabanda kucuk agaclar ve yesil bir zemin egrisi.
- * Yalniz amblem; "GreenAsset" yazisi canli metin olarak ayri durur.
- */
+/** GreenAsset amblemi: yesil halka + cozulen noktalar, icinde sehir silueti,
+ *  yaprak ve zemin egrisi. Yazi ayri, canli metin olarak durur. */
 export function LogoAmblem({ className }: IconProps) {
   return (
     <svg viewBox="0 0 100 100" fill="none" className={className}>
@@ -376,9 +366,8 @@ export function IconMenu({ className }: IconProps) {
   );
 }
 
-/** Varlik turunun ikon karsiligi - liste satirlari, lejant ve bildirimler ayni
- *  esleme icin kendi kopyalarini tutuyordu. Turun rengi icin bkz.
- *  types/asset.ts `TIP_RENGI`, ham glifi icin `TIP_GLIF_PATH` (yukarida). */
+/** Tur -> ikon eslemesi (liste, lejant ve bildirimler bunu kullanir). Renk
+ *  icin types/asset.ts `TIP_RENGI`, ham glif icin `TIP_GLIF_PATH`. */
 export const TIP_IKONU: Record<AssetType, TipIkonu> = Object.fromEntries(
   Object.entries(TIP_GLIF_PATH).map(([tur, ic]): [string, TipIkonu] => [
     tur,

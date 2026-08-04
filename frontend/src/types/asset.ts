@@ -1,7 +1,6 @@
-/** Vatandasin ihbar edebildigi + veride gorulebilecek TUM turler (backend
- *  `asset_type` enum'uyla birebir; `reports.type` ayni enum'u paylasir).
- *  Sira bilincli olarak TUR GRUBUNA gore: acilir listeler ve lejant bu siradan
- *  beslendiginde ayrica siralama yapmak gerekmez. */
+/** Tum turler; backend'in `asset_type` enum'uyla birebir (`reports.type` de
+ *  ayni enum'u paylasir). Sira tur grubuna goredir: acilir listeler ve lejant
+ *  bu siradan beslendigi icin ayrica siralanmalari gerekmez. */
 export const ASSET_TYPES = [
   // Yeşil alan ve park
   "agac",
@@ -29,9 +28,8 @@ export type AssetType = (typeof ASSET_TYPES)[number];
 export type AssetStatus = (typeof ASSET_STATUSES)[number];
 export type AssetSource = (typeof ASSET_SOURCES)[number];
 
-/** Belediyeye dogrudan KAYITLI varlik olarak eklenebilen turler: `diger`
- *  HARIC hepsi. "Diğer" tanim geregi "ne oldugu basliktan okunacak" bir ihbar
- *  kategorisidir; envantere bilerek "Diğer" kaydi acilmaz. */
+/** Envantere elle eklenebilen turler: `diger` haric hepsi. "Diğer" yalnizca
+ *  bir ihbar kategorisidir, envantere boyle bir kayit acilmaz. */
 export const KAYITLI_ASSET_TYPES = ASSET_TYPES.filter(
   (t) => t !== "diger"
 ) as readonly Exclude<AssetType, "diger">[];
@@ -58,13 +56,9 @@ export const ASSET_STATUS_LABELS: Record<AssetStatus, string> = {
   bakim_lazim: "Bakım Lazım",
 };
 
-/* ------------------------------------------------------------------ *
- * Tur gruplari
- *
- * 13 tur icin 13 ayirt edilebilir renk yok; renk GRUBU, glif TURU anlatir
- * (bkz. components/icons.tsx `TIP_GLIF_PATH`). Gruplama yalnizca bir arayuz
- * kavramidir - backend'de karsiligi yoktur, `asset_type` duz bir enum'dur.
- * ------------------------------------------------------------------ */
+/* Tur gruplari: 13 tur icin 13 ayirt edilebilir renk olmadigindan renk grubu,
+ * glif turu anlatir. Yalnizca bir arayuz kavramidir; backend'de `asset_type`
+ * duz bir enum'dur. */
 
 export const TIP_GRUPLARI = [
   "yesil",
@@ -108,8 +102,7 @@ export const TIP_GRUBU: Record<AssetType, TipGrubu> = {
   diger: "diger",
 };
 
-/** Grup -> hex renk. Harita isaretcileri (MapView), lejant ve bildirim
- *  noktalari bu tek kaynaktan beslenir. */
+/** Grup -> hex renk; harita, lejant ve bildirimler bu tek kaynaktan beslenir. */
 export const GRUP_RENGI: Record<TipGrubu, string> = {
   yesil: "#059669",
   aydinlatma: "#0284c7",
@@ -118,8 +111,8 @@ export const GRUP_RENGI: Record<TipGrubu, string> = {
   diger: "#64748b",
 };
 
-/** Grup -> Tailwind rozet sinifi. Tailwind JIT sablon dizgilerini taramadigi
- *  icin siniflar acik yazilir (bkz. BolgePaneli `BOLUM_RENKLERI` ayni gerekce). */
+/** Grup -> Tailwind rozet sinifi; JIT sablon dizgilerini taramadigi icin
+ *  siniflar acik yazilir. */
 export const GRUP_ROZET_SINIFI: Record<TipGrubu, string> = {
   yesil: "border-emerald-200 bg-emerald-50 text-emerald-700",
   aydinlatma: "border-sky-200 bg-sky-50 text-sky-700",
@@ -137,9 +130,7 @@ export const GRUP_TURLERI: Record<TipGrubu, AssetType[]> = TIP_GRUPLARI.reduce(
   {} as Record<TipGrubu, AssetType[]>
 );
 
-/** Tur -> hex renk (grubundan turetilir; sabitin sekli korundugu icin bunu
- *  tuketen onlarca bilesen degismedi). Turun ikon karsiligi icin bkz.
- *  components/icons.tsx `TIP_IKONU`. */
+/** Tur -> hex renk, grubundan turetilir. Ikon karsiligi: icons.tsx TIP_IKONU. */
 export const TIP_RENGI = Object.fromEntries(
   ASSET_TYPES.map((t) => [t, GRUP_RENGI[TIP_GRUBU[t]]])
 ) as Record<AssetType, string>;
@@ -159,16 +150,14 @@ export const TIP_ROZET_SINIFI_VARSAYILAN =
  *  silinecegi (backend'deki TAMIR_SAKLAMA_GUN ile ayni olmali). */
 export const TAMIR_SAKLAMA_GUN = 5;
 
-/** Durum etiketi - ihbar kaynakli ve durumu "iyi" olan varliklar tanim geregi
- *  tamir edilmis demektir; bu baglamda "İyi" yerine "Tamir Edildi" gosterilir.
- *  Kayitli varliklarda (hic bozulmamis olabilir) normal "İyi" etiketi kalir. */
+/** Durum etiketi. Ihbar kaynakli ve "iyi" durumdaki varlik tanim geregi tamir
+ *  edilmistir; kayitli varlikta normal "İyi" etiketi kalir. */
 export function durumEtiketi(status: AssetStatus, source: AssetSource): string {
   if (status === "iyi" && source === "ihbar") return "Tamir Edildi";
   return ASSET_STATUS_LABELS[status];
 }
 
-/** Tamir edilmis ihbar varligi icin otomatik silmeye kalan tam gun sayisi
- *  (yukari yuvarlanir; suresi gecmisse 0). repaired_at yoksa null. */
+/** Otomatik silmeye kalan tam gun (yukari yuvarlanir, suresi gecmisse 0). */
 export function kalanSilmeGunu(repairedAt: string | null): number | null {
   if (!repairedAt) return null;
   const silmeZamani =
@@ -195,8 +184,7 @@ export interface AssetProperties {
   photo_url: string | null;
   created_at: string;
   updated_at: string;
-  /** "Tamir Edildi" isaretlenme zamani (ISO); ihbar kaynakli varliklarda
-   *  5 gunluk otomatik silme geri sayimi bundan hesaplanir. */
+  /** "Tamir Edildi" zamani; otomatik silme geri sayimi bundan hesaplanir. */
   repaired_at: string | null;
 }
 
@@ -222,8 +210,7 @@ export interface PolygonGeometry {
   coordinates: [number, number][][];
 }
 
-/** Birden fazla ayri parcali alanlar icin (orn. Bogaz'la ikiye bolunmus il
- *  siniri, ya da tamamen adalardan olusan bir ilce). */
+/** Cok parcali alanlar icin (orn. tamamen adalardan olusan bir ilce). */
 export interface MultiPolygonGeometry {
   type: "MultiPolygon";
   coordinates: [number, number][][][];

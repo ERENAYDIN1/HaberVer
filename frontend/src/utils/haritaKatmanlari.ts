@@ -8,28 +8,22 @@ import {
 } from "./haritaIkonlari";
 import type { AssetFeatureCollection } from "../types/asset";
 
-/** Haritadaki KAYNAK + KATMAN kurulumu, aileye gore ayrilmis halde.
+/** Haritadaki kaynak + katman kurulumu, aileye gore ayrilmis halde. Buradaki
+ *  fonksiyonlar yalnizca `map`'e dokunur; olay baglama ve veri yazma guncel
+ *  prop/ref degerlerine bagli oldugu icin MapView'da kalir.
  *
- *  Buradaki her fonksiyon yalnizca `map`'e ve modul sabitlerine dokunur -
- *  React state'i, ref'i ya da callback'i YOKTUR. Olay baglama (tiklama/hover)
- *  ve veri yazma (`setData`) bilincli olarak disarida, MapView'da kalir: onlar
- *  guncel prop/ref degerlerine bagli, bunlar degil.
- *
- *  Hepsi IDEMPOTENT: kaynak zaten varsa hicbir sey yapmaz. Stil degisiminde
- *  MapLibre tum kaynaklari/katmanlari dusurdugu icin ayni fonksiyonlar tekrar
- *  cagrilir. */
+ *  Hepsi idempotenttir: stil degisiminde MapLibre tum kaynaklari dusurdugu
+ *  icin ayni fonksiyonlar tekrar cagrilir. */
 
 export const SOURCE_ID = "assets";
 export const REPORTS_SOURCE_ID = "reports";
 export const CIZIM_SOURCE_ID = "cizim";
 export const TAMAMLANAN_SOURCE_ID = "tamamlanan-alanlar";
-/** Kaydedilmis gorev bolgeleri / guzergahlar - anlik secimlerden (yukaridaki
- *  TAMAMLANAN) ayri bir kaynakta durur: kalicidir, secimler temizlenince
- *  haritadan kalkmaz ve kesik cizgiyle cizilerek gorsel olarak da ayrilir. */
+/** Kaydedilmis bolgeler: anlik secimlerden ayri kaynak - kalicidir, secim
+ *  temizlenince haritadan kalkmaz ve kesik cizgiyle ayrica ayrilir. */
 export const BOLGE_SOURCE_ID = "bolgeler";
-/** Sekli duzenlenmekte olan bolge/guzergah - kendi kaynaginda cizilir ki
- *  koseleri suruklenirken kalici katmanla (ve digerlerinin tiklama alanlariyla)
- *  karismasin; duzenlenen kayit BOLGE_SOURCE_ID'den bu sirada cikarilir. */
+/** Sekli duzenlenen kayit: kalici katmanla ve digerlerinin tiklama alanlariyla
+ *  karismasin diye kendi kaynaginda cizilir. */
 export const SEKIL_SOURCE_ID = "sekil-duzenleme";
 export const OLCUM_SOURCE_ID = "olcum";
 export const DINAMIK_SOURCE_ID = "dinamik-onizleme";
@@ -42,31 +36,27 @@ export const BOS_KOLEKSIYON: AssetFeatureCollection = {
 /** Rozetlerin gorunmeye basladigi zoom (hem varlik hem ihbar tarafinda). */
 export const ROZET_MINZOOM = 12.5;
 
-/** Isaretci olculeri tek yerde: tur glifi okunabilir kalsin diye daireler
- *  belirgin (kalin beyaz halka + yumusak golge), ama uzaklasinca (z10-12)
- *  birbirine girmesin diye o uctaki yaricaplar belirgin sekilde kucuk. */
+/** Isaretci olculeri: daireler glif okunacak kadar belirgin, ama uzaklasinca
+ *  (z10-12) birbirine girmesin diye o uctaki yaricaplar kucuk. */
 export const ISARETCI = {
-  /** Varlik dairesi yaricapi (zoom 10 -> 16 arasi interpolasyon). */
+  /** Varlik dairesi yaricapi (zoom 10 -> 16 interpolasyonu). */
   varlikYaricap: ["interpolate", ["linear"], ["zoom"], 10, 8, 16, 14.5],
   /** Ihbar pininin ucundaki yer golgesi (pin havada durmasin). */
   ihbarGolgeYaricap: ["interpolate", ["linear"], ["zoom"], 10, 2.5, 16, 4],
-  /** "Bakim lazim" amber uyari halkasi - ana dairenin disinda kalmali. Artik
-   *  durumun TEK gorsel tasiyicisi (dolgu tur rengine birakildi), bu yuzden
-   *  ihbar pinindeki halkayla ayni agirlikta okunmali. */
+  /** "Bakim lazim" amber uyari halkasi; ana dairenin disinda kalir. */
   uyariYaricap: ["interpolate", ["linear"], ["zoom"], 10, 10.5, 16, 17],
-  /** Secim halkalari - uyari halkasinin da disinda. */
+  /** Secim halkasi; uyari halkasinin da disinda. */
   varlikSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 12.5, 16, 19],
   beyazHalka: 2.2,
 } as const;
 
-/** Isaretcinin altina yumusak golge - dairenin hafif buyugu, asagi kaydirilmis
- *  ve bulaniklastirilmis siyah bir daire (altliktan bagimsiz derinlik hissi). */
+/** Isaretcinin altina yumusak golge: asagi kaydirilmis, bulaniklastirilmis
+ *  siyah daire - altliktan bagimsiz derinlik hissi verir. */
 export function golgeBoyasi(yaricap: unknown, opaklik: unknown = 1): Record<string, unknown> {
   return {
     "circle-radius": yaricap,
     "circle-color": "#0f172a",
-    // Sonumlenen ihbarlarda golge de sonmeli, yoksa %38 opak bir pinin altinda
-    // tam opak bir golge kaliyor.
+    // Sonumlenen ihbarlarda golge de sonmeli.
     "circle-opacity": ["*", 0.22, opaklik],
     "circle-blur": 0.5,
     "circle-translate": [0, 2],
@@ -79,7 +69,7 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
   if (!map.getSource(SOURCE_ID)) {
     map.addSource(SOURCE_ID, { type: "geojson", data: BOS_KOLEKSIYON });
 
-    // En altta yumusak golge - isaretcileri altliktan ayirip kabartir.
+    // En altta golge; isaretcileri altliktan ayirir.
     map.addLayer({
       id: "assets-golge",
       type: "circle",
@@ -87,10 +77,8 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
       paint: golgeBoyasi(ISARETCI.varlikYaricap) as never,
     });
 
-    // Bakim gereken varliklar icin amber uyari halkasi. Artik durumun TEK
-    // gorsel tasiyicisi: dolgu tur rengine birakildigi icin "dikkat" sinyali
-    // tamamen buraya (ve zoom >= ROZET_MINZOOM'da "!" rozetine) bindi.
-    // Onaylanmis ihbar pininin halkasiyla ayni amber - ikisi de acik is.
+    // Bakim gerektiren varliklarda amber uyari halkasi: dolgu tur rengini
+    // tasidigi icin durumun tek gorsel isareti budur ("!" rozetiyle birlikte).
     map.addLayer({
       id: "assets-durum",
       type: "circle",
@@ -105,10 +93,7 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
       },
     });
 
-    // Ana isaretci: dolgu HER ZAMAN tur (grup) rengi, beyaz cerceve.
-    // Eskiden "bakim lazim" varliklarda dolgu amber'e cevriliyordu; bu, o
-    // varligin kategorisini haritada tamamen siliyordu. Durum artik yukaridaki
-    // halkada, kategori ise burada - iki eksen birbirine karismiyor.
+    // Ana isaretci: dolgu her zaman tur rengi, beyaz cerceve.
     map.addLayer({
       id: "assets-circle",
       type: "circle",
@@ -120,12 +105,6 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
         "circle-stroke-color": "#ffffff",
       },
     });
-
-    // Not: "ihbardan dogmus varlik" icin cizilen ince MOR ic halka
-    // ("assets-ihbar-kaynak") KALDIRILDI. Kokeni artik seklin kendisi
-    // tasiyor (pin = vatandas ihbari) ve mor tek anlamina - "karar bekliyor"
-    // - geri dondu; ayrica ic halka amber uyari halkasiyla birlikte
-    // isaretciyi ic ice uc halkaya boguyordu.
 
     map.addLayer({
       id: "assets-selected",
@@ -147,10 +126,9 @@ export function ihbarKatmanlari(map: maplibregl.Map): void {
   if (!map.getSource(REPORTS_SOURCE_ID)) {
     map.addSource(REPORTS_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
 
-    // Ihbarin PIN ucundaki yer golgesi. Pinin kendisi bir symbol katmanidir
-    // ve goruntuler asenkron yuklendigi icin sonradan eklenir; bu kucuk daire
-    // hem pinin "yere basmasini" saglar hem SENKRON var oldugundan tiklama/
-    // hover baglantilarinin (ve katman sirasi kontrolunun) sabit dayanagidir.
+    // Pinin ucundaki yer golgesi. Pin symbol katmanidir ve goruntuleri
+    // asenkron yuklendigi icin sonradan eklenir; bu daire senkron var
+    // oldugundan tiklama/hover baglantilari icin sabit dayanaktir.
     map.addLayer({
       id: "reports-circle",
       type: "circle",
@@ -206,10 +184,8 @@ export function bolgeKatmanlari(map: maplibregl.Map): void {
         "line-dasharray": [3, 2],
       },
     });
-    // Secili kayit: kesik kenarligin uzerine DUZ bir hat cizilir - varlik/ihbar
-    // isaretcilerindeki secim halkasinin bolge karsiligi. Kalinlik bilincli
-    // olarak normal kenarlikla ayni (2.5): secimi kalinlik degil, kesik
-    // cizginin duz hatta donmesi anlatir - kalin hat sekli kabalastiriyordu.
+    // Secili kayit: kesik kenarligin uzerine duz bir hat cizilir. Kalinlik
+    // bilerek ayni; secimi kalinlik degil, cizginin duzlesmesi anlatir.
     map.addLayer({
       id: "bolge-secili",
       type: "line",
@@ -221,8 +197,8 @@ export function bolgeKatmanlari(map: maplibregl.Map): void {
         "line-opacity": 1,
       },
     });
-    // Gorunmez, kalin vurus alani: 2.5px'lik bir guzergah cizgisini tam
-    // uzerinden tutturmak zor - tiklama/imlec bu genis seride yakalanir.
+    // Gorunmez kalin vurus seridi: ince bir cizgiyi tam uzerinden tutturmak
+    // zor oldugu icin tiklama/imlec burada yakalanir.
     map.addLayer({
       id: "bolge-vurus",
       type: "line",
@@ -237,8 +213,7 @@ export function sekilDuzenlemeKatmanlari(map: maplibregl.Map): void {
   if (!map.getSource(SEKIL_SOURCE_ID)) {
     map.addSource(SEKIL_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
 
-    // Duzenlenen sekil, kalici bolgelerden daha belirgin cizilir (duz ve
-    // kalin kenarlik): o an "uzerinde calisilan" sekil oldugu bakisla belli.
+    // Duzenlenen sekil daha belirgin cizilir (duz ve kalin kenarlik).
     map.addLayer({
       id: "sekil-fill",
       type: "fill",

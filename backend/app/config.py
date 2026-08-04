@@ -7,35 +7,28 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Uygulama ayarlari.
 
-    SIR NITELIGINDEKI alanlarin (istemci secret'i, ilk admin parolasi)
-    VARSAYILANI YOKTUR ve bos birakilamaz: eksik birakildiklarinda uygulama
-    aciliste okunakli bir hatayla durur. Bunlara "gelistirme icin yeterli" bir
-    varsayilan vermek, ortam degiskeni ulasmadiginda sistemin herkesin bildigi
-    bir parolayla sessizce ayaga kalkmasi demekti - bu bir kez gerceklesti
-    (compose backend'e DEFAULT_ADMIN_PASSWORD'u hic gecirmiyordu, dolayisiyla
-    ilk admin `.env` ne yazarsa yazsin sabit varsayilanla aciliyordu). Gurultulu
-    basarisizlik, sessiz zayifliktan iyidir.
+    Sir niteligindeki alanlarin (istemci secret'i, ilk admin parolasi)
+    varsayilani yoktur: eksik birakilirlarsa uygulama acilista hata verir.
+    Varsayilan vermek, ortam degiskeni ulasmadiginda sistemin bilinen bir
+    parolayla sessizce ayaga kalkmasi demek olurdu.
     """
 
     database_url: str
     frontend_origin: str = "http://localhost:5173"
 
-    # Uygulamanin tarayicidan gorunen TEK origin'i: frontend, /api ve /media
-    # ayni yerden servis edilir (dev'de Vite proxy'si). Keycloak donus adresi
-    # ve cikis sonrasi yonlendirme buradan turetilir.
+    # Uygulamanin tarayicidan gorunen tek origin'i: frontend, /api ve /media
+    # ayni yerden servis edilir (dev'de Vite proxy'si). Keycloak donus adresleri
+    # buradan turetilir.
     app_base_url: str = "http://localhost:5173"
 
     # --- Keycloak (kimlik saglayici) ---
-    # public: tarayicinin gordugu adres - token'daki `iss` budur.
-    # internal: backend'in docker agi icinden gittigi adres (token/JWKS/Admin API).
-    # Ikisi ayri oldugu icin uc adresleri OIDC kesif belgesinden degil, elle
-    # kurulur: kesif belgesi tek bir hostname dondurur ve iki taraftan biri
-    # her zaman yanlis olurdu.
+    # public: tarayicinin gordugu adres, token'daki `iss` budur.
+    # internal: backend'in docker agi icinden gittigi adres.
     keycloak_public_url: str = "http://localhost:8081"
     keycloak_internal_url: str = "http://keycloak:8080"
     keycloak_realm: str = "greenasset"
     keycloak_client_id: str = "greenasset-bff"
-    # Zorunlu: realm JSON'undaki `secret` ile ayni olmali. Varsayilani YOK.
+    # Zorunlu: realm JSON'undaki `secret` ile ayni olmali.
     keycloak_client_secret: str = Field(min_length=8)
 
     # --- Oturum (BFF) ---
@@ -43,21 +36,19 @@ class Settings(BaseSettings):
     session_cookie_name: str = "greenasset_session"
     session_cookie_secure: bool = False  # production'da mutlaka True (HTTPS)
     session_max_hours: int = 12
-    # Not: burada bir `session_yenileme_dakika` ayari vardi ama HICBIR YERDEN
-    # okunmuyordu - yaniltici bir ayar dugmesiydi. Rol tazeleme araligi aslinda
-    # access token'in KEYCLOAK'TA tanimli omruyle belirlenir (crud/session.py
-    # token suresi dolunca yeniler); uygulama tarafinda ayarlanacak bir sey yok.
+    # Not: rol tazeleme araligi Keycloak'taki access token omruyle belirlenir
+    # (crud/session.py suresi dolunca yeniler); burada bir ayari yoktur.
 
     # Yerel satirla eslesecek ilk admin hesabinin e-postasi (parola Keycloak'ta).
     default_admin_email: str = "admin@greenasset.com"
-    # Zorunlu: bu parolayla Keycloak'ta ilk admin acilir. Varsayilani YOK.
+    # Zorunlu: bu parolayla Keycloak'ta ilk admin acilir.
     default_admin_password: str = Field(min_length=8)
 
     # Yuklenen dosyalarin (ihbar fotograflari) kaydedilecegi dizin.
     media_dir: str = "media"
 
-    # Suresi gecmis oturum satirlarinin temizlenme araligi (saat). Temizlik bir
-    # arka plan gorevidir, okuma uclarina ILISTIRILMEZ - bkz. main.py.
+    # Suresi gecmis oturumlarin temizlenme araligi (saat). Temizlik bir arka
+    # plan gorevidir, okuma uclarina iliştirilmez (bkz. main.py).
     oturum_temizleme_saat: int = 6
 
     @property

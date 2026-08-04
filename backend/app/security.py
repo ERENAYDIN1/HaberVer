@@ -6,16 +6,10 @@ bir cookie tutar. Bir istek geldiginde:
     cookie -> sessions satiri -> saklanan access token DOGRULANIR (JWKS,
     issuer, sure) -> roller token'dan okunur -> yetki karari verilir.
 
-**Yetki karari her zaman token'daki rollerden verilir**, `users.role`
-kolonundan degil. O kolon yalnizca SQL sorgulari icindir (ekip listeleri,
-otomatik atamadaki `WHERE role='saha_calisani'` gibi, yani o an giris yapmamis
-kullanicilar uzerinde calisan yerler) ve her istekte token'daki rolle
-guncellenir. Bu ayrimi bozmayin: bir yetki kontrolu `user.role` okumaya
-baslarsa, bayat bir kolon yetki karari verir hale gelir.
-
-`require_role` / `personel` / `saha_dahil` bagimliliklarinin IMZALARI eski
-yerel-JWT donemiyle ayni kaldi (hepsi `User` dondurur); bu yuzden router'larin
-hicbiri degismedi.
+Yetki karari her zaman token'daki rollerden verilir, `users.role` kolonundan
+degil. O kolon yalnizca SQL sorgulari icindir (giris yapmamis kullanicilar
+uzerinde calisan ekip listeleri, otomatik atama) ve her istekte token'daki
+rolle guncellenir. Bu ayrim bozulursa bayat bir kolon yetki verir hale gelir.
 """
 
 import uuid
@@ -68,9 +62,8 @@ def get_current_user(
 def _yetki_kontrol(
     baglam: oturum_crud.OturumBaglami, roller: tuple[UserRole, ...]
 ) -> User:
-    # Ham rol listesinde "iceriyor mu" diye BAKILMAZ: realm'in default rol
-    # bilesigi herkese `vatandas` verdigi icin oyle bir kontrol bir admin'i de
-    # vatandas ucundan gecirirdi. Karar tek etkin role gore verilir.
+    # Ham rol listesine bakilmaz (herkeste `vatandas` var); karar tek etkin
+    # role gore verilir - bkz. crud/session.rolu_coz.
     if baglam.etkin_rol not in roller:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -95,9 +88,8 @@ def personel(baglam: oturum_crud.OturumBaglami = Depends(get_context)) -> User:
 
 
 def saha_dahil(baglam: oturum_crud.OturumBaglami = Depends(get_context)) -> User:
-    """Admin, calisan veya saha calisani (varlik goruntuleme + tamir isaretleme).
-    Saha calisani tam CRUD yapamaz, sadece atanan/gordugu varligi tamir edildi
-    olarak isaretleyebilir (bkz. assets router'indaki /onar ucu)."""
+    """Admin, calisan veya saha calisani. Saha calisani tam CRUD yapamaz,
+    yalnizca kendisine atanan varligi tamir edildi isaretleyebilir (/onar)."""
     return _yetki_kontrol(
         baglam, (UserRole.admin, UserRole.calisan, UserRole.saha_calisani)
     )

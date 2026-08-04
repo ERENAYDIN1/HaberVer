@@ -11,13 +11,12 @@ from ..schemas.asset import AssetCreate, AssetUpdate
 from . import assignment as assignment_crud
 from .log import add_log
 
-# Ihbar kaynakli bir varlik "Tamir Edildi" (durum -> iyi) olarak isaretlendikten
-# bu kadar gun sonra otomatik silinir (liste uclarinda tembel temizlik).
+# Ihbar kaynakli bir varlik tamir edildikten bu kadar gun sonra otomatik silinir.
 TAMIR_SAKLAMA_GUN = 5
 
 
 def _select_with_coords():
-    """Asset satirini, geometriden cikarilan longitude/latitude ile birlikte seceer."""
+    """Asset satirini geometriden cikarilan longitude/latitude ile secer."""
     return select(
         Asset,
         func.ST_X(Asset.geometry).label("longitude"),
@@ -45,14 +44,9 @@ def _apply_filters(
 
 
 def purge_expired_repaired(db: Session) -> int:
-    """TAMIR_SAKLAMA_GUN gunden uzun sure once tamir edilmis (durum 'iyi') ihbar
-    kaynakli varliklari otomatik siler.
-
-    **Cagiran: `main.py::_bakim_dongusu` (periyodik arka plan gorevi).** Eskiden
-    `list_assets`/`assets_within` icinden "tembel" olarak cagriliyordu; bu, her
-    GET'i bir DELETE + COMMIT'e cevirdigi icin okuma uclarini yazma yoluna
-    sokuyordu (frontend bu uclari duzenli yokluyor). Bu fonksiyonu bir OKUMA
-    yolundan tekrar cagirmayin."""
+    """Suresi dolmus (tamir edilip TAMIR_SAKLAMA_GUN gecmis) ihbar varliklarini
+    siler. Yalnizca `main.py::_bakim_dongusu` cagirir; bir okuma ucundan
+    cagrilmamali - her GET'i DELETE + COMMIT'e cevirir."""
     esik = datetime.now(timezone.utc) - timedelta(days=TAMIR_SAKLAMA_GUN)
     expired = (
         db.execute(
@@ -99,10 +93,8 @@ def assets_within(
     status: AssetStatus | None = None,
     source: AssetSource | None = None,
 ):
-    """Verilen GeoJSON poligonunun icine dusen varliklari dondurur (ST_Within).
-
-    Geometri sutunundaki GiST indeksi sayesinde sorgu indeksten faydalanir.
-    """
+    """Verilen poligonun icine dusen varliklar (ST_Within; geometri sutunundaki
+    GiST indeksinden faydalanir)."""
     polygon = func.ST_SetSRID(func.ST_GeomFromGeoJSON(polygon_geojson), 4326)
     stmt = _select_with_coords().where(func.ST_Within(Asset.geometry, polygon))
     stmt = _apply_filters(stmt, asset_type, status, source)
@@ -136,8 +128,7 @@ def create_asset(db: Session, data: AssetCreate, actor: User | None = None):
         entity_id=asset.id,
         entity_name=asset.name,
     )
-    # Dogrudan "Bakim Lazim" olarak eklenen varlik da en yakin uygun ekibe
-    # otomatik yonlendirilir (bkz. update_asset - ayni davranis).
+    # Dogrudan "Bakim Lazim" eklenen varlik da otomatik yonlendirilir.
     if asset.status == AssetStatus.bakim_lazim:
         ekip = assignment_crud.en_yakin_uygun_ekip(db, asset.geometry)
         if ekip is not None:
@@ -168,13 +159,11 @@ def update_asset(
 
     if payload or koordinat_degisti:
         if "status" in payload and payload["status"] != eski_durum:
-            # "Tamir Edildi" (iyi) isaretlenince tamir zamanini kaydet; tekrar
-            # bakima donerse temizle - ihbar varliklarinin 5 gunluk otomatik
-            # silme sayaci buna gore isler.
+            # Tamir zamani otomatik silme sayacini besler; varlik tekrar
+            # bakima donerse temizlenir.
             if asset.status == AssetStatus.iyi:
                 asset.repaired_at = datetime.now(timezone.utc)
-                # Tamir edildi: varsa aktif saha gorevini de kapat (hem /onar
-                # ucundan hem personel PUT'undan tek yerde tetiklenir).
+                # Aktif saha gorevi de kapanir; /onar ile PUT tek yerden gecer.
                 assignment_crud.gorev_tamamla(db, asset.id, actor=actor)
             elif asset.status == AssetStatus.bakim_lazim:
                 asset.repaired_at = None
@@ -187,10 +176,8 @@ def update_asset(
                 entity_name=asset.name,
                 detail=f"{eski_durum.value} → {asset.status.value}",
             )
-            # Kayitli bir varlik "Bakim Lazim"a cekilince (ihbar onayindaki gibi)
-            # en yakin uygun saha ekibine otomatik yonlendirilir. Menzilde uygun
-            # ekip yoksa havuzda bekler; bir ekip kapasite/menzil acinca otomatik
-            # dagitilir (bekleyen_gorevleri_dagit).
+            # Bakima cekilen varlik en yakin uygun ekibe yonlendirilir; uygun
+            # ekip yoksa havuzda bekler.
             if asset.status == AssetStatus.bakim_lazim:
                 db.flush()
                 ekip = assignment_crud.en_yakin_uygun_ekip(db, asset.geometry)

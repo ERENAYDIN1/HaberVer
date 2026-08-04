@@ -31,10 +31,9 @@ router = APIRouter(prefix="/api/saha", tags=["saha"])
 
 
 # Havuz dagitimini tetiklemek icin gereken en kucuk yer degistirme (metre).
-# Konum ~30 sn'de bir bildiriliyor; her ping'te dagitim yapmak, ekip yerinde
-# dursa bile havuzdaki HER is icin ayri sorgu demekti (ekip sayisi x is sayisi,
-# dakikada iki kez). Bu esik altindaki hareket atama sonucunu degistiremeyecek
-# kadar kucuktur - menzil siniri 5 km (MAKS_ATAMA_MESAFE_M).
+# Konum ~30 sn'de bir bildirildigi icin her ping'te dagitim yapmak, ekip
+# yerinde dursa bile havuzdaki her is icin ayri sorgu demekti. Bu esigin
+# altindaki hareket, 5 km'lik menzil sinirinda sonucu degistiremez.
 KONUM_DAGITIM_ESIGI_M = 250
 
 
@@ -50,11 +49,9 @@ def konum_guncelle(
         func.ST_MakePoint(data.longitude, data.latitude), 4326
     )
 
-    # Ekip, yeni konumuyla havuzda bekleyen bir isin menziline girmis OLABILIR.
-    # Ama bu ancak KAYDA DEGER bir yer degistirmede mumkun: duran bir ekip icin
-    # dagitimi tekrar calistirmak ayni sonucu ureten saf bir maliyettir.
-    # Konumu hic yoksa (ilk bildirim) her zaman dagitilir - ekip o ana kadar
-    # atama icin hic uygun degildi.
+    # Ekip yeni konumuyla havuzdaki bir isin menziline girmis olabilir, ama bu
+    # ancak kayda deger bir yer degistirmede mumkun. Ilk konum bildiriminde her
+    # zaman dagitilir: ekip o ana kadar atama icin uygun degildi.
     if user.last_location is None:
         dagit = True
     else:
@@ -130,8 +127,8 @@ def ekip_gorevleri(
     for row in crud.aktif_atamalar(db):
         gorev = row[0]
         grup.setdefault(gorev.worker_id, []).append(GorevOzet.from_row(row))
-    # Ekip basina son tamamlanan isler (haritadaki popup'in "Son Tamir Edilenler"
-    # satirlari) - aktif gorevlerle ayni desende tek sorgu + Python'da gruplama.
+    # Ekip basina son tamamlananlar; aktif gorevlerle ayni desen (tek sorgu +
+    # Python'da gruplama).
     tamamlanan: dict[uuid.UUID, list[TamamlananOzet]] = {}
     for row in crud.son_tamamlananlar(db):
         tamamlanan.setdefault(row[0].worker_id, []).append(TamamlananOzet.from_row(row))

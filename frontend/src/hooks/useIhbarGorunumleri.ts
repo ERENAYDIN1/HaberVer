@@ -12,16 +12,14 @@ import {
 } from "../types/report";
 import { useAssets } from "./useAssets";
 
-/** Ihbarlarin cekilmesi ve GORUNUME gore gruplanmasi.
+/** Ihbarlarin cekilmesi ve gorunume gore gruplanmasi.
  *
- *  Backend'in uc durumu (`beklemede`/`onaylandi`/`reddedildi`) arayuzde DORT
- *  gorunume ayrilir: onaylanmis bir ihbar, olusturdugu varlik tamir edilince
- *  "Tamir Edildi"ye duser. Bu ayrim tamamen frontend'de turetilir - ne yeni bir
- *  enum ne migration var (bkz. types/report.ts::ihbarGorunumu).
+ *  Backend'in uc durumu arayuzde dort gorunume ayrilir: onaylanmis bir ihbar,
+ *  varligi tamir edilince "Tamir Edildi"ye duser. Ayrim tamamen frontend'de
+ *  turetilir (bkz. types/report.ts::ihbarGorunumu).
  *
- *  Tek hesap noktasi olmasi kritik: panel alt-sekmeleri, lejant alt-filtresi +
- *  sayaclari, harita katmani ve secim->sekme senkronu ayni gruplamayi okur. Uc
- *  yerde ayri ayri hesaplanirsa biri digerinden kayar. */
+ *  Tek hesap noktasi olmasi onemli: panel sekmeleri, lejant sayaclari, harita
+ *  katmani ve secim senkronu ayni gruplamayi okur. */
 
 export interface OnayliEsleme {
   rapordanVarliga: Map<string, string>;
@@ -29,11 +27,8 @@ export interface OnayliEsleme {
 }
 
 /** Onaylanmis ihbar <-> ondan olusan varlik eslesmesi (`created_asset_id`).
- *
- *  Ikisi AYRI id'lerdir, bu yuzden "İhbarlar > Onaylandı" sekmesinde haritadan
- *  bir ihbar secmek panelde hicbir satiri vurgulamiyordu (ve tersi) - harita
- *  ham ihbar noktasini, panel ondan olusan varligi gosteriyor. Secim
- *  callback'leri bu iki yonlu haritayla esi de birlikte secer. */
+ *  Ikisi ayri id'ler oldugu icin secim callback'leri esi de birlikte secer;
+ *  yoksa haritadan ihbar secmek panelde hicbir satiri vurgulamazdi. */
 export function onayliEslemeKur(onaylananlar: readonly ReportFeature[]): OnayliEsleme {
   const rapordanVarliga = new Map<string, string>();
   const varliktanRapora = new Map<string, string>();
@@ -46,12 +41,9 @@ export function onayliEslemeKur(onaylananlar: readonly ReportFeature[]): OnayliE
   return { rapordanVarliga, varliktanRapora };
 }
 
-/** Ihbarlari gorunume gore gruplar ve her kayda `properties.gorunum` yazar
- *  (harita pin rengi bunu okur).
- *
- *  `ihbardanDoganVarliklar` **undefined** ise varlik sorgusu henuz yuklenmemis
- *  demektir ve siniflama YAPILMAZ - aksi halde acilista her sey bir an "Tamir
- *  Edildi"ye dusup geri ziplıyordu. */
+/** Ihbarlari gorunume gore gruplar ve her kayda `properties.gorunum` yazar.
+ *  `ihbardanDoganVarliklar` undefined ise (sorgu henuz yuklenmedi) siniflama
+ *  yapilmaz, yoksa acilista her sey bir an "Tamir Edildi"ye duserdi. */
 export function gorunumlereAyir(
   durumaGoreIhbarlar: Record<ReportStatus, readonly ReportFeature[] | undefined>,
   ihbardanDoganVarliklar: readonly AssetFeature[] | undefined
@@ -83,17 +75,12 @@ export function gorunumlereAyir(
 }
 
 export function useIhbarGorunumleri({ personel }: { personel: boolean }) {
-  /** Onaylanmis ihbarlardan olusan varliklar. "İhbarlar > Onaylandı" sekmesi
-   *  bunu kendi listesi olarak gosterir ve gorunum turetmesi de buna dayanir.
-   *  Yalnizca o panele aittir: haritadaki VARLIK katmanini ve lejant
-   *  sayaclarini ETKILEMEZ (ihbar alt-sekmesi degistikce varlik sayilarinin
-   *  oynamasina yol aciyordu). */
+  /** Ihbardan olusan varliklar; gorunum turetmesi buna dayanir. Yalnizca ihbar
+   *  paneline aittir, haritadaki varlik katmanini etkilemez. */
   const ihbarVarlikSorgu = useAssets({ source: "ihbar" });
 
-  // Ihbar katmani KAPALIYKEN de cekilir: lejanttaki rozet/alt-filtre sayaclari
-  // katmanin acik olup olmamasindan bagimsiz olarak gercek toplami gostermeli
-  // (eskiden katman kapaliyken bu ikisi hic cekilmedigi icin toplam eksik
-  // gorunuyordu).
+  // Ihbar katmani kapaliyken de cekilir: lejant sayaclari katmanin acik olup
+  // olmamasindan bagimsiz olarak gercek toplami gostermeli.
   const bekleyenIhbarSorgu = useQuery({
     queryKey: ["reports", "beklemede"],
     queryFn: () => listReports("beklemede"),

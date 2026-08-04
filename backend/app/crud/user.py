@@ -28,18 +28,13 @@ def keycloak_eslestir(
     full_name: str | None,
     role: UserRole,
 ) -> User:
-    """Keycloak'tan gelen kimligi yerel satirla eslestirir ("provisioning").
+    """Keycloak kimligini yerel satirla eslestirir (provisioning):
+      1. `keycloak_id` bagli   -> satiri tazele.
+      2. Ayni e-postali satir  -> baglantiyi kur; boylece Keycloak oncesi acilan
+         hesaplar id'lerini (ve gorevlerini/bolgelerini) korur.
+      3. Hicbiri yok           -> yeni satir (kendi kaydolan vatandaslar).
 
-    Uc durum:
-      1. `keycloak_id` zaten baglanmis  -> satiri tazele (rol/ad/e-posta aynasi).
-      2. Ayni e-postali yerel satir var -> baglantiyi kur (Keycloak'a gecmeden
-         once olusmus tum hesaplar - ilk admin, seed'lenen ekipler - bu yolla
-         kimliklerini korur: id'leri degismedigi icin gorevleri/bolgeleri durur).
-      3. Hicbiri yok                    -> yeni satir (Keycloak'ta kendi kaydolan
-         vatandaslar ilk API isteginde burada olusur).
-
-    Rol Keycloak'ta yasar; buradaki kolon SORGU icin tutulan bir aynadir
-    (bkz. security.py) ve her istekte token'daki rolle guncellenir.
+    Rol Keycloak'ta yasar; buradaki kolon sorgular icin tutulan bir aynadir.
     """
     email = email.lower()
     user = get_by_keycloak_id(db, keycloak_id) or get_by_email(db, email)
@@ -65,8 +60,7 @@ def get(db: Session, user_id: uuid.UUID) -> User | None:
 
 
 def aktif_admin_sayisi(db: Session) -> int:
-    """Devre disi birakma korumasi icin: sistemde en az bir aktif yonetici
-    kalmali, yoksa hesap acacak/geri acacak kimse olmaz."""
+    """Sistemde en az bir aktif yonetici kalmali; son admin kapatilamaz."""
     return (
         db.execute(
             select(func.count())
@@ -89,18 +83,13 @@ def create_user(
     actor: User | None = None,
     yaka: str | None = None,
 ) -> User:
-    """Personel/admin hesabini ONCE Keycloak'ta acar, sonra yerel satiri baglar.
+    """Hesabi once Keycloak'ta acar, sonra yerel satiri baglar. Sira bilincli:
+    Keycloak'a yazamazsak yerelde giris yapamayan bir "hayalet ekip" kalmaz.
 
-    Sira bilincli: Keycloak yazamazsak yerelde oksuz bir satir kalmaz. Tersi
-    olsaydi (once yerel) giris yapamayan bir "hayalet ekip" iş atamalarina
-    girerdi.
+    Yerel satir hemen acilir (ilk girise birakilmaz) ki yeni ekip daha giris
+    yapmadan ekip listesinde gorunup is alabilsin.
 
-    Yerel satir eager olarak acilir (JIT provisioning'e birakilmaz): yeni bir
-    saha ekibi, daha ilk girisini yapmadan `GET /api/saha/ekipler` listesinde
-    gorunup is alabilmelidir.
-
-    actor verildiginde bir log kaydi olusur. yaka yalnizca saha_calisani icin
-    anlamlidir (bkz. models/yaka.py); diger rollerde yok sayilir."""
+    `yaka` yalnizca saha_calisani rolunde dikkate alinir."""
     keycloak_id = keycloak.kullanici_olustur(
         email=email.lower(), parola=password, full_name=full_name, rol=role.value
     )
@@ -131,28 +120,20 @@ def create_user(
 
 
 def set_active(db: Session, user: User, aktif: bool, actor: User) -> User:
-    """Hesabi acar/kapatir. Uc yerde birden etkili olmasi gerekir, cunku her biri
-    ayri bir kapiyi tutuyor:
+    """Hesabi acar/kapatir. Uc kapi birden kapanmali:
+      1. Keycloak - kapali hesap yeni token alamaz.
+      2. `users.is_active` - elde gecerli token kalsa bile API 401 doner.
+      3. `sessions` satirlari - token bizde durdugu icin satir silinmezse
+         kullanici access token omru boyunca calismaya devam ederdi.
 
-      1. **Keycloak** - kapali hesap yeni token ALAMAZ (giris ekrani reddeder).
-      2. **`users.is_active`** - `security.py` her istekte bunu okur, yani
-         elde gecerli bir token kalmis olsa bile API 401 doner.
-      3. **`sessions` satirlari** - BFF'de token tarayicida degil bizde durur;
-         satir silinmezse kullanici, access token'i suresi dolana kadar (5 dk)
-         calismaya devam ederdi. Ele gecirilmis bir hesabi ANINDA kesmek bu
-         ucuncu adima bagli.
-
-    Sira bilincli: once Keycloak. Oraya yazamazsak yerel satira hic dokunmayiz
-    ve 502 doneriz - "kapattim sandim ama giris yapabiliyor" durumu olusmaz.
-    Tersi yonde (acarken) bir adim yarida kalirsa hesap KAPALI kalir, yani her
-    iki yonde de hata guvenli tarafa duser."""
+    Sira bilincli: once Keycloak. Oraya yazamazsak yerel satira dokunulmaz ve
+    502 donulur, yani hata her iki yonde de guvenli tarafa duser."""
     if user.keycloak_id is not None:
         keycloak.kullanici_durumu(str(user.keycloak_id), aktif)
 
     user.is_active = aktif
     if not aktif:
-        # Acik oturumlari dusur: token bizde durdugu icin satiri silmek, o
-        # oturumu gercek anlamda iptal etmektir.
+        # Acik oturumlari dusur; satiri silmek oturumu gercekten iptal eder.
         db.execute(delete(SessionRow).where(SessionRow.user_id == user.id))
 
     add_log(
@@ -170,8 +151,7 @@ def set_active(db: Session, user: User, aktif: bool, actor: User) -> User:
 
 
 def set_yaka(db: Session, user: User, yaka: str | None, actor: User) -> User:
-    """Bir saha ekibinin kadro yakasini ayarlar/temizler (None: yaka artik son
-    konumdan turetilir)."""
+    """Ekibin kadro yakasini ayarlar; None ise yaka son konumdan turetilir."""
     user.yaka = yaka
     add_log(
         db,

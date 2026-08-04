@@ -46,8 +46,8 @@ function tazelik(iso: string | null): { renk: string; metin: string } {
   return { renk, metin };
 }
 
-/** Havuzdaki bir isin ne zamandir bakim bekledigini insana okunur verir
- *  (updated_at = varligin bakima dusme zamani; created_at yaniltici olurdu). */
+/** Havuzdaki isin ne zamandir beklediğini okunur verir. `updated_at` kullanilir:
+ *  `created_at` kayitli varliklarda kurulus tarihidir. */
 function beklemeMetni(iso: string): string {
   const farkSn = (Date.now() - new Date(iso).getTime()) / 1000;
   if (farkSn < 60) return "az önce bakıma alındı";
@@ -56,9 +56,7 @@ function beklemeMetni(iso: string): string {
   return `${Math.floor(farkSn / 86400)} gün önce bakıma alındı`;
 }
 
-/** Tur grubuna gore renkli, ikonlu kare rozet (satirlarin basinda). Renk ve
- *  ikon ortak paletten gelir (types/asset.ts + icons.tsx) - bu dosya kendi
- *  kopyasini tutuyordu ve 13 ture cikan sozlukte guncel kalamazdi. */
+/** Satir basindaki renkli/ikonlu tur rozeti; renk ve ikon ortak paletten gelir. */
 function TipRozet({ type }: { type: AssetType }) {
   const Ikon = TIP_IKONU[type];
   return (
@@ -86,8 +84,7 @@ function KaynakRozet({ source }: { source: AssetSource }) {
   );
 }
 
-/** Yaka rozeti (Avrupa / Anadolu / Adalar). Otomatik atama yalnizca ayni yaka
- *  icinde yapildigi icin ekip ve is kartlarinda gorunur tutulur. */
+/** Yaka rozeti; otomatik atama ayni yaka icinde yapildigi icin gorunur tutulur. */
 function YakaRozet({ yaka, koyu }: { yaka: string | null; koyu?: boolean }) {
   if (!yaka) return null;
   const kisa = YAKA_KISA[yaka as Yaka] ?? yaka;
@@ -103,8 +100,7 @@ function YakaRozet({ yaka, koyu }: { yaka: string | null; koyu?: boolean }) {
   );
 }
 
-/** Bir ekip secim <option>'unun etiketi: yuk + konum + karsi yaka uyarisi.
- *  hedefYaka verilirse (isin yakasi) farkli yakadaki ekipler isaretlenir. */
+/** Ekip secim etiketi: yuk + konum + karsi yaka uyarisi. */
 function ekipSecenegi(e: EkipGorevleri, hedefYaka: string | null): string {
   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
   const karsi = Boolean(e.yaka && hedefYaka && e.yaka !== hedefYaka);
@@ -199,8 +195,7 @@ function EkipKarti({
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
-      {/* Ekip basligi: koyu bant + "SAHA EKIBI" ustyazisiyla altindaki gorev
-          kartlarindan net ayrilir (bir baslik gibi okunur). */}
+      {/* Koyu bant: ekip basligini altindaki gorev kartlarindan ayirir. */}
       <div className="flex items-center gap-3 bg-slate-800 px-3 py-2.5 text-white">
         <span
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white"
@@ -355,9 +350,8 @@ function HavuzGrup({
   );
 }
 
-/** Personel icin saha ekibi yonetim panosu: hangi ekipte hangi gorevler var,
- *  gorevleri baska ekibe tasi / havuza al, havuzdaki isleri elle ata. Canli
- *  konum haritada; buradaki yuk/gorevler 20sn'de bir tazelenir. */
+/** Saha ekibi yonetim panosu: hangi ekipte hangi gorevler var, gorevi baska
+ *  ekibe tasi / havuza al, havuzdaki isleri elle ata. 20 sn'de bir tazelenir. */
 export default function SahaEkipleri() {
   const queryClient = useQueryClient();
   const [durum, setDurum] = useState<{ ok: boolean; metin: string } | null>(null);
@@ -384,7 +378,7 @@ export default function SahaEkipleri() {
         ok: true,
         metin: v.tip === "ata" ? "Görev ilgili ekibe taşındı." : "Görev havuza alındı.",
       });
-      // Ekip yukleri (harita rozetleri dahil), gorev listeleri ve havuz degisti.
+      // Ekip yukleri, gorev listeleri ve havuz birlikte degisir.
       queryClient.invalidateQueries({ queryKey: ["saha"] });
     },
     onError: (e) => setDurum({ ok: false, metin: (e as Error).message }),

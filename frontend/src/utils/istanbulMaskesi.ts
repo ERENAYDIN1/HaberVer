@@ -2,14 +2,12 @@ import type maplibregl from "maplibre-gl";
 
 import { BOS_GEOJSON } from "./geojson";
 
-/** Proje kapsami en fazla bir il (Istanbul); haritalarin varsayilan merkezi
- *  ve tek "detay alani" budur. */
+/** Proje kapsami tek il: haritalarin varsayilan merkezi ve detay alani. */
 export const ISTANBUL_MERKEZI: [number, number] = [28.9784, 41.0082];
 export const ISTANBUL_IL_KODU = "34";
 
-/** Kullanicinin sehri komsu illerle birlikte genis acidan gorebilmesi icin
- *  harita her yonde ~400km'e kadar kaydirilabilir/uzaklastirilabilir; asil
- *  "detay" alani (bkz. asagidaki maske) yine de sadece Istanbul il siniridir. */
+/** Harita her yonde ~400 km'e kadar kaydirilabilir (sehir komsu illerle
+ *  birlikte gorulsun); detay alani yine de yalnizca il siniridir. */
 export const ISTANBUL_SINIRLARI: [[number, number], [number, number]] = [
   [24.2, 37.4],
   [33.8, 44.6],
@@ -20,12 +18,9 @@ export const MASKE_DOLGU_LAYER_ID = "istanbul-maske-dolgu";
 export const MASKE_CIZGI_LAYER_ID = "istanbul-maske-cizgi";
 
 
-/** Genis (400km) gorunum alani icinde, Istanbul il sinirinin DISINDA kalan
- *  her yeri kaplayan bir "maske" poligonu uretir - buyuk bir dis dikdortgen +
- *  ic halka olarak il sinirinin tum parcalari (delik gibi davranir). Hem
- *  raster (Google Yol/Hibrit/Uydu, OSM) hem vektor (Liberty/Voyager) stillerde ayni
- *  yari saydam dolgu + Istanbul kenarini izleyen vurgu cizgisi kullanilir -
- *  altta yatan detay (yol, etiket, arazi) soluk da olsa gorunur kalir. */
+/** Il sinirinin disinda kalan her yeri kaplayan maske poligonu: buyuk bir dis
+ *  dikdortgen + il sinirinin halkalari ic halka (delik) olarak. Ters sarim
+ *  sayesinde MapLibre bu halkalari otomatik olarak delik sayar. */
 export function maskeGeometrisi(halkalar: [number, number][][]): GeoJSON.Polygon {
   const disKutu: [number, number][] = [
     [-180, -85],
@@ -40,10 +35,8 @@ export function maskeGeometrisi(halkalar: [number, number][][]): GeoJSON.Polygon
   };
 }
 
-/** Maske kaynagini/katmanlarini yoksa ekler (idempotent) - yari saydam dolgu
- *  + Istanbul kenarini izleyen bir vurgu cizgisi ("delik"in kenarlari bir
- *  "line" katmaniyla cizilince otomatik olarak tam Istanbul sinirini takip
- *  eder). Butun stillerde (raster/vektor) ayni sekilde kullanilir. */
+/** Maske kaynagini/katmanlarini ekler (idempotent): yari saydam dolgu + il
+ *  kenarini izleyen vurgu cizgisi. Tum stillerde ayni sekilde kullanilir. */
 export function maskeKaynagiHazirla(map: maplibregl.Map) {
   if (map.getSource(MASKE_SOURCE_ID)) return;
   map.addSource(MASKE_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
@@ -61,8 +54,7 @@ export function maskeKaynagiHazirla(map: maplibregl.Map) {
   });
 }
 
-/** Istanbul il siniri hazir olunca (fetch + stil yuklemesi ikisi de bitince)
- *  cagirilir: maske kaynagini Istanbul'un halkalariyla doldurur. */
+/** Sinir verisi ve stil ikisi de hazir olunca cagrilir; maskeyi doldurur. */
 export function istanbulMaskesiUygula(
   map: maplibregl.Map,
   halkalar: [number, number][][] | null

@@ -81,10 +81,8 @@ def giris(email: str, parola: str) -> httpx.Client:
 
 
 def main() -> None:
-    # Varsayilanlar ayarlardan okunur, SABIT YAZILMAZ: burada bir zamanlar
-    # "admin1234" yaziyordu ve admin parolasi degistiginde test, uygulamada
-    # bir sorun varmis gibi patliyordu. Ayni sinif hata (bir parolanin kodda
-    # sabitlenmesi) A1'in de sebebiydi.
+    # Kimlik ayarlardan okunur, koda sabitlenmez: parola degistiginde test
+    # uygulamada sorun varmis gibi patliyordu.
     email, parola = admin_bilgileri()
 
     # Cookie'siz erisim reddedilmeli.
@@ -107,9 +105,8 @@ def main() -> None:
     korumali = istemci.get(f"{API}/api/assets")
     print(f"[ok] korumali uc /api/assets -> {korumali.status_code}")
 
-    # Rol ayrimi: realm'in default bilesigi HERKESE `vatandas` rolu verdigi
-    # icin ham listede o da var; yetki karari tek etkin role gore verilmeli,
-    # yani admin vatandas ucuna girememeli.
+    # Rol ayrimi: herkeste `vatandas` rolu var, ama yetki tek etkin role gore
+    # verilmeli - admin vatandas ucuna girememeli.
     vatandas_ucu = istemci.get(f"{API}/api/reports/mine")
     assert vatandas_ucu.status_code == 403, vatandas_ucu.status_code
     print("[ok] admin -> vatandas ucu (/reports/mine) 403")
@@ -138,11 +135,10 @@ def main() -> None:
     assert sonra.status_code == 401, sonra.status_code
     print("[ok] cikistan sonra /auth/me -> 401")
 
-    # Yerel oturumun silinmesi YETMEZ: cikis adresi gercekten izlenmezse
-    # Keycloak SSO oturumu ayakta kalir ve bir sonraki /auth/login formu hic
-    # gostermeden kod verir - kullanici "cikamamis" olur. Olcut: giris formu.
-    # follow_redirects=False, cunku cikisin son duragi tarayiciya ait
-    # http://localhost:5173/giris ve container icinden erisilemez.
+    # Yerel oturumu silmek yetmez: cikis adresi izlenmezse Keycloak SSO
+    # oturumu ayakta kalir ve sonraki giris form gostermeden kod verir. Olcut:
+    # giris formunun gercekten gelmesi. follow_redirects=False, cunku cikisin
+    # son duragi tarayiciya ait ve container icinden erisilemez.
     istemci.get(ic(cikis.json()["cikis_url"]))
     tekrar = istemci.get(f"{API}/api/auth/login", params={"next": "/"})
     kc = istemci.get(ic(tekrar.headers["location"]))

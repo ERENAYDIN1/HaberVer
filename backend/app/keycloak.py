@@ -1,17 +1,13 @@
 """Keycloak ile konusan tek modul: yetkilendirme kodu akisi, token yenileme,
 ID token dogrulama (JWKS) ve kullanici yonetimi icin Admin API.
 
-Tasarim notlari:
+Iki adres: tarayici Keycloak'a `KEYCLOAK_PUBLIC_URL`, backend docker agi
+icinden `KEYCLOAK_INTERNAL_URL` uzerinden gider. Token'daki `iss` her zaman
+public adrestir. Uc adresleri bu yuzden OIDC kesif belgesinden okunmaz: kesif
+tek hostname dondurur ve iki taraftan biri hep yanlis olurdu.
 
-* **Iki adres.** Tarayici Keycloak'a `KEYCLOAK_PUBLIC_URL` uzerinden gider
-  (yonlendirme, giris ekrani); backend ise docker agi icinden
-  `KEYCLOAK_INTERNAL_URL`'e gider. Token'daki `iss` her zaman PUBLIC adrestir,
-  dogrulama da ona gore yapilir. Uc adresleri bu yuzden OIDC kesif belgesinden
-  okunmaz - kesif tek bir hostname dondurur ve iki taraftan biri hep yanlis
-  olurdu.
-* **Token tarayiciya hic gitmez** (BFF): kod degisimi burada yapilir, token'lar
-  oturum satirinda kalir. Bu yuzden `client_secret` ile "confidential" istemci
-  kullanilir, PKCE de ayrica uygulanir.
+Token tarayiciya hic gitmez (BFF): kod degisimi burada yapilir, token'lar
+oturum satirinda kalir. Bu yuzden confidential istemci + PKCE kullanilir.
 """
 
 from __future__ import annotations
@@ -49,8 +45,7 @@ def _admin(yol: str) -> str:
 ISSUER = _public("")
 REDIRECT_URI = f"{settings.app_base_url.rstrip('/')}/api/auth/callback"
 
-# JWKS istemcisi anahtarlari onbellekler; anahtar donunce (kid degisince)
-# kendisi yeniden ceker.
+# JWKS istemcisi anahtarlari onbellekler; kid degisince yeniden ceker.
 _jwk_client = PyJWKClient(_internal("/protocol/openid-connect/certs"))
 
 
@@ -58,9 +53,9 @@ _jwk_client = PyJWKClient(_internal("/protocol/openid-connect/certs"))
 
 
 def pkce_uret() -> tuple[str, str]:
-    """(verifier, challenge) ciftini uretir. Verifier oturum akisi cookie'sinde
-    saklanir, challenge Keycloak'a gider - araya giren bir taraf kodu ele
-    gecirse bile verifier'i bilmedigi icin token alamaz."""
+    """(verifier, challenge) cifti. Verifier akis cookie'sinde kalir, challenge
+    Keycloak'a gider: kodu ele geciren taraf verifier'i bilmedigi icin token
+    alamaz."""
     verifier = base64.urlsafe_b64encode(os.urandom(64)).decode().rstrip("=")
     ozet = hashlib.sha256(verifier.encode("ascii")).digest()
     challenge = base64.urlsafe_b64encode(ozet).decode().rstrip("=")
@@ -68,8 +63,8 @@ def pkce_uret() -> tuple[str, str]:
 
 
 def giris_url(state: str, nonce: str, challenge: str, kayit: bool = False) -> str:
-    """Tarayicinin yonlendirilecegi Keycloak adresi. `kayit=True` ise dogrudan
-    kayit ekrani acilir (vatandas oz-kaydi Keycloak'in kendi formundadir)."""
+    """Tarayicinin yonlendirilecegi Keycloak adresi; `kayit=True` ise kayit
+    ekrani acilir."""
     sorgu = urlencode(
         {
             "client_id": settings.keycloak_client_id,
@@ -121,8 +116,8 @@ def _token_iste(veri: dict) -> TokenSeti:
     if yanit.status_code != 200:
         raise KeycloakHatasi(f"Token alinamadi ({yanit.status_code}): {yanit.text}")
     govde = yanit.json()
-    # Iddialari ACCESS token'dan okuruz: rol eslemesi hem access hem id token'a
-    # yaziliyor, ama yenilemeden sonra id_token her zaman geri gelmez.
+    # Iddialar access token'dan okunur: rol eslemesi ikisinde de var ama
+    # yenilemeden sonra id_token her zaman geri gelmez.
     return TokenSeti(
         access_token=govde["access_token"],
         refresh_token=govde.get("refresh_token"),
@@ -162,28 +157,23 @@ def token_dogrula(token: str) -> dict:
             anahtar.key,
             algorithms=["RS256"],
             issuer=ISSUER,
-            # Keycloak access token'inin `aud` degeri istemciye gore degisir
-            # (cogu kurulumda "account"), bu yuzden `aud` yerine ASAGIDA `azp`
-            # dogrulanir.
+            # `aud` kuruluma gore degistigi icin (cogunlukla "account") yerine
+            # asagida `azp` dogrulanir.
             options={"verify_aud": False},
         )
     except jwt.PyJWTError as e:
         raise KeycloakHatasi(f"Token dogrulanamadi: {e}") from e
 
-    # `azp` (authorized party) = token'in HANGI ISTEMCI icin verildigi. Bu
-    # kontrol daha once yalnizca yorumda vaat ediliyordu, kodda yoktu: ayni
-    # realm'deki BASKA bir istemcinin cikardigi token da imza + issuer
-    # kontrolunden gecerdi. BFF'de token'lari kendimiz aldigimiz icin bugun
-    # somurulebilir degil, ama realm'e ikinci bir istemci eklendigi an gercek
-    # bir aciga donusurdu - ve o an kimse bu satiri hatirlamazdi.
+    # `azp` = token'in hangi istemci icin verildigi. Olmadan ayni realm'deki
+    # baska bir istemcinin token'i da imza + issuer kontrolunden gecerdi.
     if claims.get("azp") != settings.keycloak_client_id:
         raise KeycloakHatasi("Token baska bir istemci icin verilmis (azp uyusmuyor)")
     return claims
 
 
 def rolleri_oku(claims: dict) -> list[str]:
-    """Realm rollerini iddialardan cikarir. Ozel eslememiz `roles` claim'ini
-    yaziyor; olmazsa Keycloak'in standart `realm_access.roles` alanina duseriz."""
+    """Realm rollerini okur: ozel eslemenin yazdigi `roles`, yoksa Keycloak'in
+    standart `realm_access.roles` alani."""
     roller = claims.get("roles")
     if isinstance(roller, list):
         return [str(r) for r in roller]
@@ -243,10 +233,8 @@ def kullanici_bul(email: str) -> dict | None:
 
 def _ad_temizle(full_name: str | None) -> str:
     """Keycloak'in kisi adi dogrulamasindan gececek hale getirir: harf, bosluk,
-    tire ve kesme isareti disindaki karakterler atilir (`error-person-name-
-    invalid-character`). Parantezli aciklamalar - ornegin "Saha Ekibi 1
-    (Kadikoy)" - bu yuzden temizlenir; YEREL kayitta ad oldugu gibi kalir,
-    yalnizca Keycloak'a giden kopya sadelestirilir."""
+    tire ve kesme disindaki karakterler atilir. Yerel kayitta ad oldugu gibi
+    kalir, yalnizca Keycloak'a giden kopya sadelestirilir."""
     if not full_name:
         return ""
     temiz = "".join(k for k in full_name if k.isalpha() or k in " -'")
@@ -256,10 +244,9 @@ def _ad_temizle(full_name: str | None) -> str:
 def kullanici_olustur(
     *, email: str, parola: str, full_name: str | None, rol: str
 ) -> str:
-    """Keycloak'ta bir kullanici acar ve realm rolunu atar; kullanici id'sini
-    (yerel satirdaki `keycloak_id`) dondurur. Hesap zaten varsa mevcut id
-    dondurulur ve rolu guncellenir - script'lerin tekrar calistirilabilmesi
-    (idempotentlik) icin."""
+    """Keycloak'ta kullanici acar, realm rolunu atar ve id'sini (yerel
+    `keycloak_id`) dondurur. Hesap zaten varsa mevcut id donup rolu
+    guncellenir; boylece script'ler tekrar calistirilabilir."""
     ad, _, soyad = _ad_temizle(full_name).partition(" ")
     govde = {
         "username": email,
@@ -287,8 +274,8 @@ def kullanici_olustur(
 
 
 def rol_ata(kullanici_id: str, rol: str) -> None:
-    """Verilen realm rolunu atar ve DIGER uygulama rollerini geri alir: rol
-    her zaman tekildir (bir kullanici hem calisan hem vatandas olamaz)."""
+    """Verilen realm rolunu atar, diger uygulama rollerini geri alir: rol her
+    zaman tekildir."""
     yanit = _admin_istek("GET", f"/roles/{rol}")
     if yanit.status_code != 200:
         raise KeycloakHatasi(f"'{rol}' rolu bulunamadi: {yanit.text}")

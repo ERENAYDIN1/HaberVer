@@ -1,21 +1,17 @@
 import type { AssetType, PointGeometry } from "./asset";
 
-/** Backend'in bildigi ihbar durumlari (reports.status). Arayuzdeki sekme/filtre
- *  siralamasi bunlardan DEGIL, asagidaki IHBAR_GORUNUMLERI'nden gelir. */
+/** Backend'in bildigi ihbar durumlari (reports.status). Arayuzdeki siralama
+ *  bunlardan degil, asagidaki IHBAR_GORUNUMLERI'nden gelir. */
 export const REPORT_STATUSES = ["onaylandi", "beklemede", "reddedildi"] as const;
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
-/** Sol paneldeki alt-sekmeler ve sag-ustteki lejant alt-filtresi bu kumeyi
- *  kullanir. "tamir" backend'de bir ihbar durumu DEGILDIR: onaylanmis bir
- *  ihbardan olusan varlik 'iyi'ye cekilince (tamir edildi) o ihbar bu turemis
- *  gruba gecer. Ayrim sart oldu cunku bitmis isler "Onaylandı"nin icinde
- *  kaldigi surece haritada hala acik is gibi gorunuyordu.
+/** Panel alt-sekmeleri ve lejant alt-filtresi bu kumeyi kullanir. "tamir"
+ *  backend'de bir durum degildir: onaylanmis ihbardan olusan varlik 'iyi'ye
+ *  cekilince ihbar bu turemis gruba gecer, yoksa bitmis isler haritada hala
+ *  acik is gibi gorunurdu.
  *
- *  Siralama ACIK IS -> KAPANMIS IS: once uzerinde islem yapilacak olanlar
- *  (Onaylandı = ekip gidecek, Bekleyen = karar verilecek), sonra sonuclanmis
- *  olanlar (Tamir Edildi, Reddedildi). Bu ayrim haritadaki giysiyle birebir
- *  ortusur - ilk ikisi durum halkasi tasir, son ikisi sonumlenir
- *  (bkz. IHBAR_GIYSISI / HALKALI_GORUNUMLER). */
+ *  Siralama acik is -> kapanmis is; haritadaki giysiyle ortusur (ilk ikisi
+ *  durum halkasi tasir, son ikisi sonumlenir). */
 export const IHBAR_GORUNUMLERI = [
   "onaylandi",
   "beklemede",
@@ -31,12 +27,10 @@ export const REPORT_STATUS_LABELS: Record<IhbarGorunumu, string> = {
   tamir: "Tamir Edildi",
 };
 
-/** Bir ihbarin hangi GORUNUME dustugu: onaylanmislar, olusturduklari varligin
- *  durumuna gore ikiye ayrilir. `varlikDurumu` undefined ise varlik artik yok
- *  (tamir edilenler TAMIR_SAKLAMA_GUN sonra otomatik siliniyor) - o da bitmis
- *  is sayilir. `varlikBilgisiVar=false` (varlik sorgusu henuz yuklenmedi) ise
- *  siniflama yapilmaz, kayit "onaylandi"da kalir; yoksa acilista her sey bir an
- *  "Tamir Edildi"ye dusup geri zipliyordu. */
+/** Bir ihbarin hangi gorunume dustugu. Onaylanmislar, olusturduklari varligin
+ *  durumuna gore ayrilir; varlik silinmisse (tamir sonrasi otomatik silme) de
+ *  bitmis is sayilir. `varlikBilgisiVar=false` iken siniflama yapilmaz, yoksa
+ *  acilista her sey bir an "Tamir Edildi"ye dusup geri zipliyor. */
 export function ihbarGorunumu(
   status: ReportStatus,
   varlikDurumu: "iyi" | "bakim_lazim" | undefined,
@@ -46,35 +40,19 @@ export function ihbarGorunumu(
   return varlikDurumu === "bakim_lazim" ? "onaylandi" : "tamir";
 }
 
-/** Ihbar gorunumu -> DURUM SINYALI rengi. Bu renk artik pinin DOLGUSU degildir:
- *  pin (varlik dairesi gibi) turunun grup rengini tasir, durum ise pinin
- *  cevresindeki halka ve sag-ustteki rozetle anlatilir. Buradaki renk iste o
- *  halkanin/rozetin rengidir; lejant swatch'lari da ayni kaynaktan beslenir.
- *
- *  Neden degisti: eskiden dolgu duruma gore boyaniyordu ve palet varliklarin
- *  KATEGORI paletiyle (GRUP_RENGI) uc tonda cakisiyordu - zumrut hem "Yeşil
- *  Alan" hem "Onaylandı", slate hem "Diğer" hem "Tamir Edildi", mor hem
- *  "ihbardan dogdu" hem "bekleyen" demekti. Artik renk YALNIZCA kategoriyi,
- *  halka+rozet YALNIZCA durumu anlatir.
- *
- *  `onaylandi` bilincli olarak amber: bakim gerektiren bir varlikla onaylanmis
- *  bir ihbar ayni seydir (ekibin gitmesi gereken acik is), dolayisiyla ayni
- *  uyari rengini paylasirlar. Aralarindaki fark sekil - daire envanterin kendi
- *  kaydi, pin vatandastan geldi. */
+/** Gorunume gore durum sinyali rengi. Pinin dolgusu degildir - pin turunun
+ *  grup rengini tasir, durum ise halka ve rozetle anlatilir; lejant
+ *  swatch'lari da buradan beslenir. */
 export const IHBAR_DURUM_RENGI: Record<IhbarGorunumu, string> = {
   beklemede: "#9333ea",
-  // Bakim lazim varlikla ayni amber: ikisi de ACIK IS (bkz. MapView
-  // "assets-durum" uyari halkasi).
+  // Bakim lazim varlikla ayni amber: ikisi de acik is.
   onaylandi: "#f59e0b",
   reddedildi: "#e11d48",
-  // Tamir edilen (kapanmis) is: bilincli olarak notr gri - haritada "artik is
-  // yok" demek.
+  // Kapanmis is icin notr gri: "artik is yok".
   tamir: "#64748b",
 };
 
-/** Rozet simgeleri. Text degil PATH cizilir: rozet ~17px capinda bir diskte
- *  basiliyor ve data-URI ile raster'a cevrilen bir SVG'de `<text>` tarayicinin
- *  font secimine kalirdi. */
+/** Rozet simgeleri (SVG path adlari). */
 export const DURUM_ROZETLERI = ["unlem", "soru", "onay", "carpi"] as const;
 export type DurumRozeti = (typeof DURUM_ROZETLERI)[number];
 
@@ -85,26 +63,25 @@ export interface IhbarGiysisi {
   halka: boolean;
   /** Halka kesikli mi (karar bekleyen = henuz kesinlesmemis). */
   halkaKesikli: boolean;
-  /** Sag-ustteki kucuk rozet; null ise rozet cizilmez. */
+  /** Sag-ustteki kucuk rozet; null ise cizilmez. */
   rozet: DurumRozeti | null;
-  /** Kapanmis kayitlar sonumlenir - haritada dururlar ama gorsel agirliklari
-   *  acik islerle yarismaz. */
+  /** Kapanmis kayitlar sonumlenir, acik islerle gorsel agirlikta yarismasin. */
   opaklik: number;
 }
 
 export const IHBAR_GIYSISI: Record<IhbarGorunumu, IhbarGiysisi> = {
-  // Acik is: dolu amber halka + "!" - bakim lazim varlikla ayni giysi.
+  // Acik is: dolu amber halka + "!", bakim lazim varlikla ayni giysi.
   onaylandi: { halka: true, halkaKesikli: false, rozet: "unlem", opaklik: 1 },
-  // Kapanmis is: halka yok, sonuk, kucuk bir onay isareti.
+  // Kapanmis is: halkasiz, sonuk, kucuk onay isareti.
   tamir: { halka: false, halkaKesikli: false, rozet: "onay", opaklik: 0.5 },
-  // Karar bekliyor: KESIKLI mor halka - "henuz kesinlesmedi" demek.
+  // Karar bekliyor: kesikli mor halka.
   beklemede: { halka: true, halkaKesikli: true, rozet: "soru", opaklik: 1 },
-  // Reddedildi: en sonuk; haritadan silinmez ama neredeyse arka plana duser.
+  // Reddedildi: en sonuk, neredeyse arka planda.
   reddedildi: { halka: false, halkaKesikli: false, rozet: "carpi", opaklik: 0.38 },
 };
 
-/** Halka/rozet cizilen gorunumler - katman filtreleri bunlardan turetilir ki
- *  MapLibre var olmayan bir goruntu adi ("ihbar-halka-tamir") istemesin. */
+/** Halka/rozet cizilen gorunumler; katman filtreleri bunlardan turetilir ki
+ *  MapLibre var olmayan bir goruntu adi istemesin. */
 export const HALKALI_GORUNUMLER = IHBAR_GORUNUMLERI.filter(
   (d) => IHBAR_GIYSISI[d].halka
 );
@@ -125,9 +102,8 @@ export interface ReportProperties {
   review_note: string | null;
   created_asset_id: string | null;
   created_at: string;
-  /** YALNIZCA frontend'de doldurulur (App.tsx, ihbarGorunumu ile) - backend
-   *  boyle bir alan dondurmez. Harita pin rengi ve panel/lejant gruplamasi
-   *  bunu okur; yoksa `status`a duser. */
+  /** Yalnizca frontend'de doldurulur (bkz. `ihbarGorunumu`); backend boyle bir
+   *  alan dondurmez. Yoksa `status`a dusulur. */
   gorunum?: IhbarGorunumu;
 }
 

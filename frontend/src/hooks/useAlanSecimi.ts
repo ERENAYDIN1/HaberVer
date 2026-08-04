@@ -18,25 +18,20 @@ import {
   toplamMesafeMetre,
 } from "../utils/geo";
 
-/** Haritadaki ALAN SECIMI: cizim, mesafe olcumu, secilen alanlarin varlik
+/** Haritadaki alan secimi: cizim, mesafe olcumu, secilen alanlarin varlik
  *  sonuclari, cakismasiz alan ozeti ve ilce/mahalle sinir secimi.
  *
- *  Bunlar tek bir hook'ta, cunku hepsi AYNI listeyi (`tamamlananAlanlar`)
- *  besliyor: kullanicinin cizdigi alan da, secilen ilce siniri da haritada ayni
- *  sekilde cizilir, ayni sekilde `assetsWithin` ile sorgulanir ve ayni panelde
- *  listelenir. Idari sinir bilincli olarak ayri bir mekanizma DEGIL, sabit
- *  id'li (`IDARI_ALAN_ID`) bir alandir - boylece render/etiket/yeniden-sorgulama
- *  mantigi tek kere yazilmis olur. */
+ *  Hepsi tek hook'ta cunku hepsi ayni listeyi (`tamamlananAlanlar`) besler:
+ *  kullanicinin cizdigi alan da secilen ilce siniri da ayni sekilde cizilir,
+ *  ayni sekilde sorgulanir ve ayni panelde listelenir. */
 
-/** Ilce/mahalle sinir secimi de bir "tamamlanan alan" olarak temsil edilir; bu
- *  sabit id sayesinde yeni bir sinir secilince oncekinin YERINE gecer. */
+/** Ilce/mahalle secimi de bir "tamamlanan alan"dir; sabit id sayesinde yeni
+ *  bir sinir secilince oncekinin yerine gecer. */
 export const IDARI_ALAN_ID = "idari-sinir";
 export const IDARI_ALAN_RENK = "#0891b2";
 
-/** Halka listesinden (MultiPolygon parcalari) backend'e gonderilecek GeoJSON
- *  geometrisini uretir. Tek halkalı alanlarda (kullanicinin cizdigi alanlar)
- *  duz bir Polygon, birden fazla halkalı alanlarda (orn. adalardan olusan
- *  Adalar ilcesi) bir MultiPolygon dondurur. */
+/** Halka listesinden backend'e gonderilecek GeoJSON geometrisi: tek halkada
+ *  Polygon, cok halkada (orn. Adalar ilcesi) MultiPolygon. */
 export function halkalarGeometrisi(
   halkalar: [number, number][][]
 ): PolygonGeometry | MultiPolygonGeometry {
@@ -51,16 +46,14 @@ export function halkalarGeometrisi(
 }
 
 export interface AlanSecimiSecenekleri {
-  /** Alan sorgularina eklenen aktif filtreler (`source` + ...). Degisince
-   *  tamamlanmis alanlarin sonuclari yeniden getirilir. */
+  /** Alan sorgularina eklenen aktif filtreler; degisince tamamlanmis
+   *  alanlarin sonuclari yeniden getirilir. */
   filters: AssetFilters;
   /** Baslangic cizim rengi ("Temizle" bunu geri yukler). */
   varsayilanRenk: string;
   /** Haritayi bir hedefe ucurur (idari sinir secilince kullanilir). */
   ucur: (hedef: UcusHedefi) => void;
-  /** Yeni bir alan cizimi baslarken - varlik secimini birakmak icin. */
   onCizimBasladi?: () => void;
-  /** Bir alan tamamlandiginda - sonuclari gostermek uzere listeye gecmek icin. */
   onAlanTamamlandi?: () => void;
 }
 
@@ -71,7 +64,7 @@ export function useAlanSecimi({
   onCizimBasladi,
   onAlanTamamlandi,
 }: AlanSecimiSecenekleri) {
-  // --- Alan (poligon) secimi - birden fazla alan ayni anda acik kalabilir ---
+  // --- Alan (poligon) secimi; birden fazla alan acik kalabilir ---
   const [cizimModu, setCizimModu] = useState(false);
   const [cizimNoktalari, setCizimNoktalari] = useState<[number, number][]>([]);
   const [cizimRengi, setCizimRengi] = useState<string>(varsayilanRenk);
@@ -83,24 +76,20 @@ export function useAlanSecimi({
   const [olcumModu, setOlcumModu] = useState(false);
   const [olcumNoktalari, setOlcumNoktalari] = useState<[number, number][]>([]);
 
-  // --- Ilce/mahalle sinirina gore filtreleme (proje kapsami Istanbul ile
-  //     sinirli oldugundan il secimi yok; once ilceye, ilce secilince kademeli
-  //     olarak mahalleye kadar filtrelenebilir) ---
+  // --- Ilce/mahalle sinirina gore filtreleme (kapsam Istanbul oldugundan il
+  //     secimi yok; ilce secilince kademeli olarak mahalle gelir) ---
   const [ilceKodu, setIlceKodu] = useState<string | null>(null);
   const [mahalleKodu, setMahalleKodu] = useState<string | null>(null);
   const [idariHatasi, setIdariHatasi] = useState<string | null>(null);
-  /** Secili sinirin sinir kutusu; verilince konum aramasi bu bolgeyle
-   *  SINIRLANIR (sadece oncelik degil) - "GOP secip Kucukkoy aradiginda
-   *  Besiktas cikmasin". */
+  /** Secili sinirin sinir kutusu; konum aramasi bu bolgeyle sinirlanir
+   *  (onceliklendirme degil, sert kisit). */
   const [idariSinirKutusu, setIdariSinirKutusu] = useState<
     [[number, number], [number, number]] | null
   >(null);
 
-  // Callback'ler ve filtreler ref'te tutulur: efektlerin/callback'lerin kimligi
-  // cagiranin her render'da yeni fonksiyon vermesine bagli olmasin. Atama
-  // RENDER SIRASINDA degil bir efektte yapilir (MapView'daki ayni desen) -
-  // render'da ref'e yazmak React'in eszamanli (concurrent) render'inda iki kez
-  // calisabilir ve derleyici de bunu hata olarak isaretliyor.
+  // Callback ve filtreler ref'te tutulur ki efektlerin kimligi cagiranin her
+  // render'da yeni fonksiyon vermesine bagli olmasin. Atama render sirasinda
+  // degil efekt icinde yapilir (concurrent render'da iki kez calisabilir).
   const ucurRef = useRef(ucur);
   const onCizimBasladiRef = useRef(onCizimBasladi);
   const onAlanTamamlandiRef = useRef(onAlanTamamlandi);
@@ -118,8 +107,8 @@ export function useAlanSecimi({
     [olcumNoktalari]
   );
 
-  /** Tamamlanmis alanlarin varlik sonuclarinin birlesimi (ust uste binen
-   *  alanlarda ayni varlik iki kez sayilmasin diye id'ye gore tekillestirilir). */
+  /** Tamamlanmis alanlarin sonuclarinin birlesimi; ust uste binen alanlarda
+   *  ayni varlik iki kez sayilmasin diye id'ye gore tekillestirilir. */
   const birlesikAlanSonucu = useMemo<AssetFeatureCollection | null>(() => {
     if (tamamlananAlanlar.length === 0) return null;
     const gorulen = new Map<string, AssetFeature>();
@@ -147,10 +136,9 @@ export function useAlanSecimi({
     setOlcumNoktalari([]);
   }, []);
 
-  // Cizim ve olcum ayni harita tiklamalarini paylasir; ikisi ayni anda acik
-  // olamaz, bu yuzden her biri digerini kapatarak baslar. Kosul gereksiz
-  // gorunuyor ama degil: `olcumIptal` her cagrildiginda YENI bir bos dizi
-  // yazar, yani mod zaten kapaliyken de bir render tetiklerdi.
+  // Cizim ve olcum ayni harita tiklamalarini paylasir, ikisi birlikte acilamaz.
+  // Kosul gereksiz gorunse de gerekli: `olcumIptal` her cagrildiginda yeni bir
+  // bos dizi yazar, yani mod kapaliyken bile render tetiklerdi.
   const alanSecimiBaslat = useCallback(() => {
     if (olcumModu) olcumIptal();
     setCizimModu(true);
@@ -175,8 +163,7 @@ export function useAlanSecimi({
     setOlcumNoktalari([]);
   }, []);
 
-  /** Sekil duzenleme baslarken cagrilir: o da ayni alt paneli ve ayni harita
-   *  tiklamalarini kullanir, ucu birden acik olamaz. */
+  /** Sekil duzenleme baslarken cagrilir; o da ayni paneli/tiklamalari kullanir. */
   const cizimVeOlcumuKapat = useCallback(() => {
     setCizimModu(false);
     setCizimNoktalari([]);
@@ -185,8 +172,8 @@ export function useAlanSecimi({
 
   const alanKaldir = useCallback((id: string) => {
     setTamamlananAlanlar((a) => a.filter((alan) => alan.id !== id));
-    // Idari sinir alani kaldirilinca acilir kutulari da bosalt, yoksa panel
-    // haritada olmayan bir ilceyi secili gosterirdi.
+    // Idari sinir kaldirilinca acilirlar da bosalir, yoksa panel haritada
+    // olmayan bir ilceyi secili gosterirdi.
     if (id === IDARI_ALAN_ID) {
       setIlceKodu(null);
       setMahalleKodu(null);
@@ -200,15 +187,13 @@ export function useAlanSecimi({
     setMahalleKodu(null);
   }, []);
 
-  /** Yalnizca cizilen/secilen alanlari birakir, ilce/mahalle secimine
-   *  DOKUNMAZ. Bildirimden bir varliga gidilirken kullanilir: oraya odaklanmak
-   *  icin alan secimi kalkar ama panel filtresi kullanicinin biraktigi gibi
-   *  kalir. */
+  /** Yalnizca cizilen alanlari birakir, ilce/mahalle secimine dokunmaz.
+   *  Bildirimden varliga giderken kullanilir. */
   const alanlariTemizle = useCallback(() => {
     setTamamlananAlanlar([]);
   }, []);
 
-  // Ilce degisince mahalle secimini sifirla (eski mahalle baska ilceden kalmasin).
+  // Ilce degisince mahalle secimi sifirlanir.
   const ilceSec = useCallback((kod: string | null) => {
     setIlceKodu(kod);
     setMahalleKodu(null);
@@ -232,7 +217,7 @@ export function useAlanSecimi({
           sonuc,
         },
       ]);
-      // Bu alan bitti; cizimi sifirla ki kullanici hemen bir sonrakine baslayabilsin.
+      // Cizim sifirlanir ki kullanici hemen bir sonraki alana baslayabilsin.
       setCizimModu(false);
       setCizimNoktalari([]);
       onAlanTamamlandiRef.current?.();
@@ -243,9 +228,8 @@ export function useAlanSecimi({
     }
   }, [cizimNoktalari, cizimRengi]);
 
-  // Filtreler degistiginde, tamamlanmis alanlarin da uzerinde durdugu sorgu
-  // sonuclarini yeniden getir - aksi halde alan secildikten sonra filtreler
-  // donmus (alan tamamlandigi andaki) sonuclara bakmaya devam eder.
+  // Filtre degisince tamamlanmis alanlarin sonuclari da yeniden getirilir,
+  // yoksa panel alanin tamamlandigi andaki donmus sonuclara bakmaya devam eder.
   const filtreIstekSirasiRef = useRef(0);
   useEffect(() => {
     if (tamamlananAlanlar.length === 0) return;
@@ -261,7 +245,7 @@ export function useAlanSecimi({
       })
     )
       .then((guncellenmis) => {
-        // Bu sirada baska bir filtre degisikligi baslamissa, eski sonucu yoksay.
+        // Arada yeni bir istek baslamissa eski sonucu yoksay.
         if (filtreIstekSirasiRef.current === siraNo)
           setTamamlananAlanlar(guncellenmis);
       })
@@ -269,22 +253,19 @@ export function useAlanSecimi({
         if (filtreIstekSirasiRef.current === siraNo)
           setAlanHatasi((e as Error).message);
       });
-    // tamamlananAlanlar kasitli olarak bagimlilik disi: yeni alan eklendiginde
-    // zaten guncel filtreyle sorgulaniyor, burada sadece filtre degisince
-    // tetiklenmeli.
+    // tamamlananAlanlar kasitli olarak bagimlilik disi: yeni alan zaten guncel
+    // filtreyle sorgulaniyor, burasi yalnizca filtre degisince calismali.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
   // --- Secili alanlarin cakismayi hesaba katan olcusu ---------------------
-  // Yerel (shoelace) hesap TEK bir poligon icin dogru, ama iki alan ust uste
-  // bindiginde ayni yeri iki kez sayar - "aynı alanın üstünden tekrar geçince
-  // m² artmasın" istegi bu yuzden backend'de (PostGIS) cozuluyor: her alanin
-  // kendisinden ONCEKILERLE cakismayan net katkisi ve bunlarin toplami
-  // (= birlesim alani) donuyor.
+  // Yerel (shoelace) hesap tek poligon icin dogru ama ust uste binen alanlarda
+  // ayni yeri iki kez sayar; bu yuzden olcu backend'de (PostGIS) hesaplanir:
+  // her alanin oncekilerle cakismayan net katkisi ve toplami doner.
   const [alanOzetiSonuc, setAlanOzetiSonuc] = useState<AlanOzeti | null>(null);
   const olcuIstekSirasiRef = useRef(0);
-  /** Yalnizca GEOMETRI degisince yeniden olculsun: filtre degisince
-   *  tamamlananAlanlar yeni nesnelerle degisiyor ama sekiller ayni kaliyor. */
+  /** Yalnizca geometri degisince yeniden olculsun: filtre degisince
+   *  `tamamlananAlanlar` yeni nesnelerle gelir ama sekiller aynidir. */
   const alanGeometriImzasi = useMemo(
     () =>
       tamamlananAlanlar
@@ -307,8 +288,8 @@ export function useAlanSecimi({
         if (olcuIstekSirasiRef.current === siraNo) setAlanOzetiSonuc(ozet);
       })
       .catch(() => {
-        // Olcum alinamazsa panel yerel (cakismayi gormeyen) toplama duser -
-        // alan secimi calismaya devam etsin.
+        // Olcum alinamazsa panel yerel toplama duser, alan secimi calismaya
+        // devam eder.
         if (olcuIstekSirasiRef.current === siraNo) setAlanOzetiSonuc(null);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -319,11 +300,9 @@ export function useAlanSecimi({
     return Object.fromEntries(alanOzetiSonuc.alanlar.map((a) => [a.id, a]));
   }, [alanOzetiSonuc]);
 
-  // Ilce/mahalle secimi degisince aktif idari sinir geometrisini getirir,
-  // tamamlanan alanlar listesine sabit id'yle ekler/degistirir ve haritayi o
-  // bolgeye ucurur. Aktif sinir: bir mahalle secildiyse mahalle (daha ince),
-  // yoksa ilce, yoksa hicbiri. Filtreler degisince zaten yukaridaki efekt bu
-  // girdiyi de yeniden sorgular (noktalar uzerinden).
+  // Ilce/mahalle secimi degisince sinir geometrisini getirir, listeye sabit
+  // id'yle ekler ve haritayi o bolgeye ucurur. Aktif sinir: mahalle secildiyse
+  // mahalle, yoksa ilce. Filtre degisiminde yukaridaki efekt bunu da sorgular.
   useEffect(() => {
     if (!ilceKodu && !mahalleKodu) {
       setTamamlananAlanlar((a) => a.filter((alan) => alan.id !== IDARI_ALAN_ID));
@@ -414,8 +393,7 @@ export function useAlanSecimi({
     tamamlananAlanlar,
     birlesikAlanSonucu,
     alanOlculeri,
-    /** Cakismasiz olcum sonucu; panel "Toplam (cakismasiz)" satirini ve
-     *  "uzerinde binen X dusuldu" notunu bundan yazar. */
+    /** Cakismasiz olcum sonucu; panelin toplam satirini besler. */
     alanOzetiSonuc,
     alanKaldir,
     alanlariTemizle,

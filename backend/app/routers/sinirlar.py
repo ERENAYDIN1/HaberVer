@@ -13,8 +13,7 @@ ISTANBUL_IL_KODU = "34"
 
 VERI_DIZINI = Path(__file__).parent.parent / "data" / "sinirlar"
 
-# Sinir verisi giris yapmis herhangi bir kullaniciya acik (personel harita
-# filtreleri + gerekirse vatandas ekrani icin).
+# Sinir verisi giris yapmis her kullaniciya aciktir.
 router = APIRouter(
     prefix="/api/sinirlar",
     tags=["sinirlar"],
@@ -77,9 +76,8 @@ def mahalle_siniri(kod: str):
 
 
 # --- Koordinat -> ilce/mahalle cozumleme -------------------------------------
-# Bir varligin detayinda "hangi ilce/mahallede" bilgisini gostermek icin nokta,
-# Istanbul mahalle/ilce sinir poligonlariyla eslestirilir. Poligonlar ilk cagride
-# bbox indeksiyle birlikte belleğe alinir (yalnizca Istanbul, ~968 mahalle).
+# Nokta, Istanbul'un mahalle/ilce poligonlariyla eslestirilir. Poligonlar ilk
+# cagride bbox indeksiyle birlikte bellege alinir (~968 mahalle).
 
 
 def _nokta_poligonda(lon: float, lat: float, halka: list[list[float]]) -> bool:

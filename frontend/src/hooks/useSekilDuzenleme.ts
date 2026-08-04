@@ -6,17 +6,13 @@ import { alanTamponu } from "../api/geo";
 import type { Bolge, BolgeTipi, SekilDuzenleme } from "../types/bolge";
 import { halkalariAc } from "../utils/geo";
 
-/** Kaydedilmis bir bolgenin/guzergahin GEOMETRISINI harita uzerinde duzenleme.
- *
- *  Kayit YERINDE guncellenir: id'si, atamasi ve tamamlanma durumu korunur - bir
- *  sinirin birkac metre kaydirilmasi yeni bir bolge acmayi (ve gecmisi
- *  kaybetmeyi) gerektirmesin. Taslak burada tutulur, "Kaydet"e basilana kadar
- *  backend'e yazilmaz. */
+/** Bolge/guzergah geometrisinin harita uzerinde duzenlenmesi. Kayit yerinde
+ *  guncellenir (id, atama ve tamamlanma durumu korunur); taslak burada tutulur
+ *  ve "Kaydet"e basilana kadar backend'e yazilmaz. */
 
-/** Sekil duzenlemede kullanilacak nokta listesi: alanlarda backend'in KAPALI
- *  dondurdugu halkalarin son (tekrar eden) noktasi atilir - aksi halde ilk ve
- *  son kosede ust uste iki tutamak olur ve biri suruklenince sekil bozulur.
- *  Cizgilerde dokunulmaz (bir guzergahin ucu ucuna gelmesi mesru olabilir). */
+/** Duzenlemede kullanilacak nokta listesi: alanlarda backend'in kapali
+ *  dondurdugu halkalarin tekrar eden son noktasi atilir, yoksa ilk kosede ust
+ *  uste iki tutamak olusur. Cizgilere dokunulmaz. */
 export function sekilNoktalari(
   tip: BolgeTipi,
   noktalar: [number, number][][]
@@ -24,19 +20,15 @@ export function sekilNoktalari(
   return tip === "cizgi" ? noktalar : halkalariAc(noktalar);
 }
 
-/** Taslak, kaydedilmis geometriden farkli mi ("Kaydet"/"Geri al" icin).
- *
- *  Karsilastirma iki tarafi da AYNI normalde (acik halka) yapmali: kayitli hali
- *  kapali halkalarla gelir, taslak acik tutulur - ham karsilastirma hicbir sey
- *  degismeden "değişti" der ve Kaydet hep etkin kalirdi. */
+/** Taslak kaydedilmis geometriden farkli mi. Iki taraf da ayni normalde (acik
+ *  halka) karsilastirilir, yoksa hicbir sey degismeden "değişti" derdi. */
 export function sekilDegistiMi(
   taslak: SekilDuzenleme | null,
   kayitli: Bolge | undefined
 ): boolean {
   if (!taslak) return false;
-  // Kayit listede yoksa (henuz gelmedi ya da silindi) taslak "degismis" sayilir
-  // - kullanicinin emegini kaydedilemez gostermektense kaydetmeyi denemek daha
-  // iyi.
+  // Kayit listede yoksa taslak "degismis" sayilir: kaydetmeyi denemek,
+  // kullaniciya kaydedilemez gostermekten iyi.
   if (!kayitli) return true;
   return (
     JSON.stringify(sekilNoktalari(kayitli.tip, kayitli.noktalar)) !==
@@ -45,12 +37,10 @@ export function sekilDegistiMi(
 }
 
 export interface SekilDuzenlemeSecenekleri {
-  /** Kayitli bolgeler; taslagin "degisti mi" karsilastirmasi ve "Geri al" icin. */
+  /** Kayitli bolgeler; "degisti mi" karsilastirmasi ve "Geri al" icin. */
   bolgeler: Bolge[] | undefined;
-  /** Duzenlenen kayda haritayi ucurur. */
   bolgeyeGit: (bolge: Bolge) => void;
-  /** Duzenleme baslarken cagrilir: cizim/olcum ayni alt paneli paylasir, ucu
-   *  birden acik olamaz. */
+  /** Duzenleme baslarken cagrilir; cizim/olcum ayni paneli paylasir. */
   onBaslarken: () => void;
 }
 
@@ -65,9 +55,8 @@ export function useSekilDuzenleme({
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [genisletiliyor, setGenisletiliyor] = useState(false);
 
-  // Callback'ler ref'te: `baslat`in kimligi cagiranin her render'da yeni
-  // fonksiyon vermesine bagli olmasin (atama render'da degil efektte - bkz.
-  // useAlanSecimi'ndeki ayni not).
+  // Callback'ler ref'te: `baslat`in kimligi her render'da degismesin
+  // (bkz. useAlanSecimi'ndeki ayni desen).
   const bolgeyeGitRef = useRef(bolgeyeGit);
   const onBaslarkenRef = useRef(onBaslarken);
   useEffect(() => {

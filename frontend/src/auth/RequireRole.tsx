@@ -26,36 +26,28 @@ interface RequireRoleProps {
   children: ReactNode;
 }
 
-/** Girisi kullaniciya sormadan baslatir: "personel misin, vatandas misin"
- *  sorusunun cevabi zaten token'da (rol Keycloak'ta yasar), bu yuzden onden
- *  bir secim ekrani gostermenin teknik bir karsiligi yok. Yanlis role sahip
- *  kullanici girisin ardindan kendi ana sayfasina gonderilir - `next` her
- *  zaman dogru yere varir. */
+/** Girisi kullaniciya sormadan baslatir: rol zaten token'dan gelir, onden bir
+ *  secim ekrani gostermenin karsiligi yok. Yanlis roldeki kullanici giristen
+ *  sonra kendi ana sayfasina gonderilir. */
 export default function RequireRole({ roller, children }: RequireRoleProps) {
   const { user, yukleniyor } = useAuth();
   const konum = useLocation();
 
   const girisiz = !yukleniyor && !user;
-  // Az once de yonlendirmisiz demek ki giris tutmuyor: tekrar denemek yerine
-  // kullaniciya duran bir sayfa goster (bkz. auth/token.ts).
+  // Az once de yonlendirmisiz: giris tutmuyor demektir, tekrar denemek yerine
+  // duran bir sayfa gosterilir (bkz. auth/token.ts).
   const dongu = girisiz && girisDongusuVarMi();
 
-  // StrictMode gelistirme modunda bu effect'i (temizleme fonksiyonu
-  // olmadigi icin) art arda IKI KEZ calistirir. Korumasiz birakilirsa
-  // /auth/login'e iki ayri istek gider; her istek backend'de FARKLI bir
-  // state/nonce uretip AKIS_COOKIE'yi ustune yazdigindan, hangi yanitin
-  // cerezi en son yazdigi ile taraycinin fiilen hangi yonlendirmeyi takip
-  // ettigi arasinda yaris olusur - Keycloak'tan donen state cerezle
-  // eslesmeyip "Giris dogrulamasi basarisiz" hatasi cikabilir. Ref, ayni
-  // mount icinde girisBaslat'in yalnizca bir kez cagrilmasini garanti eder.
+  // StrictMode bu effect'i iki kez calistirir; korumasiz birakilirsa
+  // /auth/login'e iki istek gider, her biri farkli bir state/nonce uretip akis
+  // cookie'sini ustune yazar ve Keycloak'tan donen state eslesmeyebilir. Ref,
+  // ayni mount icinde tek cagriyi garanti eder.
   const baslatildiRef = useRef(false);
   useEffect(() => {
     if (girisiz && !dongu && !baslatildiRef.current) {
       baslatildiRef.current = true;
-      // "replace": bu yonlendirmeyi kullanici degil biz baslatiyoruz, bu
-      // yuzden gecmise yeni bir durak eklemez - bkz. token.ts::girisBaslat.
-      // Aksi halde geri tusu, kullanicinin nereden geldigine bakmaksizin
-      // hep bu korumali sayfaya (ve oradan yeniden giris zincirine) doner.
+      // "replace": yonlendirmeyi kullanici baslatmadigi icin gecmise durak
+      // eklenmez, yoksa geri tusu hep bu korumali sayfaya donerdi.
       girisBaslat(konum.pathname + konum.search, "replace");
     }
   }, [girisiz, dongu, konum.pathname, konum.search]);

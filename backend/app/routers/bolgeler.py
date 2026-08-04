@@ -118,12 +118,8 @@ def bolge_tamamla(
     bolge_id: uuid.UUID,
     data: BolgeTamamlama,
     user: User = Depends(saha_dahil),
-    # Rol `user.role` KOLONUNDAN degil, token'dan cozulen etkin rolden okunur.
-    # `security.py` bunu acikca yasakliyor: o kolon SQL sorgulari icin tutulan
-    # bir AYNADIR (istek basinda token'dan tazelenir), yetki dayanagi degil.
-    # Burasi projede kuralin delindigi tek yerdi - senkron sayesinde pratikte
-    # dogru sonuc veriyordu, ama bayat bir kolonun yetki karari vermesine bir
-    # adim kalmisti. `saha_dahil` de ayni baglama dayandigi icin ek sorgu yok.
+    # Rol token'dan cozulen etkin rolden okunur, `user.role` kolonundan degil
+    # (bkz. security.py). `saha_dahil` ayni baglama dayandigi icin ek sorgu yok.
     baglam: OturumBaglami = Depends(get_context),
     db: Session = Depends(get_db),
 ):

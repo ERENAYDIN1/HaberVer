@@ -34,14 +34,12 @@ interface IhbarVarlikSorguSonucu {
   error: Error | null;
 }
 
-/** Durum sekmelerinde kullanilan kisa etiketler - REPORT_STATUS_LABELS'daki
- *  tam metinler ("Bekleyen İhbar" gibi) sekme genisligini esitsiz yapiyordu;
- *  burada uc sekme de ayni (kisa) uzunlukta olacak sekilde ayrica tanimlanir. */
-/** Sabit bos liste: "Onaylandı" sekmesinde (ve veri gelmeden once) ust bilesene
- *  bildirilen deger her render'da yeni bir dizi olmasin - aksi halde
- *  onIhbarlarChange efekti kendini surekli tetikler. */
+/** Sabit bos liste: ust bilesene bildirilen deger her render'da yeni bir dizi
+ *  olmasin, yoksa `onIhbarlarChange` efekti kendini surekli tetikler. */
 const BOS_IHBARLAR: ReportFeature[] = [];
 
+/** Sekme etiketleri kisa tutulur; REPORT_STATUS_LABELS'daki tam metinler
+ *  sekme genisligini esitsiz yapiyor. */
 const SEKME_ETIKETLERI: Record<IhbarGorunumu, string> = {
   onaylandi: "Onaylandı",
   tamir: "Tamir Edildi",
@@ -49,39 +47,29 @@ const SEKME_ETIKETLERI: Record<IhbarGorunumu, string> = {
   reddedildi: "Reddedildi",
 };
 
-/** Ham ihbar kaydi listeleyen sekmeler mi, ihbardan olusan VARLIKLARI mi
- *  listeliyoruz: "Onaylandı" ve "Tamir Edildi" varlik listeler (biri hala bakim
- *  bekleyenleri, digeri kapanmis olanlari), digerleri ham ihbari. */
+/** Bu sekme ham ihbar mi yoksa ihbardan olusan varliklari mi listeler:
+ *  "Onaylandı" ve "Tamir Edildi" varlik, digerleri ham ihbar gosterir. */
 function varlikSekmesi(g: IhbarGorunumu): boolean {
   return g === "onaylandi" || g === "tamir";
 }
 
 interface IhbarPaneliProps {
-  /** Alt sekme (Onaylandı/Tamir Edildi/Bekleyen/Reddedildi) - App.tsx'te
-   *  tutulur; boylece bir bakim bildirimine tiklaninca dogrudan "onaylandi"ya
-   *  gecilebilir ve harita, o an ham ihbar noktalarini mi yoksa onaylanmis
-   *  ihbarlardan olusan varliklari mi gosterecegini bilir. */
+  /** Alt sekme; App.tsx'te tutulur ki bildirimden gelen bir kayit dogru
+   *  sekmeyi acabilsin ve harita ne gosterecegini bilsin. */
   durum: IhbarGorunumu;
   onDurumChange: (d: IhbarGorunumu) => void;
-  /** Bir ihbar onaylanip varliga donusunce ana varlik listesini tazelemek icin. */
+  /** Onay yeni bir varlik olusturunca ana listeyi tazelemek icin. */
   onVarlikOlustu?: () => void;
-  /** Yuklenen (ham) ihbarlar degisince ust bilesene bildirir (haritada gostermek icin). */
+  /** Yuklenen ham ihbarlari ust bilesene bildirir (haritada gosterilirler). */
   onIhbarlarChange?: (ihbarlar: ReportFeature[]) => void;
-  /** Bekleyen/Reddedildi sekmelerinde haritada vurgulanacak secili ihbarin id'si. */
   seciliRaporId?: string | null;
   onRaporSec?: (id: string) => void;
-  /** Onaylanmis ihbarlardan olusan varliklar - App.tsx zaten haritada gostermek
-   *  icin bu sorguyu tutuyor, burada tekrar cekmek yerine ayni veri kullanilir. */
+  /** Ihbardan olusan varliklar; App.tsx zaten tuttugu icin tekrar cekilmez. */
   ihbarVarlikSorgu: IhbarVarlikSorguSonucu;
-  /** "Onaylandı" sekmesindeki bir varliga tiklaninca - normal varlik
-   *  secimiyle (harita + detay karti) ayni kanali kullanir. */
   seciliVarlikId?: string | null;
   onVarlikSec: (id: string) => void;
-  /** Saha ekipleri - "Onaylandı" listesindeki bir varligin detayindan da ekibe
-   *  atama/atanan ekibi degistirme yapilabilsin diye (haritadaki isaretcinin
-   *  "Yönet" dugmesiyle ayni yetenek). */
+  /** Saha ekipleri: varlik detayindan ekibe atama yapilabilsin diye. */
   ekipler?: EkipOzet[];
-  /** Detay modalindaki "Konuma Git" - haritayi varligin konumuna ucurur. */
   onVarligaGit?: (asset: AssetFeature) => void;
 }
 
@@ -105,7 +93,7 @@ export default function IhbarPaneli({
   const [duzenlenen, setDuzenlenen] = useState<AssetFeature | null>(null);
   const [detayAsset, setDetayAsset] = useState<AssetFeature | null>(null);
   const seciliVarlikRef = useRef<HTMLLIElement>(null);
-  // "Varlıklar" panelindekiyle ayni yonetim kumesi (bkz. useVarlikYonetimi).
+  // "Varlıklar" panelindekiyle ayni yonetim kumesi.
   const yonetim = useVarlikYonetimi({
     ekipler,
     onDuzenle: setDuzenlenen,
@@ -117,15 +105,9 @@ export default function IhbarPaneli({
   const [islemHatasi, setIslemHatasi] = useState<string | null>(null);
   const [islemdeki, setIslemdeki] = useState<string | null>(null);
 
-  // Ihbar listesi ARTIK react-query uzerinden: App'teki harita/lejant sorgulari
-  // ("reports" onekli) ile AYNI onbellegi paylasir. Eskiden bu panel kendi
-  // fetch'ini yapiyordu; onay/ret sonrasi yalnizca panel tazeleniyor, harita ve
-  // lejant sayaclari eski veriyle kaliyordu (alt filtreyi kapat-ac etmek de
-  // ise yaramiyordu, cunku onbellekteki veri hala eskiydi).
-  //
-  // "Onaylandı"/"Tamir Edildi" alt-sekmelerinde ham ihbar kaydi degil, olusan
-  // varliklar gosterilir (ihbarVarlikSorgu ust bilesenden gelir) - o sekmelerde
-  // ihbar cekmeye gerek yok.
+  // Ihbar listesi react-query uzerinden gider: App'teki harita/lejant
+  // sorgulariyla ayni onbellegi paylasir, boylece onay/ret sonrasi hepsi
+  // birlikte tazelenir. Varlik listeleyen sekmelerde ihbar cekilmez.
   const varlikListesi = varlikSekmesi(durum);
   const ihbarSorgu = useQuery({
     queryKey: ["reports", durum],
@@ -146,9 +128,8 @@ export default function IhbarPaneli({
     onIhbarlarChangeRef.current?.(ihbarlar);
   }, [ihbarlar]);
 
-  /** Onay/ret sonrasi: ihbarin durumu degistigi icin UC durum sorgusu da
-   *  ("beklemede"/"onaylandi"/"reddedildi") gecersiz kilinir - panel, harita
-   *  noktalari, lejant sayaclari ve bildirim zili tek hamlede tazelenir. */
+  /** Onay/ret sonrasi uc durum sorgusu birden gecersiz kilinir: panel, harita,
+   *  lejant sayaclari ve bildirim zili tek hamlede tazelenir. */
   const ihbarlariTazele = () =>
     queryClient.invalidateQueries({ queryKey: ["reports"] });
 
@@ -180,9 +161,8 @@ export default function IhbarPaneli({
     }
   };
 
-  /** Reddi geri al: ihbar tekrar "beklemede"ye doner. Alt sekme burada
-   *  degistirilmez - App'teki secim/durum senkronu (secili ihbar hangi
-   *  durumdaysa o sekme acilir) kaydi Bekleyen listesinde secili gosterir. */
+  /** Reddi geri al: ihbar "beklemede"ye doner. Alt sekme burada degistirilmez;
+   *  App'teki secim senkronu kaydi Bekleyen listesinde secili gosterir. */
   const geriAl = async (id: string) => {
     setIslemdeki(id);
     setIslemHatasi(null);
@@ -196,7 +176,7 @@ export default function IhbarPaneli({
     }
   };
 
-  // Onay satirin kendi icinde (SilOnayi) alinir - bkz. AssetList'teki ikizi.
+  // Silme onayi satirin kendi icinde (SilOnayi) alinir.
   const sil = (asset: AssetFeature) => {
     deleteAsset.mutate(asset.properties.id, {
       onSuccess: () => {
@@ -205,21 +185,13 @@ export default function IhbarPaneli({
     });
   };
 
-  // Haritadan secim yapildiginda "Onaylandı" listesindeki karti gorunur
-  // alana kaydir (kayitli varliklardaki ayni davranisin esdegeri).
+  // Haritadan secim yapilinca listedeki karti gorunur alana kaydir.
   useEffect(() => {
     seciliVarlikRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [seciliVarlikId]);
+  }, [seciliVarlikId, seciliRaporId]);
 
-  // Ayni davranis "Bekleyen"/"Reddedildi" listesindeki secili ihbar icin.
-  useEffect(() => {
-    seciliVarlikRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [seciliRaporId]);
-
-  // Ihbardan olusan varliklar iki AYRI sekmeye bolunur: hala bakim bekleyenler
-  // ("Onaylandı" = acik is) ve tamir edilmis olanlar ("Tamir Edildi" = kapanmis
-  // is, otomatik silme kuyrugunda). Eskiden ikisi tek listede alt alta
-  // duruyordu; haritada da tek renk pin olduklari icin karisiyorlardi.
+  // Ihbardan olusan varliklar iki sekmeye bolunur: hala bakim bekleyenler
+  // ("Onaylandı") ve tamir edilmis olanlar ("Tamir Edildi").
   const onayliVarliklar = ihbarVarlikSorgu.data?.features ?? [];
   const gosterilenVarliklar = onayliVarliklar.filter((a) =>
     durum === "tamir"
@@ -227,7 +199,7 @@ export default function IhbarPaneli({
       : a.properties.status === "bakim_lazim"
   );
 
-  // Iki bolumde de ayni VarlikSatiri kurulumu kullanildigindan tek yerde uret.
+  // Iki bolum de ayni VarlikSatiri kurulumunu kullanir.
   const varlikSatiriRender = (asset: AssetFeature) => {
     const id = asset.properties.id;
     const secili = id === seciliVarlikId;
@@ -251,9 +223,8 @@ export default function IhbarPaneli({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Alt sekmeler - dordu de esit genislikte (grid) ve kisa etiketlerle
-          (SEKME_ETIKETLERI) gorunur; tam etiket (ornek "Bekleyen İhbar")
-          satirlarda/rozetlerde hala kullanilir. */}
+      {/* Alt sekmeler: esit genislikte ve kisa etiketli; tam etiketler
+          satirlarda/rozetlerde kullanilmaya devam eder. */}
       <div className="grid grid-cols-4 gap-1 border-b border-slate-200 px-4 py-2">
         {IHBAR_GORUNUMLERI.map((d) => (
           <button
@@ -288,8 +259,7 @@ export default function IhbarPaneli({
 
       {varlikListesi ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {/* Tamir edilenler TAMIR_SAKLAMA_GUN sonra otomatik silinir
-              (VarlikSatiri her satirda kalan gunu gosterir). */}
+          {/* Kalan gun her satirda VarlikSatiri tarafindan gosterilir. */}
           {durum === "tamir" && (
             <p className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] text-slate-500">
               Tamir edilen varlıklar {TAMIR_SAKLAMA_GUN} gün sonra otomatik

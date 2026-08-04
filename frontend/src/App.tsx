@@ -89,50 +89,31 @@ import type {
 import { mesafeEtiketi, poligonSinirKutusu } from "./utils/geo";
 import { ISTANBUL_MERKEZI } from "./utils/istanbulMaskesi";
 
-/** Katman filtresindeki tur rengi icin ortak palet kullanilir (types/asset.ts
- *  `TIP_RENGI`); durum renkleri asagida.
- *
- *  Haritada her iki durumdaki varlik da TUR (grup) rengiyle cizilir - tek bir
- *  "iyi rengi" ya da "bakim rengi" YOK. Bu yuzden iki swatch de grup
- *  renklerinden dilimlenir (`IYI_SWATCH_RENKLERI`); `renk` yalnizca kenarlik
- *  icin durur. "Bakım Lazım"in kenarligi amber cunku haritada durumu anlatan
- *  sey dolgu degil, dairenin cevresindeki amber UYARI HALKASI + "!" rozeti
- *  (MapView "assets-durum" / "assets-rozet") - ayni amber onaylanmis ihbar
- *  pininde de kullanilir, ikisi de acik is.
- *
- *  Onceden "Bakım Lazım" gercekten amber dolgu basiyordu ve o varligin
- *  kategorisi haritada tamamen kayboluyordu; "İyi" ise haritada hicbir
- *  katmanin basmadigi bir yesil (#10b981) gosteriyordu. */
+/** Lejanttaki durum swatch'inin KENARLIK rengi. Haritada her iki durumdaki
+ *  varlik da tur (grup) rengiyle cizildigi icin dolgu buradan gelmez; durumu
+ *  anlatan sey amber uyari halkasi + "!" rozetidir. */
 const VARLIK_DURUM_RENGI: Record<AssetStatus, string> = {
   iyi: "#0f766e",
   bakim_lazim: "#f59e0b",
 };
 
-/** "İyi" swatch'inin dilimleri: "tur rengiyle cizilir" demek icin gruplarin
- *  gercek renkleri (bkz. types/asset.ts `GRUP_RENGI`). */
+/** Durum swatch'inin dilimleri: gruplarin gercek harita renkleri. */
 const IYI_SWATCH_RENKLERI = TIP_GRUPLARI.map((g) => GRUP_RENGI[g]);
 
-/** Acilis (ve "Temizle") degerleri tek yerde: hem useState baslangiclari hem
- *  sifirla() bunlari kullanir, boylece ikisi birbirinden ayrisamaz.
- *
- *  Not: KATMAN/lejant baslangiclari burada DEGIL, `hooks/useKatmanlar.ts`
- *  icindeki `KATMAN_BASLANGIC`'ta - o durumun tamami (state + yazicilar +
- *  sifirlama) tek modulde tutuluyor. */
+/** Acilis (ve "Temizle") degerleri: hem useState baslangiclari hem sifirla()
+ *  buradan okur. Katman/lejant baslangiclari `hooks/useKatmanlar.ts`'te. */
 const BASLANGIC = {
   filtreler: { source: "kayitli" } as AssetFilters,
   sekme: "liste" as Sekme,
   ihbarDurum: "onaylandi" as IhbarGorunumu,
   cizimRengi: "#059669",
-  /** Harita acilis gorunumu (Istanbul merkezi + zoom 11). */
   zoom: 11,
 } as const;
 
-/** Sol paneldeki sekmeler. Ozet/Gecmis/Personel artik burada degil; ust
- *  bardaki butonlardan modal olarak aciliyor (bkz. UstModal). */
+/** Sol paneldeki sekmeler (Ozet/Gecmis/Personel modal olarak acilir). */
 type Sekme = "liste" | "ekle" | "ihbarlar" | "bolgeler" | "guzergahlar";
 
-/** Bolge sekmeleri <-> kaydedilmis kayit turu / harita katmani eslesmesi:
- *  "Bölgeler" alanlari (gorev bolgesi), "Güzergâhlar" cizgileri listeler. */
+/** Bolge sekmesi -> kayit turu + harita katmani eslesmesi. */
 const BOLGE_SEKMELERI = {
   bolgeler: { tip: "alan", katman: "bolgeler" },
   guzergahlar: { tip: "cizgi", katman: "guzergahlar" },
@@ -143,8 +124,7 @@ function bolgeSekmesi(s: Sekme | null): s is keyof typeof BOLGE_SEKMELERI {
   return s === "bolgeler" || s === "guzergahlar";
 }
 
-/** Her sekmenin kendi ikonu ve rengi var, boyle sekmeler tek bakista
- *  birbirinden ayirt edilebiliyor (hepsi ayni emerald tonuydu). */
+/** Sekme basligi/ikonu ve tema rengi. */
 const SEKME_TANIMLARI: Record<
   Sekme,
   { etiket: string; ikon: (p: { className?: string }) => React.ReactElement; renk: string }
@@ -162,39 +142,31 @@ type UstModal = "ozet" | "log" | "personel" | "saha";
 export default function App() {
   const { user, cikisYap } = useAuth();
   const queryClient = useQueryClient();
-  // Varsayilan olarak "kayitli" varliklar gosterilir; ihbardan gelenler ayri
-  // sekmede tutulur ki iki kaynak birbirine karismasin.
+  // Varsayilan "kayitli" varliklar; ihbardan gelenler ayri sekmede.
   const [filters, setFilters] = useState<AssetFilters>(BASLANGIC.filtreler);
   const [sekme, setSekme] = useState<Sekme>(BASLANGIC.sekme);
   const [ustModal, setUstModal] = useState<UstModal | null>(null);
-  /** Her "Temizle"de artar; kendi ic durumu olan yuzen bilesenleri (lejant karti)
-   *  key olarak yeniden kurup baslangica dondurmek icin. */
+  /** Her "Temizle"de artar: kendi ic durumu olan yuzen bilesenler (lejant
+   *  karti) key olarak bunu alip yeniden kurulur. */
   const [sifirlamaNo, setSifirlamaNo] = useState(0);
   const [seciliId, setSeciliId] = useState<string | null>(null);
-  // "İhbarlar" sekmesindeki ihbarlar haritada gosterilir (IhbarPaneli'den yukari
-  // tasinir); secili ihbara tiklaninca harita oraya ucar.
+  // IhbarPaneli'nin yukledigi ihbarlar; haritada da gosterilirler.
   const [ihbarlar, setIhbarlar] = useState<ReportFeature[]>([]);
   const [seciliIhbarId, setSeciliIhbarId] = useState<string | null>(null);
-  // Ihbarlar sekmesinin durum alt-sekmesi (Bekleyen İhbar/Onaylandı/Reddedildi).
-  // Burada tutulur ki bir bakim bildirimine tiklaninca dogrudan "onaylandi"ya
-  // gecilebilsin ve harita, o an ham ihbar noktalarini mi yoksa onaylanmis
-  // ihbarlardan olusan varliklari mi gosterecegini bilsin.
+  // Ihbarlar sekmesinin alt-sekmesi. Burada tutulur ki bildirimden gelen bir
+  // varlik dogru alt-sekmeyi acabilsin.
   const [ihbarDurum, setIhbarDurum] = useState<IhbarGorunumu>(BASLANGIC.ihbarDurum);
   const [duzenlenen, setDuzenlenen] = useState<AssetFeature | null>(null);
   const [koordinat, setKoordinat] = useState<
     { longitude: number; latitude: number } | undefined
   >();
-  // Acilista panel kapali gelir: harita tertemiz gorunur, kullanici sol
-  // kenardan bir sekme secince ilgili panel acilir.
+  // Acilista panel kapali gelir, harita sade gorunur.
   const [panelAcik, setPanelAcik] = useState(false);
   const [aktifStilId, setAktifStilId] = useState<HaritaStilId>(VARSAYILAN_STIL);
-  // Sol kenar cubugu genis (etiketli) mi - header'daki menu dugmesiyle degisir.
+  // Sol kenar cubugu genis (etiketli) mi.
   const [kenarAcik, setKenarAcik] = useState(true);
-  // Harita katmanlarinin gorunurlugu + varlik tur/durum ve ihbar durum
-  // alt-filtreleri. Tamami `useKatmanlar`'da: hem sag-ustteki lejant hem sol
-  // paneldeki acilirlar AYNI state'i yazar (bkz. hook'taki "tek kaynak"
-  // notu). Sekmelerden bagimsizdir - kullanici istedigi kombinasyonu ayni
-  // anda gorebilir.
+  // Katman gorunurlugu + tur/durum alt-filtreleri. Sag-ustteki lejant ile sol
+  // paneldeki acilirlar ayni state'i yazar (bkz. useKatmanlar).
   const {
     katmanlar,
     katmanTurleri,
@@ -212,11 +184,10 @@ export default function App() {
     sifirla: katmanlariSifirla,
   } = useKatmanlar();
 
-  // Panel kapalıyken hiçbir sekme "aktif" sayılmaz (harita sade kalır; ihbar
-  // noktaları gizlenir, boş haritaya tıklama Ekle formuna düşmez).
+  // Panel kapaliyken hicbir sekme aktif sayilmaz.
   const aktifSekme: Sekme | null = panelAcik ? sekme : null;
 
-  // Kutucuğa tıklama: yeni sekme açar, aynı (aktif) kutucuğa tekrar tıklamak paneli kapatır.
+  // Aktif kutucuga tekrar tiklamak paneli kapatir.
   const sekmeSec = (id: Sekme) => {
     if (panelAcik && sekme === id) {
       setPanelAcik(false);
@@ -231,9 +202,8 @@ export default function App() {
     [[number, number], [number, number]] | null
   >(null);
 
-  /** Harita uzerindeki alan secimi: cizim, olcum, secili alanlarin varlik
-   *  sonuclari ve ilce/mahalle sinir secimi. Hepsi ayni `tamamlananAlanlar`
-   *  listesini besledigi icin tek hook'ta duruyor (bkz. useAlanSecimi). */
+  /** Alan secimi: cizim, olcum, secili alanlarin varlik sonuclari ve
+   *  ilce/mahalle sinirlari - hepsi ayni `tamamlananAlanlar` listesini besler. */
   const {
     cizimModu,
     cizimNoktalari,
@@ -273,25 +243,17 @@ export default function App() {
     filters,
     varsayilanRenk: BASLANGIC.cizimRengi,
     ucur: setUcusHedefi,
-    // Yeni bir alan cizilirken varlik secimi birakilir - secili isaretci
-    // cizimin altinda kalmasin.
+    // Cizim baslarken varlik secimi birakilir, isaretci cizimin altinda kalmasin.
     onCizimBasladi: () => setSeciliId(null),
     // Alan bitince sonuclarin listelendigi sekmeye gec.
     onAlanTamamlandi: () => setSekme("liste"),
   });
 
-  // "Temizle": tüm çalışma durumunu (seçimler, panel filtreleri, lejant/katman
-  // seçimleri, çizim/ölçüm, ilçe/mahalle, açık panel ve modal) sitenin ilk
-  // açıldığı hale döndürür ve haritayı İstanbul başlangıç görünümüne (merkez +
-  // zoom 11) geri uçurur. Değerler BASLANGIC'tan okunur; useState başlangıçları
-  // da aynı yerden geldiği için ikisi birbirinden ayrışamaz.
-  //
-  // Bilinçli olarak DOKUNULMAYANLAR: harita altlık stili ve sol kenar çubuğunun
-  // açık/kapalı oluşu - bunlar çalışma durumu değil, kullanıcının görünüm tercihi.
+  // "Temizle": tum calisma durumunu (secimler, filtreler, cizim/olcum,
+  // ilce/mahalle, acik panel ve modal) BASLANGIC degerlerine dondurur ve
+  // haritayi acilis gorunumune ucurur. Harita stili ve kenar cubugunun
+  // acik/kapali olusu bilincli olarak korunur: bunlar gorunum tercihi.
   const sifirla = () => {
-    // Lejant kartinin KENDI ic durumu (acik/kapali, hangi alt-filtre grubu
-    // genisletilmis) App'te degil bilesenin icinde tutulur; bu sayaci key olarak
-    // vererek bileseni yeniden kurar, o durumu da baslangica dondururuz.
     setSifirlamaNo((n) => n + 1);
     setFilters(BASLANGIC.filtreler);
     setSekme(BASLANGIC.sekme);
@@ -305,22 +267,17 @@ export default function App() {
     setIhbarDurum(BASLANGIC.ihbarDurum);
     setDuzenlenen(null);
     setKoordinat(undefined);
-    // Lejant (sag-ustteki katman filtresi): hicbir ANA katman secili kalmaz -
-    // varlik, ihbar ve saha ekibi isaretcileri haritadan kalkar. ALT filtrelerin
-    // ise hepsi isaretli birakilir (ihbar durumlari dahil): kullanici bir katmani
-    // tekrar actiginda elenmis degil, toplam sayiyi/tam listeyi gorur.
+    // Ana katmanlar kapanir, alt filtreler isaretli kalir: katman tekrar
+    // acildiginda kullanici elenmis degil tam listeyi gorur.
     katmanlariSifirla();
-    // Cizim/olcum kapanir, secili alanlar ve ilce/mahalle secimi sifirlanir.
     alanSeciminiSifirla();
     setBolgeTaslagi(null);
     setDetayBolge(null);
     setSeciliBolgeId(null);
-    // Yarim kalan sekil duzenlemesi de birakilir (kaydedilmemis taslak gider).
+    // Yarim kalan sekil duzenlemesi birakilir (kaydedilmemis taslak gider).
     sekilDuzenlemeKapat();
-    // Kaydedilmis bolgeler SILINMEZ (kalici kullanici verisi): BOS_KATMANLAR
-    // zaten "Bölgeler" katmanini kapatiyor, yani haritadan kalkiyorlar.
-    // Tek tek yapilmis gizlemeler ise varsayilana (hepsi gorunur) doner -
-    // katman tekrar acildiginda kullanici eksik bir liste gormesin.
+    // Kaydedilmis bolgeler silinmez, yalnizca katmanlari kapanir. Tek tek
+    // yapilmis gizlemeler varsayilana (hepsi gorunur) doner.
     setGizliBolgeler(new Set());
     setUcusHedefi({
       anahtar: crypto.randomUUID(),
@@ -331,30 +288,23 @@ export default function App() {
   };
 
   // --- Kaydedilmis bolgeler (gorev bolgeleri / guzergahlar) ---------------
-  // Haritada GIZLENMIS olanlarin id'leri; varsayilan olarak hepsi gorunur.
+  // Haritada gizlenmis olanlarin id'leri; varsayilan olarak hepsi gorunur.
   const [gizliBolgeler, setGizliBolgeler] = useState<Set<string>>(new Set());
-  // Kaydedilmek uzere olan cizim (alan/cizgi); modal bunun uzerinden acilir.
+  // Kaydedilmek uzere olan cizim; kaydetme modali bunun uzerinden acilir.
   const [bolgeTaslagi, setBolgeTaslagi] = useState<BolgeTaslagi | null>(null);
-  // Haritada tiklanan bolgenin detay karti (varlik/ihbar detayiyla ayni desen).
   const [detayBolge, setDetayBolge] = useState<Bolge | null>(null);
-  // Secili bolge/guzergah: haritada belirgin kenarlikla, panelde vurgulu kartla
-  // gosterilir (varlik/ihbar secimiyle ayni dil).
   const [seciliBolgeId, setSeciliBolgeId] = useState<string | null>(null);
-  // Sekli haritada duzenlenen kayit: taslak geometri burada tutulur, "Kaydet"e
-  // basilana kadar backend'e yazilmaz.
-
 
   const sorgu = useAssets(filters);
-  // Tamamlanmis alanlar varsa liste/ozet, birlestirilmis (tekilleştirilmiş) sonucu gosterir.
+  // Alan secimi varsa liste/ozet birlestirilmis sonucu gosterir.
   const gosterilen = birlesikAlanSonucu ?? sorgu.data;
 
-  // Yalniz admin/calisan ihbarlari yonetir; saha_calisani ihbar gormez.
+  // Yalniz admin/calisan ihbarlari yonetir.
   const personel = user?.role === "admin" || user?.role === "calisan";
 
-  /** Ihbarlar ve GORUNUM turetmesi (onaylanmis bir ihbar, varligi tamir
-   *  edilince "Tamir Edildi"ye duser). Secim callback'lerinden ONCE cagrilir:
-   *  onlar `onayliEsleme`yi dogrudan okuyabilsin diye - eskiden sira tersti ve
-   *  deger bir ref uzerinden tasiniyordu. */
+  /** Ihbarlar + gorunum turetmesi (onaylanmis ihbar, varligi tamir edilince
+   *  "Tamir Edildi"ye duser). Secim callback'leri `onayliEsleme`yi okudugu
+   *  icin onlardan once cagrilir. */
   const {
     ihbarVarlikSorgu,
     bekleyenIhbarSorgu,
@@ -363,41 +313,27 @@ export default function App() {
     gorunumler: ihbarGorunumleri,
   } = useIhbarGorunumleri({ personel });
 
-  // NOT: Ihbar secimi sekme degisiminde BILINCLI olarak temizlenmez - haritada
-  // secilen bir isaretci, panel kapaliyken de (ve baska bir sekmede de) secili
-  // kalir; kullanici paneli sonradan actiginda hangisini sectigini gorur.
-  // Haritadaki ihbar noktalarinin gorunurlugu zaten sag-ustteki katman
-  // filtresine bagli, sekmeye degil.
+  // Not: ihbar secimi sekme degisiminde bilincli olarak temizlenmez; haritada
+  // secilen isaretci panel kapaliyken de secili kalir.
 
   const haritaTiklandi = useCallback(
     (c: { longitude: number; latitude: number }) => {
-      // Bos alana tiklamak (bir varlik/ihbar/bolge ustune degil) her zaman
-      // secimi temizler - kullanici secili isaretciyi birakip haritayi sade
-      // halde gormek isteyebilir.
+      // Bos alana tiklamak her zaman secimi temizler.
       setSeciliId(null);
       setDetayAsset(null);
       setSeciliIhbarId(null);
       setDetayRapor(null);
       setSeciliBolgeId(null);
-      // Bos harita tiklamasi "Ekle" formunu ARTIK ACMAZ: haritayi gezerken
-      // istemeden forma dusmek rahatsiz ediciydi. Akis tersine cevrildi -
-      // once "Ekle" sekmesi acilir, SONRA haritadan koordinat secilir.
-      // Dolayisiyla koordinat yalnizca form zaten acikken doldurulur.
+      // Koordinat yalnizca "Ekle" formu zaten acikken doldurulur: haritayi
+      // gezerken istemeden forma dusulmesin.
       if (aktifSekme !== "ekle") return;
       setKoordinat(c);
     },
     [aktifSekme]
   );
 
-  // Hem listeden hem haritadan cagrilir; zaten secili olan bir varliga tekrar
-  // tiklamak secimi iptal eder (toggle).
-  //
-  // Secim KAPALI PANELI ACMAZ: haritadan bir isaretci secmek yalnizca onu
-  // isaretler, sol pencere kapali kalir (kullanici isterse sonradan acar ve
-  // secili kaydi vurgulanmis halde bulur). Panel ACIKKEN ise secim panelde de
-  // takip edilir: gerekiyorsa ilgili sekmeye gecilir. "İhbarlar > Onaylandı"
-  // sekmesi zaten kendi varlik listesini (ihbardan olusanlar) gosterdiginden
-  // orada sekme degistirilmez.
+  // Hem listeden hem haritadan cagrilir; secili olana tekrar tiklamak secimi
+  // iptal eder. Secim kapali paneli ACMAZ, ama panel acikken dogru sekmeye gecer.
   const varlikSecildi = useCallback(
     (id: string) => {
       const kapaniyor = seciliId === id;
@@ -407,14 +343,12 @@ export default function App() {
         setSeciliIhbarId(null);
         return;
       }
-      // Ihbardan olusan bir varlik secildiyse KAYNAK IHBAR da birlikte secilir
-      // haritadaki isaretci ham ihbar noktasidir, panel ise ondan olusan
-      // varligi listeler - iki taraf ayni secimi gostermeli.
+      // Ihbardan olusan varlikta kaynak ihbar da secilir: haritadaki isaretci
+      // ham ihbar noktasi, panel ise ondan olusan varliktir.
       setSeciliIhbarId(onayliEsleme.varliktanRapora.get(id) ?? null);
       setDetayRapor(null);
       setSeciliBolgeId(null);
-      // "İhbarlar > Onaylandı" ve "> Tamir Edildi" zaten ihbardan olusan
-      // varliklari listeler; oradayken secim sekmeyi degistirmez.
+      // "Onaylandı"/"Tamir Edildi" zaten ihbar varliklarini listeler.
       const ihbarVarlikSekmesi =
         sekme === "ihbarlar" && (ihbarDurum === "onaylandi" || ihbarDurum === "tamir");
       if (panelAcik && !ihbarVarlikSekmesi) setSekme("liste");
@@ -432,10 +366,7 @@ export default function App() {
         setSeciliId(null);
         return;
       }
-      // Simetrik dal: onaylanmis ihbarin haritadaki noktasina tiklaninca
-      // panelde ("İhbarlar > Onaylandı" listesi varliklardan olusur) hicbir
-      // satir vurgulanmiyordu - "seciliyor ama secilmiyor" gorunumunun sebebi
-      // buydu. Artik ondan olusan varlik da secili sayilir.
+      // varlikSecildi'nin simetrigi: ihbardan olusan varlik da secili sayilir.
       setSeciliId(onayliEsleme.rapordanVarliga.get(id) ?? null);
       setDetayAsset(null);
       setSeciliBolgeId(null);
@@ -445,13 +376,11 @@ export default function App() {
   );
 
   // --- Bildirimler (header zili) ------------------------------------------
-  // Bakim bekleyen varliklar (her iki kaynaktan) - ana listeden bagimsiz sorgu.
+  // Bakim bekleyen varliklar - ana listeden bagimsiz sorgu.
   const bakimSorgu = useAssets({ status: "bakim_lazim" });
 
-  // Canli saha ekibi konumlari + kendilerine dusen aktif gorevler - yalniz
-  // personel icin. Haritada marker + tiklayinca gorev popup'i, ayrica varlik
-  // detayindaki elle atama listesini besler. (EkipGorevleri, EkipOzet'in ust
-  // kumesi oldugundan yalniz konum/yuk isteyen tuketiciler de calisir.)
+  // Canli ekip konumlari + aktif gorevleri. Haritadaki marker'lari, ekip
+  // popup'ini ve varlik detayindaki elle atama listesini besler.
   const ekipSorgu = useQuery({
     queryKey: ["saha", "ekipler"],
     queryFn: ekipGorevleriGetir,
@@ -459,16 +388,14 @@ export default function App() {
     refetchInterval: 20000,
   });
 
-  // Kaydedilmis gorev bolgeleri / guzergahlar - Bölgeler paneli ve haritadaki
-  // kalici katman ayni sorguyu paylasir (panel kapaliyken de haritada durur).
+  // Kaydedilmis bolgeler: panel ve haritadaki kalici katman ayni sorguyu paylasir.
   const bolgeSorgu = useQuery({
     queryKey: ["bolgeler"],
     queryFn: bolgeleriGetir,
     enabled: personel,
   });
-  // Gorev bolgeleri (alan) ve guzergahlar (cizgi) haritada AYRI katmanlardir
-  // (lejantta iki ayri satir, solda iki ayri sekme), bu yuzden gorunur listeler
-  // de ayri hesaplanir; MapView'a yalnizca acik olanlarin birlesimi gider.
+  // Alanlar ve guzergahlar ayri katmanlar oldugu icin gorunur listeleri de
+  // ayri hesaplanir; MapView'a yalnizca acik olanlarin birlesimi gider.
   const [gorunurAlanlar, gorunurGuzergahlar] = useMemo(() => {
     const gorunur = (bolgeSorgu.data ?? []).filter((b) => !gizliBolgeler.has(b.id));
     return [
@@ -481,7 +408,7 @@ export default function App() {
       ...(katmanlar.bolgeler ? gorunurAlanlar : []),
       ...(katmanlar.guzergahlar ? gorunurGuzergahlar : []),
     ];
-    // Iki katman da kapaliysa katmani tamamen kaldir (bos dizi yerine undefined).
+    // Iki katman da kapaliysa undefined don (katman tamamen kalkar).
     return liste.length > 0 || katmanlar.bolgeler || katmanlar.guzergahlar
       ? liste
       : undefined;
@@ -496,9 +423,8 @@ export default function App() {
     });
   }, []);
 
-  // "Tümünü göster/gizle" yalnizca panelin KENDI turunu (alanlar ya da
-  // guzergahlar) etkiler; id'ler panelden gelir, diger turun gorunurlugune
-  // dokunulmaz.
+  // "Tümünü göster/gizle" yalnizca panelin kendi turunu etkiler: id'ler
+  // panelden gelir, diger turun gorunurlugune dokunulmaz.
   const bolgeleriGoster = useCallback((idler: string[]) => {
     setGizliBolgeler((g) => {
       const yeni = new Set(g);
@@ -515,15 +441,14 @@ export default function App() {
     });
   }, []);
 
-  // Kaydedilmis bolge/guzergah secimi - haritadan (alan/cizgi tiklamasi) ya da
-  // paneldeki karttan gelir; varlik/ihbar secimiyle ayni kurallara uyar:
-  // pencereyi ACMAZ, ama pencere acikken dogru sekmeye gecer.
+  // Bolge secimi haritadan ya da panelden gelir; varlik/ihbar secimiyle ayni
+  // kurallara uyar: paneli acmaz, acikken dogru sekmeye gecer.
   const bolgeSecildi = useCallback(
     (id: string) => {
       const kapaniyor = seciliBolgeId === id;
       setSeciliBolgeId(kapaniyor ? null : id);
       if (kapaniyor) return;
-      // Tek secim: bolge secilince varlik/ihbar secimi birakilir.
+      // Tek secim kurali: bolge secilince varlik/ihbar secimi birakilir.
       setSeciliId(null);
       setDetayAsset(null);
       setSeciliIhbarId(null);
@@ -536,15 +461,14 @@ export default function App() {
 
   /** Bir bolgenin tum halkalarini kapsayan sinir kutusuna ucar. */
   const bolgeyeGit = useCallback((bolge: Bolge) => {
-    // "Git" ayni zamanda secim demektir: kayit haritada isaretlenmis kalir.
+    // "Git" ayni zamanda secimdir: kayit haritada isaretli kalir.
     setSeciliBolgeId(bolge.id);
     setUcusHedefi({
       anahtar: crypto.randomUUID(),
       tip: "sinir",
       bounds: poligonSinirKutusu(bolge.noktalar.flat()),
     });
-    // Gizliyse gorunur yap - kullanici "git" dedigi seyi haritada gormeli
-    // (hem kendi turunun katman anahtari hem o kaydin tekil gizlemesi acilir).
+    // Gizliyse gorunur yap: hem turun katmani hem kaydin tekil gizlemesi acilir.
     const katman: KatmanAnahtari = bolge.tip === "cizgi" ? "guzergahlar" : "bolgeler";
     katmaniAc(katman);
     setGizliBolgeler((g) => {
@@ -555,8 +479,7 @@ export default function App() {
     });
   }, []);
 
-  /** Haritadaki etiket uzerinden yeniden adlandirma (paneldeki "Düzenle" ile
-   *  ayni ucu kullanir). Hata MapView'de yakalanir: etiket eski ada doner. */
+  /** Harita etiketi uzerinden yeniden adlandirma; hata MapView'de yakalanir. */
   const bolgeAdiDegistir = useCallback(
     async (id: string, ad: string) => {
       await bolgeGuncelle(id, { ad });
@@ -581,8 +504,7 @@ export default function App() {
   } = useSekilDuzenleme({
     bolgeler: bolgeSorgu.data,
     bolgeyeGit,
-    // Cizim/olcum ile ayni alt paneli ve ayni harita tiklamalarini paylasir;
-    // ikisi ayni anda acik olamaz.
+    // Cizim/olcum ile ayni alt paneli paylasir, ikisi birlikte acilamaz.
     onBaslarken: cizimVeOlcumuKapat,
   });
 
@@ -610,17 +532,10 @@ export default function App() {
 
 
   // --- Harita katman verileri (sag-ustteki KatmanKontrolu'ne bagli) --------
-  // Sekmelerden bagimsiz: kullanici varlik/ihbar/saha ekibi katmanlarini istedigi
-  // kombinasyonda ayni anda haritada gorebilir.
-  //
-  // Varlik katmani (taban): HER ZAMAN mevcut (alan/filtre suzulmus) varlik
-  // listesi. Ihbar sekmesinin/alt-sekmesinin bununla isi yoktur - eskiden
-  // "Onaylandı" alt-sekmesinde taban ihbar kaynagi varliklara donuyor, lejanttaki
-  // varlik sayaclari ihbar sekmesi degistikce oynuyordu.
+  // Sekmelerden bagimsiz: kullanici katmanlari istedigi kombinasyonda gorebilir.
   const varlikKatmanTaban = gosterilen;
-  // Alt-filtre sayaclari: her kirilim, DIGER kirilimin secimi uygulanmis taban
-  // uzerinden sayilir - yani "Bakım Lazım" secili iken tur sayilari yalnizca
-  // bakim bekleyenleri gosterir (rakamlar haritadakiyle tutarli kalir).
+  // Alt-filtre sayaclari her kirilim icin, DIGER kirilimin secimi uygulanmis
+  // taban uzerinden sayilir; boylece rakamlar haritadakiyle tutarli kalir.
   const { varlikTurSayilari, varlikDurumSayilari } = useMemo(() => {
     const turSayilari = Object.fromEntries(
       ASSET_TYPES.map((t) => [t, 0])
@@ -646,9 +561,7 @@ export default function App() {
     };
   }, [varlikKatmanTaban, katmanTurleri, katmanVarlikDurumlari]);
 
-  // Ihbar katmani: secili durumlarin (beklemede/onaylandi/reddedildi) ihbarlari
-  // birlestirilir (id'ye gore tekillestirilir). Panel secim vurgusu, sekmedeki
-  // durumun alt-filtresi otomatik acildigi icin dogal olarak calisir.
+  // Ihbar katmani: secili gorunumlerin ihbarlari id'ye gore tekillestirilir.
   const ihbarKatmanVeri = useMemo<ReportFeatureCollection>(() => {
     const gorulen = new Map<string, ReportFeature>();
     for (const gorunum of IHBAR_GORUNUMLERI) {
@@ -658,14 +571,9 @@ export default function App() {
     return { type: "FeatureCollection", features: [...gorulen.values()] };
   }, [katmanDurumlari, ihbarGorunumleri]);
 
-  // Haritadan secilen ihbar hangi durumdaysa panelin alt sekmesi de ona gecer -
-  // yoksa kullanici paneli sonradan actiginda (orn. "Reddedildi" sekmesi acik
-  // kalmisken bekleyen bir ihbari secmisse) secili kayit listede hic gorunmez.
-  // "onaylandi"/"tamir" de dahil: o iki sekme ham ihbarlari degil onlardan
-  // olusan varliklari listeler, ama secim artik ikisini birlikte isaretledigi
-  // icin (bkz. onayliEslemeRef) dogru satir orada da vurgulanir. Ham durum
-  // degil GORUNUM kullanilir, yoksa tamir edilmis bir ihbar secilince panel
-  // "Onaylandı" sekmesine gecip bos kaliyordu.
+  // Secilen ihbarin gorunumu panelin alt sekmesini de belirler, yoksa secili
+  // kayit acilan listede gorunmezdi. Ham durum degil gorunum kullanilir:
+  // tamir edilmis bir ihbar "Onaylandı" sekmesinde bulunmaz.
   useEffect(() => {
     if (!seciliIhbarId) return;
     const secili = ihbarKatmanVeri.features.find(
@@ -685,9 +593,8 @@ export default function App() {
   // Sag-ustteki katman kontrolune gecen alt-filtre tanimlari (etiket/renk/sayi).
   const varlikAltFiltre = useMemo<AltGrup[]>(
     () => [
-      // Turler grup grup listelenir (13 tur duz bir liste olarak okunamiyor);
-      // her grubun basligi ayni zamanda renk aciklamasidir - grup icindeki tum
-      // turler haritada ayni renkle, farkli glifle cizilir.
+      // Turler grup grup listelenir: grup basligi ayni zamanda renk
+      // aciklamasidir, gruptaki turler ayni renkle farkli glifle cizilir.
       ...TIP_GRUPLARI.map((grup) => ({
         baslik: TIP_GRUP_ETIKETLERI[grup],
         onSec: katmanTuruDegistir,
@@ -706,9 +613,7 @@ export default function App() {
           anahtar: s,
           etiket: ASSET_STATUS_LABELS[s],
           renk: VARLIK_DURUM_RENGI[s],
-          // Her iki durumda da dolgu TUR (grup) rengidir, o yuzden iki swatch
-          // de grup renklerinden dilimlenir; farki kenarlik rengi tasir
-          // (bakim = amber uyari halkasinin rengi).
+          // Dolgu her iki durumda da tur rengi; farki kenarlik tasir.
           renkler: IYI_SWATCH_RENKLERI,
           secili: katmanVarlikDurumlari[s],
           sayi: varlikDurumSayilari[s],
@@ -740,30 +645,12 @@ export default function App() {
     [katmanDurumlari, ihbarGorunumleri, katmanDurumuDegistir]
   );
 
-  // --- Sol paneldeki SEKME -> sag-ustteki lejant (ana katmanlar) senkronu ---
-  //
-  // Not: bu senkron yalnizca ANA katmanlari (ve ihbar durum alt-filtresini)
-  // kapsar. Varlik tur/durum alt-filtresi artik senkronlanmaz, cunku panel ile
-  // lejant ayni state'i paylasir (bkz. `katmanTurleri`).
-  //
-  // Kural: lejant YALNIZCA panelde o an secili olani isaretler - Varliklar
-  // sekmesinde sadece varlik katmani, İhbarlar sekmesinde sadece ihbar katmani
-  // (ve o an bakilan durum). Kutucuklar her secimde YENIDEN KURULUR: alakasiz
-  // olanlar acik birakilmaz. Eskiden efekt yalnizca "ac" yaptigi icin uc ihbar
-  // alt-sekmesi gezilince harita her durumu birden gosteriyor, panelle celisiyordu.
-  //
-  // Uzerine ekleme kullanicinin: efektler yalnizca secim degisiminde calistigindan
-  // lejanttan istenen katman/kutucuk (orn. İhbarlar'dayken Varliklar, ya da
-  // Reddedildi'de iken Onaylandı) elle acilabilir ve bir sonraki sekme/filtre
-  // degisimine kadar oyle kalir.
-  //
-  // "Saha Ekipleri" katmanina hicbir zaman dokunulmaz - o tamamen kullanicinin.
-
-  // Aktif sekme -> hangi ana katman acik olacak + ihbar durum alt-filtresi.
-  // `aktifSekme` (yani "panel ACIKKEN secili sekme") kullanilir: panel kapaliyken
-  // lejant kullanicinin biraktigi gibi kalir. "Temizle" de paneli kapattigi icin
-  // bu efekt onun bosalttigi katmanlari geri acmaz; kullanici bir sekme secince
-  // lejant yeniden o sekmeye gore kurulur.
+  // --- Sekme -> lejant (ana katmanlar) senkronu ---------------------------
+  // Lejant, panelde o an secili olani isaretler; her sekme degisiminde
+  // yeniden kurulur ki alakasiz katmanlar acik kalmasin. Yalnizca ANA
+  // katmanlari kapsar - tur/durum alt-filtresi zaten ortak state'tir.
+  // Kullanici arada lejanttan baska bir katman acarsa efekt bir sonraki sekme
+  // degisimine kadar ona dokunmaz. "Saha Ekipleri" hic degistirilmez.
   useEffect(() => {
     if (aktifSekme === "ihbarlar") {
       yalnizVarlikVeyaIhbar("ihbarlar");
@@ -771,26 +658,19 @@ export default function App() {
     } else if (aktifSekme === "liste") {
       yalnizVarlikVeyaIhbar("varliklar");
     } else if (bolgeSekmesi(aktifSekme)) {
-      // Bölgeler/Güzergâhlar paneli acilinca YALNIZCA o sekmenin katmani acilir -
-      // aksi halde panelde listelenenler haritada gorunmuyor gibi durur. Diger
-      // katmanlara dokunulmaz: bunlar bir "genel bakis" degil, varliklarin
-      // ustune binen baglam katmanlaridir.
+      // Yalnizca o sekmenin katmani acilir; bolgeler varliklarin ustune binen
+      // baglam katmanlaridir, digerlerine dokunulmaz.
       katmaniAc(BOLGE_SEKMELERI[aktifSekme].katman);
     }
     // "ekle" sekmesinde ve panel kapaliyken katmanlara dokunulmaz.
   }, [aktifSekme, ihbarDurum, yalnizVarlikVeyaIhbar, ihbarDurumunuSec, katmaniAc]);
 
-  // (Panel tur/durum filtresi -> lejant senkronu KALDIRILDI: ikisi artik ayni
-  //  state'i paylasiyor, senkronlanacak iki taraf yok. Bkz. `katmanTurleri`.)
-
-  // Bir bildirime tiklaninca ilgili varliga git: kaynagina gore dogru sekmeye
-  // gec (kayitli -> Varliklar, ihbardan gelen -> İhbarlar > Onaylandı), sec
-  // ve haritayi oraya ucur.
+  // Bildirimden varliga git: kaynagina gore dogru sekmeyi acar, secer, ucar.
   const bildirimVarligaGit = useCallback((asset: AssetFeature) => {
     alanlariTemizle();
     if (asset.properties.source === "ihbar") {
       setSekme("ihbarlar");
-      // Tamir edilmis varlik artik "Onaylandı"da degil "Tamir Edildi"de listelenir.
+      // Tamir edilmis varlik "Onaylandı"da degil "Tamir Edildi"de listelenir.
       setIhbarDurum(asset.properties.status === "iyi" ? "tamir" : "onaylandi");
     } else {
       setSekme("liste");
@@ -808,7 +688,7 @@ export default function App() {
     });
   }, [alanlariTemizle]);
 
-  // Bir ihbar bildirimine tiklaninca İhbarlar sekmesini ac, ihbari sec, ucur.
+  // Bildirimden ihbara git.
   const bildirimIhbaraGit = useCallback((report: ReportFeature) => {
     setSekme("ihbarlar");
     setPanelAcik(true);
@@ -946,18 +826,15 @@ export default function App() {
     { id: "temizle", etiket: "Temizle", ikon: IconRefresh, onClick: sifirla },
   ];
 
-  // Secili varlik (haritadaki popup'in "Detayları Gör" dugmesi icin) - o an
-  // haritada gosterilen varlik koleksiyonundan aranir.
+  // Secili varlik: o an haritada gosterilen koleksiyondan aranir.
   const seciliVarlik = useMemo<AssetFeature | null>(
     () => gosterilen?.features.find((f) => f.properties.id === seciliId) ?? null,
     [gosterilen, seciliId]
   );
   const [detayAsset, setDetayAsset] = useState<AssetFeature | null>(null);
 
-  // Secili ihbar (detay modali icin) - once panelin yukledigi ihbarlarda, yoksa
-  // haritadaki ihbar katmani verisinde aranir; boylece ihbar noktasi hangi sekmede
-  // gorunuyorsa gorunsun detay acilabilir (katman filtresiyle Varliklar sekmesinde
-  // de ihbar noktalari gorulebiliyor).
+  // Secili ihbar: once panelin yukledigi listede, yoksa harita katmaninda
+  // aranir; boylece hangi sekmede gorunurse gorunsun detayi acilabilir.
   const seciliRapor = useMemo<ReportFeature | null>(() => {
     if (!seciliIhbarId) return null;
     return (
@@ -968,11 +845,8 @@ export default function App() {
   }, [ihbarlar, ihbarKatmanVeri, seciliIhbarId]);
   const [detayRapor, setDetayRapor] = useState<ReportFeature | null>(null);
 
-  /** Onaylanmis ihbardaki "Varlığı Yönet": ihbardan olusan varligin detay
-   *  modalini acar - ekibe atama/atanan ekibi degistirme, tamir, duzenleme ve
-   *  silme orada. Hem haritadaki ihbar popup'i hem ihbar detay modali bunu
-   *  cagirir (tek islem, tek ad). Varlik bulunamazsa (orn. sonradan silinmisse)
-   *  ihbar detayina duser. */
+  /** "Varlığı Yönet": ihbardan olusan varligin detay modalini acar. Hem harita
+   *  popup'i hem ihbar detayi bunu cagirir; varlik yoksa ihbar detayina duser. */
   const ihbarVarligiYonet = useCallback(
     (raporId: string) => {
       const varlikId = onayliEsleme.rapordanVarliga.get(raporId);
@@ -980,7 +854,7 @@ export default function App() {
         (f) => f.properties.id === varlikId
       );
       if (varlik) {
-        // Iki modal ust uste binmesin: ihbar detayindan gelindiyse o kapanir.
+        // Iki modal ust uste binmesin.
         setDetayRapor(null);
         setDetayAsset(varlik);
       } else setDetayRapor(seciliRapor);
@@ -988,11 +862,9 @@ export default function App() {
     [ihbarVarlikSorgu.data, seciliRapor]
   );
 
-  /** Detay modalindeki "Konuma Git": haritayi varligin konumuna ucurur.
-   *  BILINCLI olarak `seciliId`'ye dokunmaz - secim efekti (MapView) yalnizca
-   *  varlik o an haritadaki koleksiyonda VARSA uctugu icin, "Ihbar Edilen"
-   *  sekmesi kapaliyken ihbardan dogan bir varlikta sessizce hicbir sey
-   *  olmuyordu. Ucus artik koleksiyondan bagimsiz, tek ve acik bir yol. */
+  /** "Konuma Git": haritayi varligin konumuna ucurur. `seciliId`'ye bilincli
+   *  olarak dokunmaz - MapView'in secim ucusu varlik o an haritadaki
+   *  koleksiyonda yoksa calismazdi, bu yol koleksiyondan bagimsizdir. */
   const varligaGit = useCallback((asset: AssetFeature) => {
     setUcusHedefi({
       anahtar: crypto.randomUUID(),
@@ -1002,14 +874,9 @@ export default function App() {
     });
   }, []);
 
-  /** Haritadaki ekip popup'inda bir is satirina tiklanmasi: o varligin detay
-   *  modali acilir - "Tamir Edildi", ekibe (yeniden) atama, duzenleme ve silme
-   *  hepsi orada (bkz. AssetDetayModal). Varlik ekrandaki listelerde olmayabilir
-   *  (baska sekme/filtre acik olabilir) ve durumu taze olmali, bu yuzden her
-   *  zaman API'den cekilir. Varlik silinmisse (tamir sonrasi otomatik silme)
-   *  kullaniciya sebebi soylenir.
-   *  Harita OYNATILMAZ: modali acmak bir gezinme degildir; konuma gitmek
-   *  isteyen kullanici modaldaki "Konuma Git" dugmesini kullanir. */
+  /** Ekip popup'indaki bir ise tiklaninca varligin detay modalini acar. Varlik
+   *  acik listelerde olmayabilir ve durumu taze olmali, bu yuzden her zaman
+   *  API'den cekilir. Harita oynatilmaz: modal acmak bir gezinme degildir. */
   const ekipGoreviAcildi = useCallback(async (assetId: string) => {
     try {
       const varlik = await getAsset(assetId);
@@ -1021,9 +888,8 @@ export default function App() {
     }
   }, []);
 
-  /** Reddedilmis ihbar popup'undaki "Reddi Geri Al". Secim BIRAKILMAZ: ihbar
-   *  "beklemede"ye dondugu icin alt-sekme senkronu (yukaridaki efekt) paneli
-   *  Bekleyen'e alir ve kullanici kaydi orada secili bulur. */
+  /** "Reddi Geri Al". Secim birakilmaz: ihbar "beklemede"ye dondugu icin
+   *  alt-sekme senkronu paneli Bekleyen'e alir, kayit orada secili kalir. */
   const ihbarGeriAl = useCallback(
     async (raporId: string) => {
       try {
@@ -1042,7 +908,7 @@ export default function App() {
       {/* Ust bar (uygulama header'i) */}
       <header className="z-20 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
         <div className="flex items-center gap-3">
-          {/* Sol kenar cubugunu genislet/daralt (referanstaki hamburger). */}
+          {/* Sol kenar cubugunu genislet/daralt */}
           <button
             onClick={() => setKenarAcik((v) => !v)}
             aria-label="Menüyü aç/kapat"
@@ -1100,10 +966,8 @@ export default function App() {
                 : "Ölç"}
           </button>
 
-          {/* Alan secim kontrolu - detaylar alt ortadaki arac panelinde.
-              Alan(lar) secilmisken yanina bir "cikis" dugmesi eklenir: ana
-              dugme yeni bir alan cizmeye baslatir, cikis ise secimi bitirip
-              alanlari haritadan kaldirir. */}
+          {/* Alan secim kontrolu. Alan secilmisken yanindaki "cikis" dugmesi
+              secimi bitirir; ana dugme yeni bir alan cizmeye baslar. */}
           <span className="flex items-center">
           <button
             onClick={cizimModu ? alanSecimiIptal : alanSecimiBaslat}
@@ -1162,8 +1026,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Alt-ortadaki arac paneli tek olmali: sekil duzenlenirken cizim/olcum
-          paneli yerine sekil paneli gorunur (ikisi ayni anda acilmaz). */}
+      {/* Alt-ortada tek panel durur: sekil duzenlenirken cizim/olcum paneli
+          yerine sekil paneli gorunur. */}
       {sekilDuzenleme ? (
         <BolgeSekilPaneli
           duzenleme={sekilDuzenleme}
@@ -1205,12 +1069,10 @@ export default function App() {
       />
       )}
 
-      {/* Govde: tam ekran harita + uzerine binen sol kenar cubugu ve yuzen paneller.
-          Kenar cubugu akisin disindadir (bkz. Kenarcubugu): akista olsaydi
-          acilip kapanmasi harita kapsayicisini yeniden boyutlandirip goruntuyu
-          yana kaydiriyordu. Genisligi `--kenar` olarak yayilir; harita
-          uzerindeki sol hizali her sey (yuzen panel, MapLibre olcek kontrolu)
-          bu degiskene gore kaydirilir. */}
+      {/* Govde: tam ekran harita + uzerine binen kenar cubugu ve yuzen paneller.
+          Cubuk akisin disindadir, yoksa acilip kapanmasi haritayi yeniden
+          boyutlandirirdi; genisligi `--kenar` degiskeniyle yayilir ve sola
+          hizali her sey ona gore kayar. */}
       <div
         className="relative min-h-0 flex-1"
         style={
@@ -1245,16 +1107,12 @@ export default function App() {
           ucusHedefi={ucusHedefi}
           onGorunumDegisti={setHaritaGorunumu}
           onVarlikDetay={() => setDetayAsset(seciliVarlik)}
-          // Haritadaki isaretci uzerinden dogrudan duzenleme (yalniz personel);
-          // silme/tamir/ekibe yonlendirme detay modalinin icinde.
+          // Yalniz personel: silme/tamir/atama detay modalinin icinde.
           onVarlikDuzenle={personel ? () => setDuzenlenen(seciliVarlik) : undefined}
           onIhbarDetay={() => setDetayRapor(seciliRapor)}
-          // Onaylanan ihbarin isaretcisinden dogrudan varlik yonetimi (ekibe
-          // atama vb.), reddedilen ihbarinkinden reddi geri alma - yalniz personel.
           onIhbarVarlikYonet={personel ? ihbarVarligiYonet : undefined}
           onIhbarGeriAl={personel ? ihbarGeriAl : undefined}
           ekipler={katmanlar.ekipler ? ekipSorgu.data : undefined}
-          // Ekip popup'indaki bir ise tiklaninca o varligin detay/islem modali.
           onEkipGorevSec={personel ? ekipGoreviAcildi : undefined}
           bolgeler={haritaBolgeleri}
           seciliBolgeId={seciliBolgeId}
@@ -1266,16 +1124,14 @@ export default function App() {
             const bolge = bolgeSorgu.data?.find((b) => b.id === id);
             if (bolge) sekilDuzenlemeBaslat(bolge);
           }}
-          // Ad, panele girmeye gerek kalmadan haritadaki etiket uzerinden de
-          // degistirilebilir (kalem / cift tiklama) - yalniz personel.
+          // Ad haritadaki etiket uzerinden de degistirilebilir (yalniz personel).
           onBolgeAdDegis={personel ? bolgeAdiDegistir : undefined}
           sekilDuzenleme={sekilDuzenleme}
           onSekilDegis={sekilDegisti}
           bolgeTiklanabilir={!(panelAcik && sekme === "ekle")}
         />
 
-        {/* Sag-ustteki lejant + katman filtresi: varlik/ihbar/saha ekibi
-            katmanlarini bagimsizca acip kapatir (genel bakis). */}
+        {/* Sag-ustteki lejant + katman filtresi. */}
         <KatmanKontrolu
           key={sifirlamaNo}
           gorunur={katmanlar}
@@ -1287,9 +1143,8 @@ export default function App() {
 
         <MapStilKontrolu aktifId={aktifStilId} onSec={setAktifStilId} />
 
-        {/* Aktif sekmenin yuzen paneli - sol kenar cubugunun hemen sagindan
-            acilir. Cubuk artik haritanin uzerine bindigi icin sol bosluk
-            `--kenar` uzerinden verilir ve cubukla ayni surede kayar. */}
+        {/* Aktif sekmenin yuzen paneli: kenar cubugunun sagindan acilir,
+            sol bosluk `--kenar` uzerinden verilir. */}
         {panelAcik && (
           <div className="absolute bottom-4 top-4 z-20 flex w-[360px] max-w-[calc(100vw_-_var(--kenar)_-_2rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur-sm transition-[left] duration-200 ease-out" style={{ left: "calc(var(--kenar) + 1rem)" }}>
             <div
@@ -1323,8 +1178,8 @@ export default function App() {
             <div className="flex min-h-0 flex-1 flex-col">
               {sekme === "liste" && (
                 <AssetList
-                  // Haritayla AYNI koleksiyon: liste, lejant sayaclari ve
-                  // isaretciler tek filtre state'inden turedigi icin ayrisamaz.
+                  // Haritayla ayni koleksiyon: liste, sayaclar ve isaretciler
+                  // tek filtre state'inden turer.
                   data={varlikKatmanVeri}
                   isLoading={sorgu.isLoading}
                   isError={sorgu.isError}
@@ -1361,9 +1216,8 @@ export default function App() {
                   durum={ihbarDurum}
                   onDurumChange={setIhbarDurum}
                   onVarlikOlustu={() => {
-                    // Onay yeni bir "bakim lazim" varlik olusturur ve onu en
-                    // yakin uygun ekibe otomatik atar: hem varlik listeleri hem
-                    // saha ekibi yuk/gorev sorgulari tazelenmeli.
+                    // Onay yeni bir varlik olusturup ekibe atar; iki sorgu da
+                    // tazelenmeli.
                     queryClient.invalidateQueries({ queryKey: ["assets"] });
                     queryClient.invalidateQueries({ queryKey: ["saha"] });
                   }}
@@ -1402,9 +1256,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* Varlik/ihbar detayi artik sol-altta yer kaplayan ayri bir kart yerine
-          tek, ortalanmis bir modalde gosterilir - haritadaki popup'taki
-          "Detaylari Gor" ve listedeki "Detay" butonu ayni modali acar. */}
+      {/* Varlik detayi: harita popup'indaki "Detayları Gör" ile listedeki
+          "Detay" ayni modali acar. */}
       <AssetDetayModal
         asset={detayAsset}
         onKapat={() => setDetayAsset(null)}
@@ -1413,8 +1266,7 @@ export default function App() {
         onAtandi={() =>
           queryClient.invalidateQueries({ queryKey: ["saha", "ekipler"] })
         }
-        // Detay modali haritadaki popup'tan da acildigi icin duzenleme/silme
-        // buradan yapilabilir: iki modal ust uste binmesin diye detay kapanir.
+        // Iki modal ust uste binmesin diye duzenlemeye gecerken detay kapanir.
         onDuzenle={
           personel
             ? (asset) => {
@@ -1433,8 +1285,6 @@ export default function App() {
         report={detayRapor}
         onKapat={() => setDetayRapor(null)}
         islemYetkisi={personel}
-        // Onaylanmis ihbarda "Varlığı Yönet": haritadaki popup'in ayni adli
-        // dugmesiyle tek islem - ihbar detayindan varlik yonetimine gecer.
         onVarligiYonet={personel ? ihbarVarligiYonet : undefined}
         onIslemBitti={() => {
           setDetayRapor(null);
@@ -1451,8 +1301,7 @@ export default function App() {
         onKapat={() => setDetayBolge(null)}
         onGit={bolgeyeGit}
         onSekilDuzenle={personel ? sekilDuzenlemeBaslat : undefined}
-        // Ekibe aktarma ve silme de haritadaki popup -> Detay yolundan
-        // yapilabilsin (paneldeki kartla ayni islemler).
+        // Ekibe aktarma/silme paneldeki kartla ayni islemler.
         ekipler={personel ? ekipSorgu.data : undefined}
         yonetebilir={personel}
         onDegisti={() => queryClient.invalidateQueries({ queryKey: ["bolgeler"] })}
@@ -1469,15 +1318,12 @@ export default function App() {
         onKapat={() => setBolgeTaslagi(null)}
         onKaydedildi={() => {
           queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
-          // Kaydedilen cizim artik "Bölgeler" katmaninda duruyor; ayni sekil bir
-          // de gecici cizim listesinde kalirsa iki kez gorunur (ve alan ozetinde
-          // iki kez sayilir), o yuzden kaynagindan dusurulur.
+          // Sekil artik "Bölgeler" katmaninda; gecici cizim listesinde de
+          // kalirsa iki kez gorunur ve alan ozetinde iki kez sayilirdi.
           const kaynak = bolgeTaslagi?.kaynak;
           if (kaynak?.tip === "alan") alanKaldir(kaynak.id);
           else if (kaynak?.tip === "olcum") olcumTemizle();
-          // Yeni kayit haritada gorunur olsun ve kullanici listeyi gorsun -
-          // kaydin turune gore dogru sekme acilir (alan -> Bölgeler,
-          // cizgi -> Güzergâhlar).
+          // Yeni kaydin turune gore dogru sekme acilir.
           setSekme(bolgeTaslagi?.tip === "cizgi" ? "guzergahlar" : "bolgeler");
           setPanelAcik(true);
         }}
@@ -1505,7 +1351,7 @@ export default function App() {
         icerikSinifi=""
         onKapat={() => setUstModal(null)}
       >
-        {/* Ozet de listeyle/haritayla ayni suzulmus kumeyi ozetler. */}
+        {/* Ozet, liste/harita ile ayni suzulmus kumeyi kullanir. */}
         <Dashboard
           data={varlikKatmanVeri}
           alanSecimiAktif={tamamlananAlanlar.length > 0}
@@ -1545,9 +1391,8 @@ export default function App() {
   );
 }
 
-/** Sekme renklerine gore tam Tailwind sinif adlari - Tailwind'in JIT
- *  taramasi dinamik `border-${renk}-600` gibi sablon dizgilerini
- *  yakalayamadigindan siniflar burada tam metin olarak tutulur. */
+/** Sekme renklerinin Tailwind siniflari. Tailwind JIT sablon dizgilerini
+ *  (`border-${renk}-600`) taramadigi icin tam metin yazilir. */
 const SEKME_RENK_SINIFLARI: Record<
   string,
   { aktif: string; ikonAktif: string; ikonPasif: string }

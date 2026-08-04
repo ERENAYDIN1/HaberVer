@@ -1,21 +1,13 @@
 import type { AssetType } from "../types/asset";
 
 /**
- * Her varlik/ihbar turunun cizgi glifi, HAM SVG icerigi olarak - TEK kaynak.
+ * Her turun cizgi glifi, ham SVG icerigi olarak - tek kaynak. Ayni path'ler
+ * hem React ikonu olarak (icons.tsx `TIP_IKONU`) hem de haritada raster'a
+ * cevrilen isaretci goruntusu olarak kullanilir; bu yuzden veri bir React
+ * dosyasinda degil burada durur.
  *
- * Ayni path'ler iki farkli dunyada kullaniliyor:
- *   - React bileseni olarak (liste rozetleri, lejant, bildirimler) —
- *     components/icons.tsx bunlardan `TIP_IKONU`'yu uretir,
- *   - ham SVG dizgisi olarak, MapView'da raster'a cevrilip harita
- *     isaretcisinin ortasina basilan `tip-<tur>` / `pin-glif-<tur>` goruntusu.
- *
- * 3 turde iki ayri kopya tutulabiliyordu (MapView kendi kopyasini tasiyordu),
- * 13 turde tutulamaz. Veri bilincli olarak bir React dosyasinda DEGIL burada:
- * MapView'in ihtiyaci duz dizgi, bilesen degil.
- *
- * Glifler 24x24 viewBox'ta, yalnizca KONTUR (dolgu yok) olacak sekilde
- * cizilmeli - harita isaretcisinde beyaz cizgi olarak basiliyorlar. Turun
- * rengi grubundan gelir, bkz. types/asset.ts `GRUP_RENGI`.
+ * Glifler 24x24 viewBox'ta ve yalnizca kontur (dolgusuz) cizilmelidir -
+ * haritada beyaz cizgi olarak basilirlar. Renk turun grubundan gelir.
  */
 export const TIP_GLIF_PATH: Record<AssetType, string> = {
   // --- Yeşil alan ve park ---

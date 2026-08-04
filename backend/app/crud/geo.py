@@ -1,11 +1,8 @@
 """Cizilen alanlarin PostGIS ile olculmesi.
 
-Neden backend: frontend'deki alan hesabi (utils/geo.ts, shoelace) TEK bir
-poligon icin yeterli, ama birden fazla alanin CAKISMASINI cozemez - iki alan
-ust uste bindiginde ikisinin alani ayri ayri toplanir ve ayni yer iki kez
-sayilir. Poligon kesisimi/farki elle yazilmasi zor (ve kutuphane eklemeyi
-gerektiren) bir islem; PostGIS zaten projede var ve sonucu jeodezik olarak
-tam veriyor.
+Frontend'deki shoelace hesabi tek poligon icin yeterli ama cakisan alanlarda
+ayni yeri iki kez sayar. Poligon kesisimi/farki elle yazilmasi zor bir islem;
+PostGIS zaten projede var ve sonucu jeodezik olarak veriyor.
 """
 
 import json
@@ -15,9 +12,8 @@ from sqlalchemy.orm import Session
 
 
 def halkalar_geojson(noktalar: list[list[tuple[float, float]]]) -> str:
-    """Halka listesini GeoJSON MultiPolygon metnine cevirir - her halka kendi
-    parcasi olur (frontend'deki halkalarGeometrisi ile ayni anlam). Halkalar
-    kapali degilse kapatilir."""
+    """Halka listesini GeoJSON MultiPolygon metnine cevirir; her halka kendi
+    parcasi olur ve kapali degilse kapatilir."""
     parcalar = []
     for halka in noktalar:
         koordinatlar = [[float(x), float(y)] for x, y in halka]
@@ -36,13 +32,10 @@ def cizgi_geojson(noktalar: list[tuple[float, float]]) -> str:
     )
 
 
-# Her alanin kendi buyuklugu + KENDISINDEN ONCEKI alanlarla cakismayan (net)
-# kismi. Net parcalar tanim geregi ayrik oldugundan toplamlari alanlarin
-# birlesim (union) alanina esittir - toplam ayrica hesaplanmaz.
-#
-# ST_MakeValid + ST_CollectionExtract(...,3): kullanici kendi kendini kesen bir
-# poligon cizdiginde (ayni yerin uzerinden ikinci kez gecince) geometri gecersiz
-# olur; bu ikili onu gecerli bir MULTIPOLYGON'a normalize eder.
+# Her alanin kendi buyuklugu + kendisinden oncekilerle cakismayan (net) kismi.
+# Net parcalar ayrik oldugundan toplamlari birlesim alanina esittir, toplam
+# ayrica hesaplanmaz. ST_MakeValid + ST_CollectionExtract, kullanicinin kendini
+# kesen poligonunu gecerli bir MULTIPOLYGON'a normalize eder.
 _ALAN_OZETI_SQL = text(
     """
     WITH girdi AS (
@@ -84,11 +77,10 @@ def alan_olculeri(
     return [(float(r.kendi_m2 or 0.0), float(r.net_m2 or 0.0)) for r in rows]
 
 
-# Bir alani her yonunde `mesafe` metre genisletir (negatifse daraltir).
-# `::geography` uzerinden tamponlanir ki mesafe gercek metre olsun (4326
-# derecelerinde degil). quad_segs=2 bilincli: kose yuvarlamalari 8 yerine 2
-# segmentle uretilir, boylece elle duzenlenebilir sayida kose kalir - bu sekil
-# haritada koseleri surukleyerek duzenlenmeye devam edecek.
+# Alani her yonunde `mesafe` metre genisletir (negatifse daraltir).
+# `::geography` uzerinden tamponlanir ki mesafe gercek metre olsun. quad_segs=2
+# bilincli: kose yuvarlamasi 8 yerine 2 segmentle uretilir, boylece sonuc elle
+# duzenlenebilir sayida kosede kalir.
 _TAMPON_SQL = text(
     """
     WITH g AS (
@@ -128,8 +120,8 @@ def alan_tamponu(
     parcalar = (
         geo["coordinates"] if geo["type"] == "MultiPolygon" else [geo["coordinates"]]
     )
-    # Yalnizca dis halkalar: kaydedilen bolgeler kullanicinin cizdigi basit
-    # alanlardir, delikli poligon uretilmez (bkz. crud/bolge.py::_noktalar).
+    # Yalnizca dis halkalar: kaydedilen bolgeler basit alanlardir, delikli
+    # poligon uretilmez.
     halkalar = [
         [(float(x), float(y)) for x, y in parca[0]] for parca in parcalar if parca
     ]

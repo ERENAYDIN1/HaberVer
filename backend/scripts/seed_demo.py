@@ -1,18 +1,15 @@
-"""Gelistirme/demo verisi tohumlar - MIGRATION ZINCIRININ DISINDADIR.
+"""Gelistirme/demo verisi tohumlar; migration zincirinin disindadir.
 
-Neden migration degil: migration'lar semanin surum gecmisidir, demo veri degil.
-Bu dosya alembic tarafindan hic bilinmez, dolayisiyla `alembic upgrade head`
-uretimde calistiginda demo veri FIZIKSEL OLARAK devrede olmaz - yanlis/unutulmus
-bir ortam degiskeni riski yoktur. Ayrica demo veriyi degistirmek icin yeni bir
-migration yazmak gerekmez, bu dosyayi duzenleyip tekrar calistirmak yeter.
+Migration'lar semanin surum gecmisidir, demo veri degil. Bu dosya alembic
+tarafindan bilinmedigi icin `alembic upgrade head` uretimde demo veri
+olusturamaz; ayrica veriyi degistirmek icin yeni migration yazmak gerekmez.
 
 Kullanim (backend container icinde):
-    python scripts/seed_demo.py            # ekle (idempotent, tekrar calisabilir)
-    python scripts/seed_demo.py --temizle  # once demo veriyi sil, sonra ekle
-    python scripts/seed_demo.py --sil      # yalnizca demo veriyi sil
+    python scripts/seed_demo.py            # ekle (idempotent)
+    python scripts/seed_demo.py --temizle  # once sil, sonra ekle
+    python scripts/seed_demo.py --sil      # yalnizca sil
 
-Tohumlanan hesaplarin parolalari bu dosyada aciktir - bu bilincli bir tercihtir
-ve bu verinin ASLA uretime gitmemesi gerektiginin bir baska sebebidir.
+Hesap parolalari bu dosyada aciktir; bu verinin uretime gitmemesi gerekir.
 """
 import argparse
 import sys
@@ -28,8 +25,7 @@ from app import keycloak  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 
 # --- Demo hesaplar: (email, ad, rol, parola, lon, lat) -----------------------
-# Saha ekiplerinin konumu, otomatik yonlendirmenin (mesafe + yaka kisiti) elle
-# denenebilmesi icin bilincli olarak iki yakaya dagitildi.
+# Ekipler iki yakaya dagitildi ki mesafe + yaka kisiti elle denenebilsin.
 KULLANICILAR = [
     ("sahaekibi1@greenasset.com", "Saha Ekibi 1 (Kadıköy)", "saha_calisani",
      "saha1234", 29.0275, 40.9902),
@@ -51,8 +47,8 @@ BAKIM_VARLIKLARI = [
     ("Kadıköy Moda Parkı Sulama Hattı", "sulama", 29.0265, 40.9885),
     ("Beşiktaş Sahil Sulama Vanası", "sulama", 29.0060, 41.0435),
     ("Bakırköy Botanik Sulama Sistemi", "sulama", 28.8710, 40.9800),
-    # Genisletilmis tur sozlugunden ornekler (haritadaki grup renkleri +
-    # glifler tek bakista ayirt edilebilsin diye her gruptan en az bir tane).
+    # Her tur grubundan en az bir ornek: harita renkleri/glifleri gozle
+    # dogrulanabilsin.
     ("Karaköy Kemeraltı Rögar Kapağı", "rogar", 28.9755, 41.0230),
     ("Üsküdar Sahil Yolu Çukuru", "yol", 29.0155, 41.0265),
     ("Kadıköy Bahariye Bankı B-12", "bank", 29.0285, 40.9905),
@@ -96,8 +92,7 @@ IYI_VARLIKLAR = [
 ]
 
 # --- Bekleyen vatandas ihbarlari: (ad, tip, lon, lat, aciklama) --------------
-# photo_url NULL kalir: API'den gonderilen ihbarlarda fotograf zorunludur ama
-# tohumlanan kayitlar icin diskte bir dosya yok.
+# photo_url NULL kalir: API'de fotograf zorunlu ama seed icin diskte dosya yok.
 IHBARLAR = [
     ("Kadıköy'de kurumuş ağaç", "agac", 29.0240, 40.9880,
      "Ağaç tamamen kurumuş, düşme tehlikesi var."),
@@ -115,8 +110,7 @@ IHBARLAR = [
      "Ağaç son fırtınadan sonra yana yattı, park halindeki araçlara doğru eğik."),
     ("Pendik Sahil'de kırık aydınlatma direği", "direk", 29.2350, 40.8760,
      "Direğin alt kapağı kopmuş, kabloları açıkta duruyor. Çocuklar için tehlikeli."),
-    # Genisletilmis tur sozlugu: vatandas ihbarlari gercekte cok cesitli olur -
-    # her tur grubundan ornek var, "diger" de dahil.
+    # Her tur grubundan ornek ("diger" dahil): ihbarlar gercekte cesitlidir.
     ("Beyoğlu'nda açık kalmış rögar kapağı", "rogar", 28.9770, 41.0335,
      "Rögar kapağı yerinde değil, çukur açıkta. Gece görünmüyor, çok tehlikeli."),
     ("Mecidiyeköy'de derin asfalt çukuru", "yol", 28.9970, 41.0670,
@@ -152,19 +146,14 @@ TUM_EMAILLER = [k[0] for k in KULLANICILAR]
 
 def _keycloak_hesabi(email: str, ad: str, rol: str, parola: str) -> uuid.UUID:
     """Demo hesabini Keycloak'ta acar (varsa rolunu dogrular) ve id'sini doner.
-
-    Parolalar artik yerel veritabaninda DEGIL Keycloak'ta; bu yuzden seed'in
-    kullanici kismi da oraya yazmak zorunda. Aksi halde tohumlanan hesaplarla
-    giris yapilamazdi."""
+    Parolalar Keycloak'ta tutuldugu icin seed'in oraya yazmasi zorunlu."""
     return uuid.UUID(
         keycloak.kullanici_olustur(email=email, parola=parola, full_name=ad, rol=rol)
     )
 
 
 def sil(db) -> None:
-    """Demo veriyi kaldirir. Sirasi onemli: assignments ve reports, assets ve
-    users'a FK ile bagli (assignments CASCADE, reports.created_asset_id SET NULL
-    olsa da activity_logs kayitlari icin acik silme daha ongorulebilir)."""
+    """Demo veriyi kaldirir. Silme sirasi FK bagimliliklarina gore onemlidir."""
     db.execute(
         sa.text("DELETE FROM reports WHERE name = ANY(:adlar)"),
         {"adlar": TUM_IHBAR_ADLARI},
@@ -186,10 +175,9 @@ def ekle(db) -> None:
     """Demo veriyi ekler. Her kayit NOT EXISTS ile korunur; script tekrar tekrar
     calistirilabilir, kopya olusmaz."""
     for email, ad, rol, parola, lon, lat in KULLANICILAR:
-        # Konumu olan (saha ekibi) ve olmayan (calisan/vatandas) hesaplar icin
-        # ayri INSERT: tek sorguda CASE ile NULL konum uretmek, ayni parametrenin
-        # hem IS NULL kontrolunde hem ST_MakePoint'te gecmesine yol aciyor ve
-        # Postgres parametre tipini cikaramiyor (AmbiguousParameter).
+        # Konumlu ve konumsuz hesaplar icin ayri INSERT: tek sorguda CASE ile
+        # NULL konum uretmek ayni parametreyi hem IS NULL kontrolunde hem
+        # ST_MakePoint'te kullanir ve Postgres tipini cikaramaz.
         keycloak_id = _keycloak_hesabi(email, ad, rol, parola)
         if lon is None:
             sorgu = sa.text(
@@ -220,8 +208,8 @@ def ekle(db) -> None:
                 sa.bindparam("rol", rol, type_=sa.String),
             )
         )
-        # Hesap zaten varsa (tekrar calistirma) baglantiyi yine de tazele:
-        # veritabani silinmeden Keycloak sifirlandiysa id degismis olabilir.
+        # Hesap zaten varsa baglantiyi yine tazele: veritabani silinmeden
+        # Keycloak sifirlandiysa id degismis olabilir.
         db.execute(
             sa.text(
                 "UPDATE users SET keycloak_id = :kid WHERE email = :email"
@@ -309,7 +297,7 @@ def ekle(db) -> None:
             )
         )
 
-    # Saha ekiplerinin kadro yakasini son konumlarindan ata (yaka kisiti icin).
+    # Ekiplerin kadro yakasini son konumlarindan ata.
     db.execute(
         sa.text(
             """

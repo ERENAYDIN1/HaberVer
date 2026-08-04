@@ -22,13 +22,13 @@ export interface HaritaIsaret {
   lat: number;
   renk: string;
   onClick?: () => void;
-  /** Verilirse isaretciye tiklaninca gosterilecek MapLibre popup icerigi (HTML).
-   *  Icerik bizim urettigimiz guvenli HTML olmali (kullanici metni kacislanir). */
+  /** Isaretciye tiklaninca acilacak popup icerigi; kullanici metni kacislanmis
+   *  olmali (bkz. utils/html.ts). */
   popupHtml?: string;
 }
 
-/** Haritada gosterilecek salt-okunur bir alan/cizgi (orn. saha ekibine atanmis
- *  gorev bolgesi). `noktalar` halka listesidir; cizgide tek elemanli. */
+/** Salt-okunur alan/cizgi (orn. ekibe atanmis gorev bolgesi). `noktalar`
+ *  halka listesidir, cizgide tek elemanli. */
 export interface HaritaAlani {
   id: string;
   noktalar: [number, number][][];
@@ -44,8 +44,7 @@ interface KonumSecMapProps {
   /** Secili konum ([lon, lat]) veya henuz secilmediyse null. */
   secili: [number, number] | null;
   onSec: (konum: [number, number]) => void;
-  /** Disaridan (orn. "Konumumu kullan" butonu) harita bu hedefe ucar. `anahtar`
-   *  her degistiginde tetiklenir. */
+  /** Harita bu hedefe ucar; `anahtar` her degistiginde tetiklenir. */
   ucus?: { anahtar: string; merkez: [number, number]; zoom?: number } | null;
   /** Salt-okunur isaretler (orn. saha calisaninin gorev pinleri). */
   isaretler?: HaritaIsaret[];
@@ -57,9 +56,8 @@ interface KonumSecMapProps {
   tiklanabilir?: boolean;
 }
 
-/** Vatandas ihbari icin basit bir harita: tiklanan noktaya (ya da cihaz
- *  konumuna) tek bir isaretci koyar ve koordinati bildirir. Saha ekraninda
- *  ayni harita salt-okunur gorev pinleriyle (isaretler) yeniden kullanilir. */
+/** Basit harita: tiklanan noktaya tek bir isaretci koyup koordinati bildirir.
+ *  Saha ekraninda ayni harita salt-okunur gorev pinleriyle kullanilir. */
 export default function KonumSecMap({
   secili,
   onSec,
@@ -112,9 +110,8 @@ export default function KonumSecMap({
     for (const a of liste) {
       if (!a.etiket) continue;
       guncel.add(a.id);
-      // Guzergah etiketi hattin uzunlugunun ortasina (yani her zaman cizginin
-      // UZERINE) konur ve hemen ustunde durur; nokta ortalamasi kavisli bir
-      // guzergahta hattin hic gecmedigi bir yere duserdi (bkz. geo.ts).
+      // Guzergah etiketi hattin uzunlugunun ortasina konur: nokta ortalamasi
+      // kavisli bir hatta cizginin hic gecmedigi bir yere duserdi.
       const merkez = a.cizgi
         ? cizgiOrtaNoktasi(a.noktalar[0])
         : enBuyukHalkaMerkezi(a.noktalar);
@@ -162,10 +159,8 @@ export default function KonumSecMap({
     map.addControl(new maplibregl.NavigationControl(), "bottom-right");
     haritayaKapaliAttributionEkle(map);
 
-    // Istanbul il sinirini getirip maske katmanini doldurur - bkz.
-    // utils/istanbulMaskesi.ts. Harita yuklenmesi ile sinir istegi
-    // yarisabilecegi icin (hangisi once biterse) her iki taraf da hazir
-    // olduklarinda ayni "uygula" fonksiyonunu cagirir.
+    // Il sinirini getirip maskeyi doldurur. Harita yuklenmesi ile sinir istegi
+    // yarisabildigi icin iki taraf da hazir olunca ayni fonksiyon cagrilir.
     let sinirHalkalari: [number, number][][] | null = null;
     let stilYuklendi = false;
     const maskeUygula = () => {
@@ -178,8 +173,7 @@ export default function KonumSecMap({
       stilYuklendi = true;
       maskeUygula();
 
-      // Salt-okunur alan/cizgi katmani (gorev bolgesi vb.) - maskeden sonra
-      // eklenir ki maske onu ortmesin.
+      // Alan/cizgi katmani maskeden sonra eklenir ki maske onu ortmesin.
       if (!map.getSource(ALAN_SOURCE_ID)) {
         map.addSource(ALAN_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
         map.addLayer({
@@ -208,11 +202,10 @@ export default function KonumSecMap({
         maskeUygula();
       })
       .catch(() => {
-        // Sinir getirilemezse maske sessizce bos kalir, harita yine calisir.
+        // Sinir gelmezse maske bos kalir, harita yine calisir.
       });
 
-    // Cihaz konumu kontrolu (haritadaki buton): tiklanip konum bulundugunda
-    // isaretciyi oraya koyar ve harita oraya merkezlenir.
+    // Haritadaki konum butonu: bulunan konuma isaretci koyar.
     const geolocate = new maplibregl.GeolocateControl({
       positionOptions: { enableHighAccuracy: true },
       trackUserLocation: false,
@@ -227,9 +220,8 @@ export default function KonumSecMap({
       ]);
     });
 
-    // Harita acilirken cihaz konumuna SADECE merkezlen (isaretci koyma); izin
-    // verilmezse Istanbul'da kal. Boylece harita kullanicinin oldugu yerde acilir
-    // ama konum secimini yine kullanici yapar.
+    // Acilista cihaz konumuna yalnizca merkezlenir, isaretci konmaz; izin
+    // verilmezse Istanbul merkezinde kalir.
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) =>
@@ -247,8 +239,7 @@ export default function KonumSecMap({
       ]);
     });
 
-    // Temizlikte kullanilacak koleksiyon burada yakalanir (ref hicbir zaman
-    // yeniden atanmadigindan yerel degisken birebir aynisini gosterir).
+    // Temizlikte kullanilacak koleksiyon burada yakalanir (lint kurali).
     const alanEtiketleri = alanEtiketleriRef.current;
     return () => {
       markerRef.current?.remove();
@@ -268,7 +259,7 @@ export default function KonumSecMap({
     if (map) alanlariUygula(map);
   }, [alanlar]);
 
-  // Salt-okunur isaretler (gorev pinleri) - degisince yeniden kur.
+  // Salt-okunur isaretler (gorev pinleri) degisince yeniden kurulur.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -279,7 +270,7 @@ export default function KonumSecMap({
         .addTo(map);
       if (i.popupHtml) {
         marker.setPopup(
-          // anchor sabit: harita kaydirilirken popup karsi tarafa "atlamasin".
+          // Sabit anchor: harita kaydirilirken popup karsi tarafa atlamasin.
           new maplibregl.Popup({
             offset: 24,
             closeButton: true,
@@ -300,7 +291,7 @@ export default function KonumSecMap({
     });
   }, [isaretler]);
 
-  // Kullanicinin kendi konumu - ayirt edici mavi nokta.
+  // Kullanicinin kendi konumu: ayirt edici mavi nokta.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -341,7 +332,7 @@ export default function KonumSecMap({
     }
   }, [secili]);
 
-  // Disaridan gelen ucus hedefine (orn. form butonu) haritayi ucur.
+  // Disaridan gelen ucus hedefine git.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ucus) return;

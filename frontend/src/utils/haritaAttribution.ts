@@ -1,19 +1,12 @@
 import maplibregl from "maplibre-gl";
 
-/** Haritaya kompakt (kucuk yuvarlak "i") bir attribution kontrolu ekler ve
- *  baslangicta KAPALI kalmasini saglar.
+/** Haritaya kompakt ("i" dugmesi) attribution kontrolu ekler ve acilista
+ *  kapali kalmasini saglar.
  *
- *  maplibre-gl'nin kendi `compact: true` secenegi tek basina yetmiyor:
- *  kontrol eklendiginde attribution metni henuz BOS oldugundan hicbir sey
- *  yapilmiyor; sonra tile/stil kaynaklari yuklenip metin ILK KEZ dolunca
- *  (bos -> dolu gecisi) `_updateCompact` kontrolu OTOMATIK olarak "acik"
- *  (maplibregl-compact-show sinifi + open ozniteligi) baslatiyor. Bu async
- *  acilma, acilista metnin ekrana yayilmasina yol aciyordu.
- *
- *  Cozum: bir MutationObserver ile bu otomatik acilmayi geri aliyoruz.
- *  Kullanici yuvarlak butona kendisi tiklayana kadar show sinifi her
- *  eklendiginde kaldiriliyor; ilk kullanici etkilesiminden sonra gozlemci
- *  birakiliyor ki panel normal sekilde acilip kapanabilsin. */
+ *  `compact: true` tek basina yetmiyor: kontrol eklendiginde metin bos oldugu
+ *  icin bir sey yapilmiyor, sonra kaynaklar yuklenip metin dolunca maplibre
+ *  paneli kendiliginden aciyor. MutationObserver bu otomatik acilmayi geri
+ *  alir; kullanici dugmeye tiklayinca gozlemci birakilir. */
 export function haritayaKapaliAttributionEkle(map: maplibregl.Map) {
   const kontrol = new maplibregl.AttributionControl({ compact: true });
   map.addControl(kontrol, "bottom-right");
@@ -32,17 +25,14 @@ export function haritayaKapaliAttributionEkle(map: maplibregl.Map) {
   });
   gozlemci.observe(container, { attributes: true, attributeFilter: ["class"] });
 
-  // Kullanici butona tiklayinca (metni gormek isteyince) artik karisma;
-  // tiklama, maplibre'nin toggle mantigini calistirir, biz de gozlemciyi
-  // birakariz. (disconnect, bu tiklamada kuyruga girmis kayitlari da iptal
-  // eder; boylece ayni tiklamada panel tekrar kapanmaz.)
+  // Kullanici actiginda karisilmaz. `disconnect` bu tiklamada kuyruga girmis
+  // kayitlari da iptal eder, yoksa panel ayni tiklamada tekrar kapanirdi.
   container.addEventListener("click", () => {
     kullaniciActi = true;
     gozlemci.disconnect();
   });
 
-  // Ilk render bittiginde de bir kez kapat (gozlemci zaten yakalar ama
-  // garanti olsun).
+  // Ilk render bitince bir kez daha kapat (guvence).
   map.once("idle", () => {
     if (!kullaniciActi) kapat();
   });

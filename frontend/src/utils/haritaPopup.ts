@@ -19,29 +19,21 @@ import type { EkipGorevleri } from "../types/saha";
 import { alanEtiketi, cokHalkaliAlanM2, mesafeEtiketi } from "./geo";
 import { kacis } from "./html";
 
-/** MapLibre popup'lari ve saha ekibi DOM marker'i React degil, duz HTML string
- *  uretilerek kurulur. Bu dosya o uretimi MapView'in harita yasam dongusunden
- *  ayirir: buradaki her sey girdi -> HTML string olan saf fonksiyonlardir,
- *  harita durumuna (ref/effect) hic dokunmaz. */
+/** MapLibre popup'lari ve saha ekibi marker'i React degil duz HTML string ile
+ *  kurulur. Buradaki her sey girdi -> HTML donduren saf fonksiyonlardir. */
 
-/** Varlik ve ihbar popup'lari icin ortak, sabit ve CIFT piksellik genislik.
- *  Ayni genislik iki popup'i birebir esitler (istenen: hepsi "onaylandi"
- *  boyutunda). Ayrica cift sayi olmasi kritik: MapLibre popup'i kesirsiz tam
- *  piksele yuvarlar ama anchor'daki `translate(-50%)` tek genislikte yarim
- *  piksele denk gelip metni bulaniklastiriyordu; cift genislikte -%50 tam
- *  piksele oturur ve yazi keskin kalir. (200 + ~20 padding = 220, cift.) */
+/** Popup'larin ortak genisligi. Cift sayi olmasi onemli: anchor'daki
+ *  `translate(-50%)` tek genislikte yarim piksele denk gelip metni
+ *  bulaniklastiriyor. (200 + ~20 padding = 220) */
 export const POPUP_GENISLIK = "200px";
 
-/** Popup'un alt dugme seridi: `Detay` her zaman; ikinci (dolu) dugme yalnizca
- *  yetkiliyse ve baglama gore degisir - varlikta "Düzenle", onaylanmis ihbarda
- *  "Yönet" (ondan olusan varligin atama modali), reddedilmis ihbarda "Reddi
- *  Geri Al". Iki dugme yan yana esit genislikte durur (bolge popup'iyla ayni
- *  dil). */
+/** Popup'un alt dugme seridi: "Detay" her zaman, ikinci dolu dugme yalnizca
+ *  yetkiliye ve baglama gore (Düzenle / Varlığı Yönet / Reddi Geri Al). */
 interface PopupDugmesi {
-  /** Tiklama dinleyicisinin baglanacagi sinif (MapView bu siniftan yakalar). */
+  /** MapLibre'nin tiklama dinleyicisini bagladigi sinif. */
   sinif: string;
   etiket: string;
-  /** Yikici/geri alici islemler icin ayri vurgu rengi (varsayilan: ana renk). */
+  /** Yikici islemler icin ayri vurgu rengi. */
   renk?: string;
 }
 
@@ -130,14 +122,12 @@ export async function konumSatiriDoldur(
   }
 }
 
-/** Ihbar isaretcisinin popup'i. `yetkili` (personel) ise ihbarin durumuna gore
- *  ikinci bir islem dugmesi cikar - bekleyen ihbarda karar zaten "Detay"daki
- *  modalde verilir, onaylanmis ihbarda ondan olusan varligin yonetimi (ekibe
- *  atama/degistirme), reddedilmis ihbarda reddi geri alma. */
+/** Ihbar popup'i. `yetkili` ise duruma gore ikinci bir islem dugmesi cikar;
+ *  bekleyen ihbarda karar "Detay"daki modalde verilir. */
 export function ihbarPopupIcerigi(report: ReportFeature, yetkili = false): string {
   const { name, type, status, note, photo_url } = report.properties;
-  // Rozet ham durumu degil GORUNUMU anlatir: tamir edilmis bir is "Onaylandı"
-  // yazip acik isle ayni yesili tasimasin (bkz. types/report.ihbarGorunumu).
+  // Rozet ham durumu degil gorunumu anlatir: tamir edilmis bir is "Onaylandı"
+  // yazip acik isle ayni rengi tasimasin.
   const gorunum = report.properties.gorunum ?? status;
   const foto = fotoUrl(photo_url);
   const durumRenk: Record<string, { bg: string; fg: string }> = {
@@ -150,8 +140,7 @@ export function ihbarPopupIcerigi(report: ReportFeature, yetkili = false): strin
 
   let ikinciDugme: PopupDugmesi | null = null;
   if (yetkili && status === "onaylandi") {
-    // Ayni islem ihbar detay modalinde de var; iki yerde AYNI ad kullanilir.
-    // Tamir edilmis kayitta da durur: varlik (silinene kadar) hala yonetilebilir.
+    // Tamir edilmis kayitta da durur: varlik silinene kadar yonetilebilir.
     ikinciDugme = { sinif: "popup-varlik-btn", etiket: "Varlığı Yönet", renk: "#059669" };
   } else if (yetkili && status === "reddedildi") {
     ikinciDugme = { sinif: "popup-geri-al-btn", etiket: "Reddi Geri Al", renk: "#e11d48" };
@@ -183,10 +172,8 @@ export function ihbarPopupIcerigi(report: ReportFeature, yetkili = false): strin
   `;
 }
 
-/** Kaydedilmis bir gorev bolgesi / guzergah popup'i: haritada alanin ya da
- *  cizginin uzerine tiklaninca acilir (alan ve cizgiler de birer isaretci gibi
- *  secilebilir). Icerigi paneldeki kartla ayni bilgiyi verir; alttaki iki
- *  dugmeden biri detay modalini, digeri harita uzerinde sekil duzenlemeyi acar. */
+/** Bolge/guzergah popup'i: alanin ya da cizginin uzerine tiklaninca acilir,
+ *  paneldeki kartla ayni bilgiyi verir. */
 export function bolgePopupIcerigi(bolge: Bolge): string {
   const cizgi = bolge.tip === "cizgi";
   const olcu = cizgi
@@ -235,16 +222,9 @@ export function bolgePopupIcerigi(bolge: Bolge): string {
   `;
 }
 
-/** Saha ekibi simgesi: kasasinda anahtar tasiyan servis araci - hem pin'in
- *  icinde hem ekip popup'inin basliginda ayni cizim kullanilir. Varlik
- *  glifleri (agac/direk/sulama) cizgisel dogal formlar oldugundan arac
- *  silueti onlarla karismaz.
- *
- *  Olcek notu: ikon pin icinde ~18px cizilir. Referans gorseldeki kabin cami /
- *  kapi kolu / capraz IKI anahtar bu boyutta okunmadigi icin detay bilincli
- *  olarak seyreltildi: sade kasa + tek anahtar. Iki renkli okunurluk anahtarin
- *  amber olmasiyla korunur (hem indigo hem "kapasitesi dolu" kirmizi pin
- *  uzerinde kontrasti yeterli). */
+/** Saha ekibi simgesi (kasasinda anahtar tasiyan servis araci); hem pin'de hem
+ *  ekip popup'inin basliginda ayni cizim kullanilir. Ikon ~18px cizildigi icin
+ *  detay bilincli olarak seyrek tutuldu. */
 const EKIP_IKONU =
   `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">` +
   // kasa + kabin
@@ -253,15 +233,9 @@ const EKIP_IKONU =
   // zemin cizgisi (tekerleklerin arasinda kesilir)
   `<path d="M2.2 15.7h2.3M9 15.7h5.6M19.2 15.7h1.6"/>` +
   `<circle cx="6.7" cy="16.9" r="1.9"/><circle cx="16.9" cy="16.9" r="1.9"/>` +
-  // Kasadaki capraz iki anahtar (referans gorseldeki gibi). Her anahtar = sap
-  // cizgisi + iki ucta agzi acik C. Hazir/kapali konturlu bir anahtar ikonu
-  // kucultulerek KULLANILMAZ: bu olcekte ici dolup lekeye doner.
-  //   TASMA HESABI - kasa ic yuzleri: x 3.05-12.55, y 6.95-15.7 (duvar
-  //   cizgisinin yarisi 0.85 dusulmus hali). Anahtar cizgisi 1.1 kalinlikta,
-  //   agiz yaricapi 1.0 -> bir agzin dis yaricapi 1.55. Agiz merkezleri
-  //   (5.1,12.8) (10.5,9.0) (5.1,9.0) (10.5,12.8) secildi; en uc noktalar
-  //   x 3.55-12.05, y 7.45-14.35 yani her kenarda >=0.5 birim bosluk kalir.
-  //   Merkezleri oynatirken bu 1.55'lik payi hesaba kat.
+  // Kasadaki capraz iki anahtar: sap cizgisi + iki ucta agzi acik C. Agizlarin
+  // dis yaricapi 1.55 birim; merkezleri oynatirken kasa ic yuzlerine (x
+  // 3.05-12.55, y 6.95-15.7) bu payi birakmak gerekir.
   `<g stroke="#fcd34d" stroke-width="1.1">` +
   // sol alt <-> sag ust
   `<path d="M5.92 12.22 9.68 9.58"/>` +
@@ -273,16 +247,13 @@ const EKIP_IKONU =
   `<path d="M11.5 12.8A1 1 0 1 0 10.84 13.74"/>` +
   `</g></svg>`;
 
-/** Bir saha ekibi DOM marker'inin icerigini (damla pin + yuk rozeti + gizli ad
- *  etiketi) kurar/gunceller. Ayni element hem olusturmada hem guncellemede
- *  kullanilir; stiller `index.css`'teki `.ekip-marker*` siniflarinda (etiket
- *  mutlak konumlu -> isaretcinin kapladigi yer sabit). Tam ad uzerine gelince
- *  belirir, gorevler markera tiklaninca acilir. */
+/** Ekip marker'inin icerigini (pin + yuk rozeti + ad etiketi) kurar/gunceller.
+ *  Ayni element hem olusturmada hem guncellemede kullanilir; stiller
+ *  index.css'teki `.ekip-marker*` siniflarinda. */
 export function ekipMarkerGuncelle(el: HTMLElement, e: EkipGorevleri): void {
   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
   const kisaAd = (e.full_name || e.email).replace(/\s*\(.*\)\s*$/, "");
-  // classList: MapLibre'nin element'e ekledigi `maplibregl-marker` sinifi
-  // korunmali (className atamasi onu silerdi).
+  // className atamasi MapLibre'nin kendi `maplibregl-marker` sinifini silerdi.
   el.classList.add("ekip-marker");
   el.classList.toggle("ekip-marker--dolu", dolu);
   el.innerHTML = `
@@ -294,8 +265,7 @@ export function ekipMarkerGuncelle(el: HTMLElement, e: EkipGorevleri): void {
   el.title = `${kisaAd} - detay için tıklayın`;
 }
 
-/** ISO tarih -> cok kisa goreli sure ("3 sa", "2 gün"). Ekip popup'indaki
- *  "Son Tamir Edilenler" satirlari dar oldugu icin uzun metin sigmiyor. */
+/** ISO tarih -> cok kisa goreli sure ("3 sa", "2 gün"); popup satirlari dar. */
 function kisaSure(iso: string | null): string {
   if (!iso) return "";
   const sn = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -305,10 +275,8 @@ function kisaSure(iso: string | null): string {
   return `${Math.floor(sn / 86400)} gün`;
 }
 
-/** Bir saha ekibi marker'ina tiklaninca acilan popup: tam ad + yuk + son
- *  gorulme + o an ustundeki aktif gorevlerin listesi + son tamir ettikleri.
- *  Gorev satirlari tiklanabilir: tiklama MapView'in delege dinleyicisine gider,
- *  o da varligin detay modalini acar (tamir/atama/duzenleme orada). */
+/** Ekip marker'inin popup'i: ad + yuk + son gorulme + aktif gorevler + son
+ *  tamir edilenler. Gorev satirlari tiklanabilir (bkz. `data-gorev-asset`). */
 export function ekipPopupHtml(e: EkipGorevleri): string {
   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
   const vurgu = dolu ? "#dc2626" : "#4f46e5";
@@ -321,17 +289,15 @@ export function ekipPopupHtml(e: EkipGorevleri): string {
         minute: "2-digit",
       })
     : null;
-  // Kapasite, sayidan once gorulsun diye 3 segmentli bir cubukla anlatilir.
+  // Kapasite sayidan once gorulsun diye segmentli bir cubukla gosterilir.
   const segmentler = Array.from({ length: MAKS_AKTIF_GOREV }, (_, i) => {
     const doluSegment = i < e.aktif_gorev;
     return `<span style="flex:1;height:4px;border-radius:9999px;background:${
       doluSegment ? vurgu : "#e2e8f0"
     }"></span>`;
   }).join("");
-  // Her gorev satiri TIKLANABILIR: `data-gorev-asset` MapView'in popup'a
-  // bagladigi delege dinleyici tarafindan yakalanir ve o varligin detay modali
-  // acilir (tamir/atama/duzenleme oradan yapilir). Bu yuzden satirlar <div>
-  // degil <button>.
+  // `data-gorev-asset`, MapView'in popup'a bagladigi delege dinleyici
+  // tarafindan yakalanir ve varligin detay modalini acar; bu yuzden <button>.
   const satirlar = e.gorevler.length
     ? e.gorevler
         .map((g) => {
@@ -356,8 +322,7 @@ export function ekipPopupHtml(e: EkipGorevleri): string {
         .join("")
     : `<div style="padding:6px;border-radius:6px;background:#f8fafc;font-size:11px;color:#94a3b8;text-align:center">Şu an aktif görev yok</div>`;
 
-  // "En son neyi tamir etti" - kisa bir gecmis. Satirlar aktif gorevlerle ayni
-  // sekilde tiklanabilir (varlik silinmediyse detayi acilir).
+  // Kisa gecmis; satirlar aktif gorevlerle ayni sekilde tiklanabilir.
   const tamamlananlar = e.son_tamamlananlar ?? [];
   const tamamlananBolum = tamamlananlar.length
     ? `<div style="font-size:11px;font-weight:600;color:#475569;margin:8px 0 4px">Son Tamir Edilenler</div>` +
@@ -383,21 +348,18 @@ export function ekipPopupHtml(e: EkipGorevleri): string {
       `</div>`
     : "";
   return (
-    // Genislik SABIT ve cift (POPUP_GENISLIK) - digerleriyle ayni sebeple:
-    // icerige gore esneyen bir popup (eskiden min-width/max-width) kesirli
-    // piksel genisligine oturuyor, anchor'daki `translate(-50%)` yarim piksele
-    // denk geliyor ve metin bulaniklasiyordu. YUKSEKLIK tarafi da onemli
-    // (anchor "bottom" -> `translate(...,-100%)`): satir yuksekligi
-    // `.ekip-popup` sinifiyla tam piksele sabitlenir, bkz. index.css.
+    // Genislik sabit ve cift (bkz. POPUP_GENISLIK). Yukseklik de onemli:
+    // anchor "bottom" oldugu icin satir yuksekligi `.ekip-popup` sinifiyla
+    // tam piksele sabitlenir (index.css), yoksa metin bulaniklasiyor.
     `<div style="font-family:system-ui,sans-serif;width:${POPUP_GENISLIK}">` +
-    // Baslik: haritadaki pin'in aynisi + ad + son gorulme
+    // Baslik: haritadaki pin + ad + son gorulme
     `<div style="display:flex;align-items:center;gap:8px">` +
     `<span style="width:30px;height:30px;flex:none;border-radius:9999px;background:${
       dolu ? "linear-gradient(145deg,#fb7185,#dc2626)" : "linear-gradient(145deg,#818cf8,#4338ca)"
     };display:flex;align-items:center;justify-content:center">${EKIP_IKONU}</span>` +
     `<span style="min-width:0">` +
-    // 13px ada 14px'lik ortak satir kutusu dar geliyor (overflow:hidden ile
-    // 'ğ/y' kuyruklari kirpilir), bu satira 16px verilir - yine TAM piksel.
+    // Ortak 14px satir kutusu 13px ada dar geliyor ('ğ/y' kuyruklari
+    // kirpiliyor); bu satira 16px verilir - yine tam piksel.
     `<span style="display:block;line-height:16px;font-weight:600;font-size:13px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${kacis(
       tamAd
     )}</span>` +

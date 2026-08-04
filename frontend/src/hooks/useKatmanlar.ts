@@ -11,20 +11,14 @@ import { IHBAR_GORUNUMLERI, type IhbarGorunumu } from "../types/report";
 
 /** Haritanin katman gorunurlugu ve alt-filtreleri.
  *
- *  **Tek kaynak kurali.** Varlik tur/durum filtresi burada YALNIZCA BIR KEZ
- *  yasar: hem sag-ustteki lejant kutucuklari hem sol paneldeki acilirlar ayni
- *  state'i yazar/okur. Eskiden iki ayri filtre vardi - panel acilirlari BACKEND
- *  SORGUSUNU daraltiyor, lejant ise gelen veriyi suzuyordu - ve tek yonlu
- *  senkron yuzunden panelde bir tur secmek kullanicinin lejant secimini
- *  siliyordu; dahasi daraltilmis sorgu yuzunden lejanttan baska bir tur acmak
- *  haritaya HICBIR SEY eklemiyordu (o kayitlar hic getirilmemisti). Bu iki
- *  yuzeyi tekrar ayirmayin.
+ *  Tek kaynak kurali: tur/durum filtresi burada bir kez yasar, hem lejant
+ *  kutucuklari hem panel acilirlari ayni state'i yazar. Bu iki yuzey tekrar
+ *  ayrilmamali - eskiden panel backend sorgusunu daraltiyordu ve lejanttan
+ *  baska bir tur acmak haritaya hicbir sey eklemiyordu (veri hic gelmemisti).
  *
- *  Iki yazma bicimi vardir ve ikisi de aynidir:
- *    * `*Degistir(anahtar)` - lejant kutucugu: TEKIL kutucugu tersler (coklu secim).
- *    * `panel*Sec(deger)`   - panel acilir: yalnizca o degeri isaretler,
- *                             `null` ("Tüm tipler") hepsini isaretler.
- */
+ *  Iki yazma bicimi:
+ *    * `*Degistir(anahtar)` - lejant: tek kutucugu tersler (coklu secim).
+ *    * `panel*Sec(deger)`   - acilir: yalnizca o degeri, `null` ise hepsini. */
 
 export interface KatmanDurumu {
   katmanlar: Record<KatmanAnahtari, boolean>;
@@ -33,17 +27,14 @@ export interface KatmanDurumu {
   katmanDurumlari: Record<IhbarGorunumu, boolean>;
 }
 
-/** Tum anahtarlari `true` yapan bir kayit uretir - sabitler sozlukten
- *  TURETILSIN diye. Elle yazilan listeler bayatliyor: `katmanTurleri` bir
- *  donem 3 turle (`agac/direk/sulama`) sabitlenmisti ve tur sozlugu 13'e
- *  cikinca 10 tur ilk render'da haritadan dusuyordu. */
+/** Tum anahtarlari `true` yapan kayit. Sabitler elle yazilmak yerine
+ *  sozlukten turetilsin diye: elle yazilan listeler bayatliyor. */
 export function hepsi<K extends string>(anahtarlar: readonly K[]): Record<K, boolean> {
   return Object.fromEntries(anahtarlar.map((a) => [a, true])) as Record<K, boolean>;
 }
 
-/** Alt-filtre kutucuklarini TEKIL bir secime gore kurar: bir secim varsa
- *  yalnizca onu, yoksa hepsini isaretler. Sonuc oncekiyle ayniysa AYNI NESNE
- *  dondurulur - gereksiz render (ve harita katman guncellemesi) olmasin. */
+/** Kutucuklari tekil bir secime gore kurar: secim varsa yalnizca onu, yoksa
+ *  hepsini. Sonuc degismediyse ayni nesne doner (gereksiz render olmasin). */
 export function yalnizca<K extends string>(
   anahtarlar: readonly K[],
   secili: K | undefined | null
@@ -58,10 +49,8 @@ export function yalnizca<K extends string>(
 
 /** Acilis durumu. `katmanTurleri` sozlukten turetilir (bkz. `hepsi`). */
 export const KATMAN_BASLANGIC: KatmanDurumu = {
-  /** Varsayilan olarak varliklar + ihbarlar + saha ekipleri gorunur; kayitli
-   *  bolgeler/guzergahlar gizli (kullanici lejanttan veya Bolgeler sekmesinden
-   *  acar). Panel acilista KAPALI oldugu icin (`panelAcik=false` -> `aktifSekme`
-   *  null) sekme->katman efekti bu secimi ezmez. */
+  /** Varliklar + ihbarlar + ekipler gorunur; bolgeler/guzergahlar gizli
+   *  (kullanici lejanttan ya da Bölgeler sekmesinden acar). */
   katmanlar: {
     varliklar: true,
     ihbarlar: true,
@@ -70,11 +59,9 @@ export const KATMAN_BASLANGIC: KatmanDurumu = {
     ekipler: true,
   },
   katmanTurleri: hepsi(ASSET_TYPES),
-  /** Acilista yalnizca "Bakim Lazim" isaretli: ilk bakista is bekleyen
-   *  varliklar gorunur, saglam envanter haritayi doldurmaz. */
+  /** Acilista yalnizca "Bakım Lazım": saglam envanter haritayi doldurmasin. */
   katmanVarlikDurumlari: { iyi: false, bakim_lazim: true },
-  /** Ihbarlarda da ayni mantik: acilista onaylanmis (yani ise donusmus)
-   *  ihbarlar isaretli gelir. */
+  /** Ayni mantik: acilista ise donusmus (onaylanmis) ihbarlar isaretli. */
   katmanDurumlari: {
     beklemede: false,
     onaylandi: true,
@@ -83,9 +70,8 @@ export const KATMAN_BASLANGIC: KatmanDurumu = {
   },
 };
 
-/** "Temizle" sonrasi lejant: hicbir ANA katman secili degil, yani harita bombos
- *  kalir. Acilistaki `KATMAN_BASLANGIC.katmanlar`'dan bilincli olarak farklidir:
- *  Temizle "her seyi kaldir" demektir, "varsayilana don" degil. */
+/** "Temizle" sonrasi: hicbir ana katman secili degil. Acilistan bilincli
+ *  olarak farkli - Temizle "her seyi kaldir" demek, "varsayilana don" degil. */
 const BOS_KATMANLAR: Record<KatmanAnahtari, boolean> = {
   varliklar: false,
   ihbarlar: false,
@@ -127,13 +113,12 @@ export function useKatmanlar() {
   }, []);
 
   // --- Sekme -> katman senkronu icin gereken hedefli yazicilar ---
-  /** Bir ana katmani acar (zaten acikken AYNI nesneyi birakir). */
+  /** Bir ana katmani acar; zaten acikken ayni nesneyi birakir. */
   const katmaniAc = useCallback((anahtar: KatmanAnahtari) => {
     setKatmanlar((k) => (k[anahtar] ? k : { ...k, [anahtar]: true }));
   }, []);
-  /** Yalnizca varlik ya da yalnizca ihbar katmanini acik birakir (sekme
-   *  senkronu): lejant her secimde YENIDEN KURULUR, alakasiz katman acik
-   *  kalmaz - yoksa panel ile harita celisir. */
+  /** Yalnizca varlik ya da yalnizca ihbar katmanini acik birakir; alakasiz
+   *  katman acik kalirsa panel ile harita celisir. */
   const yalnizVarlikVeyaIhbar = useCallback((hangisi: "varliklar" | "ihbarlar") => {
     setKatmanlar((k) => {
       const varliklar = hangisi === "varliklar";
@@ -146,9 +131,8 @@ export function useKatmanlar() {
     setKatmanDurumlari(yalnizca(IHBAR_GORUNUMLERI, durum));
   }, []);
 
-  /** "Temizle": ANA katmanlar bosalir, ALT filtrelerin hepsi isaretlenir -
-   *  kullanici bir katmani tekrar actiginda elenmis degil, TOPLAM sayiyi
-   *  gorur. */
+  /** "Temizle": ana katmanlar bosalir, alt filtrelerin hepsi isaretlenir -
+   *  katman tekrar acildiginda kullanici toplam sayiyi gorur. */
   const sifirla = useCallback(() => {
     setKatmanlar(BOS_KATMANLAR);
     setKatmanTurleri(KATMAN_BASLANGIC.katmanTurleri);

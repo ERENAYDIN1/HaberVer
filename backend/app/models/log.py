@@ -48,8 +48,7 @@ class ActivityLog(Base):
     action: Mapped[LogAction] = mapped_column(
         Enum(LogAction, name="log_action"), nullable=False
     )
-    # Kullanici silinirse (ileride) kayit kaybolmasin diye ada da anlik kopya
-    # (snapshot) tutulur; actor_id SET NULL olsa bile actor_name kalir.
+    # Ad ayrica kopyalanir: kullanici silinse (actor_id SET NULL) bile kalir.
     actor_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

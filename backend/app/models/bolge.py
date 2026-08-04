@@ -1,14 +1,11 @@
 """Kaydedilmis cizimler: gorev bolgeleri (alan) ve guzergahlar (cizgi).
 
-Haritada cizilen bir alan ya da olculen bir cizgi, tek seferlik bir secim
-olarak kalmak yerine adlandirilip buraya kaydedilebilir. Kaydedilen kayit bir
-saha ekibine atanabilir - alan 'gorev bolgesi', cizgi 'guzergah' olarak: ekip
-o gun (ya da atama degisene kadar) orada calisir, kaydi kendi saha ekraninda
-gorur ve bitirince tamamlandi olarak isaretler.
+Haritada cizilen bir alan ya da olculen bir cizgi adlandirilip buraya
+kaydedilebilir ve bir saha ekibine atanabilir; ekip kaydi kendi ekraninda
+gorur ve bitirince tamamlandi isaretler.
 
-Neden ayri bir tablo (ve 'yakalar' gibi migration verisi degil): bolgeler
-kullanicinin calisma verisidir - calisma sirasinda olusturulur, adlandirilir,
-renklendirilir ve silinir.
+`yakalar` gibi migration verisi degil ayri bir tablodur: bolgeler kullanicinin
+calisma sirasinda olusturdugu, degistirdigi ve sildigi veridir.
 """
 
 import enum
@@ -63,9 +60,8 @@ class Bolge(Base):
     assigned_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    # Saha ekibi isi bitirdiginde dolar. Kayit SILINMEZ: ekip kendi ekraninda
-    # "Tamamlanan Isler" altinda gorur ve yanlislikla isaretlediyse geri alir
-    # (bkz. tekil bakim gorevlerindeki ayni desen, crud/assignment.py).
+    # Ekip isi bitirdiginde dolar; kayit silinmez, "Tamamlanan İşler" altinda
+    # kalir ve geri alinabilir.
     tamamlandi_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

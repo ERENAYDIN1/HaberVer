@@ -1,17 +1,11 @@
 import { useState, type ReactNode } from "react";
 
-/** Detay modallerinin (varlik / ihbar / gorev bolgesi) ORTAK islem dili.
+/** Detay modallerinin (varlik / ihbar / bolge) ortak islem dili: serit +
+ *  buton + silme onayi. Bir kayit hangi panelden acilirsa acilsin ayni
+ *  yerlesimi ve ayni renk kodunu gosterir.
  *
- *  Ayni is - "bu kaydi yonet" - uc ayri ekranda uc ayri gorunumdeydi: bir yerde
- *  tam genislikte dolu butonlar, bir yerde dar butonlar, bir yerde metin
- *  baglantisi; silme kimi yerde `window.confirm`, kimi yerde satir ici onaydi.
- *  Buradaki uc parca (serit + buton + silme onayi) o farklari tek yerde toplar:
- *  bakim bekleyen bir varlik ile onaylanmis bir ihbardan olusan varlik, hangi
- *  panelden acilirsa acilsin ayni yerlesimi ve ayni renk kodunu gosterir.
- *
- *  Renk kodu (her yerde ayni anlam): yesil = ilerleten/onaylayan ana islem,
- *  gri = notr/ikincil, kirmizi = yikici, amber = geri alan/uyaran, mor =
- *  bolge/guzergah islemleri (bolge katmaninin rengi). */
+ *  Renk kodu: yesil = ilerleten ana islem, gri = ikincil, kirmizi = yikici,
+ *  amber = geri alan/uyaran, mor = bolge islemleri. */
 
 export type AksiyonTuru =
   | "birincil"
@@ -65,8 +59,8 @@ export function AksiyonButonu({
   );
 }
 
-/** Modal govdesinin altindaki islem seridi: ust cizgiyle icerikten ayrilir,
- *  butonlar soldan dizilir (yikici olan `SilOnayi` ile saga itilir). */
+/** Modal govdesinin altindaki islem seridi: ust cizgiyle ayrilir, butonlar
+ *  soldan dizilir. */
 export function AksiyonSeridi({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
@@ -82,14 +76,13 @@ interface SilOnayiProps {
   onSil: () => void;
   /** Liste satirlarinda kullanilan kucuk, metin-baglantisi olcusu. */
   satirIci?: boolean;
-  /** Bu deger degisince acik onay kapanir - modal monte kalip baska bir kayda
-   *  gecince onceki kaydin "Evet, sil" sorusu tasinmasin diye. */
+  /** Degisince acik onay kapanir: modal monte kalirken baska bir kayda
+   *  gecildiginde onceki sorunun tasinmamasi icin. */
   sifirlaAnahtari?: string | null;
 }
 
-/** Silme her yerde AYNI iki adimla yapilir: kirmizi "Sil" baglantisi -> yerinde
- *  "Vazgeç / Evet, sil". Eskiden liste satirlari tarayicinin `window.confirm`
- *  kutusunu aciyor, modaller ise satir ici onay gosteriyordu. */
+/** Silme her yerde ayni iki adimla yapilir: kirmizi "Sil" -> yerinde
+ *  "Vazgeç / Evet, sil". */
 export function SilOnayi({
   ad,
   siliniyor = false,
@@ -99,10 +92,9 @@ export function SilOnayi({
 }: SilOnayiProps) {
   const [onayda, setOnayda] = useState(false);
 
-  // Kayit degisince acik onayi birak. Efekt yerine render sirasinda ayarlama
-  // (React'in "prop degisince state'i duzelt" deseni): modaller monte kaldigi
-  // icin efekt bir kare gecikir ve yeni kayit bir an "Evet, sil" sorusuyla
-  // acilirdi.
+  // Kayit degisince acik onay birakilir. Efekt degil render sirasinda
+  // duzeltme: efekt bir kare gecikir ve yeni kayit bir an onay sorusuyla
+  // acilirdi (React'in "prop degisince state'i duzelt" deseni).
   const [oncekiAnahtar, setOncekiAnahtar] = useState(sifirlaAnahtari);
   if (oncekiAnahtar !== sifirlaAnahtari) {
     setOncekiAnahtar(sifirlaAnahtari);
@@ -126,9 +118,8 @@ export function SilOnayi({
     );
   }
 
-  // Satir icinde butonlar KOMSU kisayollarla ayni metin-baglantisi olcusunde
-  // kalir (liste satirlarinin sabit yuksekligini bozmasin); modallerde ise
-  // gercek butonlardir - islem seridinin dilini korur.
+  // Satir icinde komsu kisayollarla ayni metin olcusunde kalir (liste
+  // satirinin sabit yuksekligini bozmasin); modallerde gercek butondur.
   if (satirIci) {
     return (
       <span

@@ -11,18 +11,15 @@ interface NominatimSonuc {
 interface KonumAramaProps {
   /** Bir sonuc secildiginde [longitude, latitude] ile cagrilir. */
   onSecildi: (konum: [number, number]) => void;
-  /** Haritada o an gorunen alan ([[minLon,minLat],[maxLon,maxLat]]); verilirse
-   *  arama sonuclari bu bolgeye onceliklendirilir (Nominatim viewbox). Bu olmadan
-   *  "cami"/"camii" gibi genel kelimeler Turkiye'nin herhangi bir yerinden,
-   *  ekranda gorunenle hicbir ilgisi olmayan sonuclar dondurebiliyor. */
+  /** Gorunen alan; sonuclar bu bolgeye onceliklendirilir (Nominatim viewbox).
+   *  Bu olmadan "cami" gibi genel kelimeler alakasiz sonuclar donduruyor. */
   gorunenAlan?: [[number, number], [number, number]] | null;
-  /** Verilirse arama SADECE bu alanla sinirlanir (sert kisitlama, Nominatim
-   *  bounded=1) - orn. secili il/ilce siniri. gorunenAlan'dan onceliklidir. */
+  /** Verilirse arama yalnizca bu alanla sinirlanir (bounded=1); gorunen
+   *  alandan onceliklidir. */
   zorunluAlan?: [[number, number], [number, number]] | null;
 }
 
-/** OpenStreetMap Nominatim'in ucretsiz, API anahtari gerektirmeyen genel arama
- *  ucu uzerinden Turkiye'ye odakli konum arama kutusu. */
+/** Nominatim uzerinden Turkiye'ye odakli konum arama kutusu. */
 export default function KonumArama({
   onSecildi,
   gorunenAlan,
@@ -33,8 +30,8 @@ export default function KonumArama({
   const [aciklarKutu, setAciklarKutu] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(false);
   const kutuRef = useRef<HTMLDivElement>(null);
-  // Aramanin kendisini her harita hareketinde yeniden tetiklememesi icin ref'te
-  // tutulur; sadece bir sonraki arama isteginde okunur.
+  // Ref'te tutulur ki her harita hareketi aramayi yeniden tetiklemesin;
+  // yalnizca bir sonraki istekte okunur.
   const gorunenAlanRef = useRef(gorunenAlan);
   const zorunluAlanRef = useRef(zorunluAlan);
   useEffect(() => {
@@ -72,8 +69,8 @@ export default function KonumArama({
         const zorunlu = zorunluAlanRef.current;
         const alan = zorunlu ?? gorunenAlanRef.current;
         if (alan) {
-          // Sinir kutusuna kucuk bir pay eklenir: sadelestirilmis sinir verisi
-          // gercek sinirdan biraz icerde kalabiliyor, kenardaki yerler kaybolmasin.
+          // Sadelestirilmis sinir gercek sinirdan biraz icerde kalabildigi
+          // icin kutuya kucuk bir pay eklenir.
           const pay = 0.01;
           const [[minLon, minLat], [maxLon, maxLat]] = alan;
           // Nominatim viewbox sirasi: sol,ust,sag,alt (minLon,maxLat,maxLon,minLat).
@@ -81,8 +78,7 @@ export default function KonumArama({
             "viewbox",
             `${minLon - pay},${maxLat + pay},${maxLon + pay},${minLat - pay}`
           );
-          // Zorunlu (il/ilce secili) alanlarda sert kisitlama (bounded=1);
-          // sadece haritanin gorunen alanina gore ise yumusak oncelik (bounded=0).
+          // Zorunlu alanda sert kisit, gorunen alanda yumusak oncelik.
           params.set("bounded", zorunlu ? "1" : "0");
         }
         const yanit = await fetch(

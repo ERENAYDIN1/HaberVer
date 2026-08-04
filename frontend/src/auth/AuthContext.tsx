@@ -31,17 +31,15 @@ const AuthContext = createContext<AuthContextTipi | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  // Oturum tarayicida okunabilir bir yerde durmuyor (httpOnly cookie), bu
-  // yuzden acilista tek yol sunucuya sormak: cookie gecerliyse /auth/me
-  // kullaniciyi doner.
+  // Oturum httpOnly cookie'de oldugu icin acilista tek yol sunucuya sormak.
   const [yukleniyor, setYukleniyor] = useState(true);
 
   useEffect(() => {
     authApi
       .me()
       .then((gelen) => {
-        // Oturum kuruldu: RequireRole'un dongu isareti temizlenir, yoksa
-        // ayni sekmede daha sonra cikis yapinca giris dongu sanilirdi.
+        // Dongu isareti temizlenir, yoksa ayni sekmede sonraki giris ihtiyaci
+        // dongu sanilirdi.
         girisDenemesiniUnut();
         setUser(gelen);
       })
@@ -49,30 +47,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setYukleniyor(false));
   }, []);
 
-  // Ekranda GORUNEN kimligi tutar; asagidaki dinleyici React'in render
-  // dongusunun disinda (tarayici olayinda) calistigi icin state'i degil bunu
-  // okur.
+  // Asagidaki dinleyici React render dongusunun disinda calistigi icin
+  // state'i degil bu ref'i okur.
   const kullaniciRef = useRef<User | null>(null);
   kullaniciRef.current = user;
 
-  // GERI TUSU / ILERI TUSU ile geri gelinen sayfa "yeniden yuklenmis" olmak
-  // zorunda degildir: tarayicilar sayfayi bfcache'ten (back/forward cache)
-  // OLDUGU GIBI - JavaScript bellegi, React state'i ve react-query onbellegi
-  // dahil - geri getirir. Hicbir istek atilmaz, dolayisiyla `/auth/me` de
-  // yeniden calismaz. Sonuc: A hesabindan cikip B ile girdikten sonra geri
-  // tusuyla A'nin ekranina donulebilir ve A'nin o an bellekte duran verileri
-  // (ad/rol, listeler, harita katmanlari) gorunur. Cookie artik B'ye ait
-  // oldugu icin bu ekrandan yapilan HER istek B olarak gider - yani A'nin
-  // yetkileri ele gecmez - ama A'nin ekranda kalan verisi tek basina bir
-  // gizlilik sorunudur ve kullaniciya "hala A'yim" izlenimi verir.
-  //
-  // `pageshow`in `persisted` bayragi tam olarak bu geri getirmeyi bildirir.
-  // Kimligi sunucuya yeniden sorar, degistiyse (ya da oturum bittiyse)
-  // sayfayi TAM YENILERIZ: bayat ekrani yamamak yerine bellegi (React state +
-  // react-query onbellegi) tumden atmak tek guvenli yol.
+  // Geri/ileri tusuyla gelinen sayfa bfcache'ten oldugu gibi (React state ve
+  // react-query onbellegi dahil) geri gelebilir; hicbir istek atilmadigi icin
+  // `/auth/me` de calismaz. Boylece A hesabindan cikip B ile girildikten sonra
+  // A'nin ekrani gorunmeye devam eder - istekler B olarak gitse de bu bir
+  // gizlilik sorunu. `pageshow.persisted` bu durumu bildirir: kimlik yeniden
+  // sorulur, degistiyse sayfa tamamen yenilenir (bayat ekrani yamamak yerine
+  // bellegi tumden atmak tek guvenli yol).
   useEffect(() => {
     const geriGelindi = (olay: PageTransitionEvent) => {
-      // Bellekte gosterilecek bir kimlik yoksa korunacak veri de yok.
+      // Bellekte kimlik yoksa korunacak veri de yok.
       if (!olay.persisted || !kullaniciRef.current) return;
       const oncekiId = kullaniciRef.current.id;
       authApi
@@ -80,8 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .then((gelen) => {
           if (gelen.id !== oncekiId) window.location.reload();
         })
-        // Oturum tamamen bitmis (cikis yapilmis, suresi dolmus): bu ekran
-        // artik kimseye ait degil.
+        // Oturum bitmis: bu ekran artik kimseye ait degil.
         .catch(() => window.location.reload());
     };
     window.addEventListener("pageshow", geriGelindi);
@@ -89,9 +77,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const cikisYap = async () => {
-    // ILK is: giris kapisini kapat. Bu satirdan sonra RequireRole "kullanici
-    // yok" gorse bile giris baslatmaz; yoksa o yonlendirme asagidaki cikis
-    // navigasyonunu iptal eder ve Keycloak oturumu hic kapanmaz.
+    // Ilk is giris kapisini kapatmak: yoksa RequireRole'un yonlendirmesi
+    // asagidaki cikis navigasyonunu iptal eder ve Keycloak oturumu kapanmaz.
     cikisiBaslat();
     let cikisUrl: string | null = null;
     try {
@@ -99,12 +86,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Sunucuya ulasilamasa bile kullaniciyi disari cikar.
     }
-    // `setUser(null)` bilincli olarak YOK: zaten sayfadan ayriliyoruz ve
-    // durumu bosaltmak yalnizca bir ara render (ve yukaridaki yaris) uretir.
-    // Keycloak oturumu da kapansin diye kimlik saglayiciya gidilir; o da
-    // kullaniciyi uygulamaya geri dondurur.
-    // Sunucuya ulasilamadiginda bile koke DEGIL /giris'e gidilir: kok rota
-    // girisi kendisi baslatir ve kullanici cikamamis gibi olurdu.
+    // `setUser(null)` bilincli olarak yok: zaten sayfadan ayriliyoruz, state'i
+    // bosaltmak yalnizca gereksiz bir ara render uretir. Hata durumunda koke
+    // degil /giris'e gidilir - kok rota girisi kendisi baslatirdi.
     window.location.href = cikisUrl ?? "/giris";
   };
 

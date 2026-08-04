@@ -1,17 +1,15 @@
 import type { AssetSource, AssetStatus, AssetType, PointGeometry } from "./asset";
 
-/** Bir saha ekibine ayni anda dusebilecek en fazla aktif gorev (backend'deki
+/** Bir ekibe ayni anda dusebilecek en fazla aktif gorev (backend'deki
  *  MAKS_AKTIF_GOREV ile ayni olmali). */
 export const MAKS_AKTIF_GOREV = 3;
 
-/** Otomatik atamada bir ekibe olan azami mesafe (km, backend'deki
- *  MAKS_ATAMA_MESAFE_M ile ayni olmali). Yalnizca metin gostermek icin. */
+/** Otomatik atamadaki azami mesafe (km); yalnizca metin gostermek icin. */
 export const MAKS_ATAMA_MESAFE_KM = 5;
 
-/** Yaka (kita) kodlari — backend'deki 'yakalar' tablosunun kod degerleri.
- *  Otomatik atamada ekip ile varligin yakasi ayni olmak zorundadir: Bogaz'in
- *  iki yakasi kus ucusu 2 km olabilir ama arac ile ancak koprüden gecilir,
- *  yani mesafe esigi tek basina 'karsiya gecme'yi engellemez. */
+/** Yaka kodlari; backend'deki `yakalar` tablosunun kod degerleri. Otomatik
+ *  atamada ekip ile varligin yakasi ayni olmali: Bogaz'in iki yakasi kus
+ *  ucusu yakin gorunse de araba ile ancak kopruden gecilir. */
 export const YAKALAR = ["avrupa", "anadolu", "ada"] as const;
 export type Yaka = (typeof YAKALAR)[number];
 

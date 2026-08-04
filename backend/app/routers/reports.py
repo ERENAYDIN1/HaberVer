@@ -50,11 +50,8 @@ def _fotograf_kaydet(foto: UploadFile) -> str:
             status_code=400, detail="Sadece JPEG, PNG veya WEBP yuklenebilir"
         )
 
-    # Boyut siniri, dosya BELLEGE ALINMADAN once uygulanir. Onceki hali
-    # `icerik = foto.file.read()` ile tum govdeyi okuyup uzunluguna SONRA
-    # bakiyordu: 5 MB'lik sinir ancak 2 GB'lik bir yukleme tamamen belleğe
-    # alindiktan sonra devreye giriyordu, yani sinirin kendisi bir bellek
-    # tuketme yoluydu. Simdi esik asilir asilmaz okuma kesilir.
+    # Boyut siniri dosya bellege alinmadan uygulanir: tum govdeyi okuyup sonra
+    # uzunluguna bakmak, sinirin kendisini bir bellek tuketme yoluna cevirirdi.
     parcalar: list[bytes] = []
     toplam = 0
     while parca := foto.file.read(OKUMA_PARCASI):
@@ -68,10 +65,9 @@ def _fotograf_kaydet(foto: UploadFile) -> str:
         raise HTTPException(status_code=400, detail="Fotograf bos olamaz")
     icerik = b"".join(parcalar)
 
-    # `content_type` tamamen ISTEMCININ soyledigi seydir; dosyanin gercekten o
-    # tur oldugunu kanitlamaz. Uzantiyi ve servis edilirken kullanilacak
-    # media_type'i ondan turettigimiz icin, baslangic baytlarindan da dogrularim:
-    # boylece "PNG diye gonderilen HTML" diske PNG olarak yazilamaz.
+    # `content_type` istemcinin iddiasidir. Uzanti ve servis media_type'i ondan
+    # turedigi icin ilk baytlardan da dogrulanir: "PNG diye gonderilen HTML"
+    # diske yazilamasin.
     if not _imza_uyuyor(icerik, foto.content_type):
         raise HTTPException(
             status_code=400,

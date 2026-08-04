@@ -26,9 +26,8 @@ class User(Base):
         server_default=text("gen_random_uuid()"),
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    # Keycloak kullanicisinin id'si (`sub`). Parola/kimlik orada yasar; burasi
-    # yalnizca baglantiyi tutar. NULL ise satir henuz eslenmemistir - kullanici
-    # ilk giriste e-posta uzerinden eslenir (bkz. crud/user.py::keycloak_eslestir).
+    # Keycloak kullanicisinin id'si (`sub`); parola/kimlik orada yasar. NULL ise
+    # satir henuz eslenmemistir, ilk giriste e-posta uzerinden baglanir.
     keycloak_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True, unique=True
     )
@@ -39,9 +38,8 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
-    # Saha calisani (ekip) icin son bilinen konum + zamani; uygulama acikken
-    # tarayici geolocation'i periyodik olarak gunceller (bkz. /api/saha/konum).
-    # Diger roller icin NULL kalir.
+    # Saha ekibinin son bilinen konumu; tarayici periyodik olarak gunceller
+    # (/api/saha/konum). Diger rollerde NULL kalir.
     last_location: Mapped[object | None] = mapped_column(
         Geometry(geometry_type="POINT", srid=4326, spatial_index=False),
         nullable=True,
@@ -49,10 +47,9 @@ class User(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    # Saha ekibinin kadro olarak bagli oldugu yaka (yakalar.kod). NULL ise ekibin
-    # yakasi son konumundan turetilir; dolu ise konum ne olursa olsun bu gecerlidir
-    # (ekip Bogaz kiyisinda/koprude iken GPS'in yanlis yakaya dusmesini onler).
-    # Otomatik atamada ekip ile varligin yakasi ayni olmak zorundadir.
+    # Ekibin kadro yakasi (yakalar.kod). NULL ise yaka son konumdan turetilir;
+    # dolu ise konumdan bagimsiz gecerlidir - ekip kiyida/koprude iken GPS'in
+    # karsi yakaya dusmesi is dagitimini bozmasin.
     yaka: Mapped[str | None] = mapped_column(
         String(16), ForeignKey("yakalar.kod"), nullable=True
     )

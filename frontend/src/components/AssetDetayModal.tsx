@@ -27,30 +27,24 @@ import Modal from "./Modal";
 interface AssetDetayModalProps {
   asset: AssetFeature | null;
   onKapat: () => void;
-  /** Personel (admin/calisan) ise bakim varligini elle bir ekibe yonlendirebilir. */
+  /** Personel ise bakim varligini elle bir ekibe yonlendirebilir. */
   atayabilir?: boolean;
-  /** Elle atama icin secilebilecek saha ekipleri (canli yuk bilgisiyle). */
+  /** Elle atama icin secilebilecek ekipler (canli yuk bilgisiyle). */
   ekipler?: EkipOzet[];
-  /** Basarili atama sonrasi (liste/ekip ozetini tazelemek icin). */
+  /** Basarili atama sonrasi liste/ekip ozetini tazelemek icin. */
   onAtandi?: () => void;
-  /** Verilirse modalda "Düzenle" cikar (formu acmak ust bilesenin isi: iki
-   *  modal ust uste binmesin diye detay kapatilip duzenleme acilir). */
+  /** Verilirse "Düzenle" cikar; formu acmak ust bilesenin isi (iki modal ust
+   *  uste binmesin diye detay kapatilir). */
   onDuzenle?: (asset: AssetFeature) => void;
-  /** Verilirse "Sil" cikar; silme bu modalin icinde yapilir, basarili olunca
-   *  cagrilir (ust bilesen modali kapatip secimi birakir). */
+  /** Verilirse "Sil" cikar; silme bu modalin icinde yapilir. */
   onSilindi?: () => void;
-  /** Verilirse "Konuma Git" cikar: modal kapanir ve harita varligin konumuna
-   *  ucar. Ucus BILINCLI olarak yalnizca bu dugmeye baglidir - modali acmak
-   *  (orn. ekip popup'indaki bir gorev satiri) haritayi kendiliginden
-   *  oynatmaz. */
+  /** Verilirse "Konuma Git" cikar. Ucus bilincli olarak yalnizca bu dugmeye
+   *  baglidir: modali acmak haritayi kendiliginden oynatmaz. */
   onGit?: (asset: AssetFeature) => void;
 }
 
-/** Bir varligin bu modaldan yonetilebilmesi icin ust bilesenlerin gecmesi
- *  gereken ORTAK prop kumesi. Tek yerde durur ki "Varlıklar" listesi,
- *  "İhbarlar > Onaylandı" listesi ve haritadaki isaretci ayni yetenekleri
- *  sunsun - eskiden her cagri yeri farkli bir alt kumeyi geciyor, ayni varlik
- *  acildigi yere gore bazen atanabiliyor bazen salt okunur oluyordu. */
+/** Bu modaldan varlik yonetebilmek icin gereken ortak prop kumesi. Tek yerde
+ *  durur ki liste, ihbar paneli ve harita isaretcisi ayni yetenekleri sunsun. */
 export interface VarlikYonetimProplari {
   atayabilir: boolean;
   ekipler?: EkipOzet[];
@@ -60,9 +54,7 @@ export interface VarlikYonetimProplari {
   onGit?: (asset: AssetFeature) => void;
 }
 
-/** Yukaridaki kumeyi tek yerde uretir; "Varlıklar" ve "İhbarlar > Onaylandı"
- *  panelleri bunu kullandigi icin ikisi ayrisamaz. `detayKapat` iki modalin
- *  ust uste binmesini onler (duzenleme formu acilirken detay kapanir). */
+/** Yukaridaki kumeyi uretir; iki panel de bunu kullandigi icin ayrisamazlar. */
 export function useVarlikYonetimi({
   ekipler,
   onDuzenle,
@@ -70,10 +62,9 @@ export function useVarlikYonetimi({
   detayKapat,
 }: {
   ekipler?: EkipOzet[];
-  /** Duzenleme formunu acan ust bilesen isi (yoksa "Düzenle" cikmaz). */
+  /** Verilmezse "Düzenle" dugmesi cikmaz. */
   onDuzenle?: (asset: AssetFeature) => void;
-  /** Haritayi varligin konumuna ucuran ust bilesen isi (yoksa "Konuma Git"
-   *  cikmaz). */
+  /** Verilmezse "Konuma Git" dugmesi cikmaz. */
   onGit?: (asset: AssetFeature) => void;
   detayKapat: () => void;
 }): VarlikYonetimProplari {
@@ -96,9 +87,8 @@ export function useVarlikYonetimi({
   };
 }
 
-/** Bir varligin tum detaylarini (foto dahil) kucuk bir pop up icinde gosterir.
- *  Saha calisaninin ihbar edilen varligi sahada bulmasini kolaylastirmak icin
- *  fotograf her zaman (varsa) gorunur olur. */
+/** Varligin tum detaylarini gosterir. Fotograf (varsa) her zaman gorunur:
+ *  saha calisani ihbar edilen varligi sahada daha kolay bulsun. */
 export default function AssetDetayModal({
   asset,
   onKapat,
@@ -115,9 +105,7 @@ export default function AssetDetayModal({
   const { user } = useAuth();
   const deleteAsset = useDeleteAsset();
   const repairAsset = useRepairAsset();
-  /** Islem seridi, modal NEREDEN acilirsa acilsin ayni: liste satirindaki
-   *  kisayollar (Detay/Tamir/Düzenle/Sil) ile haritadaki popup ayni modale
-   *  ciktigi icin ikisinde de tam takim gorunur. */
+  /** Islem seridi modal nereden acilirsa acilsin aynidir. */
   const islemModu = Boolean(onDuzenle || onSilindi || onGit);
   const tamCrudYetkisi = user?.role !== "saha_calisani";
 
@@ -131,8 +119,7 @@ export default function AssetDetayModal({
   const bakimVar = asset?.properties.status === "bakim_lazim";
   const atamaGoster = Boolean(atayabilir && bakimVar && assetId);
 
-  // Varligin o an atali oldugu ekip (yoksa null: havuzda bekliyor) + varligin
-  // yakasi (karsi yakadaki ekibe elle atama uyarisi icin).
+  // Varligin atali oldugu ekip (null ise havuzda) + isin yakasi.
   const { data: durum, isLoading: gorevYukleniyor } = useQuery({
     queryKey: ["saha", "gorev", assetId],
     queryFn: () => gorevDurumu(assetId!),
@@ -141,16 +128,14 @@ export default function AssetDetayModal({
   const mevcutGorev = durum?.gorev ?? null;
   const varlikYaka = durum?.varlik_yaka ?? null;
 
-  // Secilen ekip varligin yakasinin disindaysa uyari gosterilir. Elle atama
-  // bilincli olarak yaka kisitindan MUAFTIR (otomatik atama degildir), ama
-  // personel "bu ekip Bogaz'in karsisinda" bilgisini gormeden onaylamamali.
+  // Elle atama yaka kisitindan muaftir, ama personel karsi yakadaki bir ekibi
+  // secerken bunu gormeli.
   const seciliEkipNesnesi = ekipler?.find((e) => e.id === seciliEkip);
   const karsiYaka = Boolean(
     seciliEkipNesnesi?.yaka && varlikYaka && seciliEkipNesnesi.yaka !== varlikYaka,
   );
 
-  // Varlik degisince atama durumunu sifirla (bekleyen silme onayini SilOnayi
-  // kendi `sifirlaAnahtari` prop'uyla birakir).
+  // Varlik degisince atama durumu sifirlanir (silme onayini SilOnayi birakir).
   useEffect(() => {
     setSeciliEkip("");
     setAtamaHatasi(null);
@@ -291,10 +276,7 @@ export default function AssetDetayModal({
           </div>
         </dl>
 
-        {/* Islem seridi: tamir/duzenleme/silme burada toplanir. Modal NEREDEN
-            acilirsa acilsin ayni serit gorunur - "Varlıklar" listesi,
-            "İhbarlar > Onaylandı" listesi ve haritadaki isaretci ayni ekrana
-            cikar (bkz. useVarlikYonetimi). */}
+        {/* Tamir/duzenleme/silme; serit her cagri yerinde aynidir. */}
         {islemModu && (
           <AksiyonSeridi>
             {onGit && (

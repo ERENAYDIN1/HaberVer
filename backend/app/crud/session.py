@@ -23,14 +23,11 @@ from ..models.user import User, UserRole
 
 
 def rolu_coz(roller: list[str]) -> UserRole:
-    """Keycloak realm rollerinden ETKIN uygulama rolu (tek rol).
-
-    Bu bir "hangi roller var" degil "hangi rol gecerli" sorusudur ve YETKI
-    KARARININ dayanagidir. Coklu rol normalde olusmaz (keycloak.rol_ata tekil
-    tutar) ama realm'in `default-roles-*` bilesigi HERKESE `vatandas` verir;
-    bu yuzden en genis rol kazanir - yoksa bir admin, vatandas ucuna da
-    girebilirdi. Hicbir uygulama rolu yoksa vatandas: Keycloak'ta kendi
-    kaydolan kullanicinin durumu budur."""
+    """Realm rollerinden etkin uygulama rolu (tek rol) - yetki kararinin
+    dayanagi. Realm'in `default-roles-*` bilesigi herkese `vatandas` verdigi
+    icin "listede var mi" kontrolu bir admin'i de vatandas ucundan gecirirdi;
+    bu yuzden en genis rol kazanir. Uygulama rolu yoksa vatandas (Keycloak'ta
+    kendi kaydolan kullanicinin durumu)."""
     for aday in (UserRole.admin, UserRole.calisan, UserRole.saha_calisani):
         if aday.value in roller:
             return aday
@@ -69,11 +66,10 @@ def kullanicinin_oturumlarini_sil(db: DbSession, user_id: uuid.UUID) -> None:
 class OturumBaglami:
     oturum: Session
     user: User
-    #: Access token'in icindeki ham realm rolleri (Keycloak'in kendi
-    #: `default-roles-*`, `offline_access` gibi rolleri dahil).
+    #: Token'daki ham realm rolleri (Keycloak'in kendi rolleri dahil).
     roller: list[str]
-    #: Bu istekteki YETKI KAYNAGI: ham rollerden cozulen tek etkin rol.
-    #: `user.role` kolonu bunun yalnizca SQL sorgulari icin tutulan aynasidir.
+    #: Yetki kaynagi: ham rollerden cozulen tek etkin rol. `user.role` kolonu
+    #: bunun yalnizca SQL sorgulari icin tutulan aynasidir.
     etkin_rol: UserRole
 
 
@@ -94,8 +90,8 @@ def coz(db: DbSession, oturum_id: uuid.UUID) -> OturumBaglami | None:
         sil(db, oturum.id)
         return None
 
-    # Access token'in suresi doldu (ya da dolmak uzere): yenile. Yenileme
-    # kalirsa oturum Keycloak tarafinda iptal edilmis demektir.
+    # Suresi dolan token yenilenir; yenileme basarisizsa oturum Keycloak
+    # tarafinda iptal edilmis demektir.
     if oturum.token_expires_at <= simdi + timedelta(seconds=30):
         if not oturum.refresh_token:
             sil(db, oturum.id)
@@ -112,9 +108,8 @@ def coz(db: DbSession, oturum_id: uuid.UUID) -> OturumBaglami | None:
         oturum.token_expires_at = simdi + timedelta(seconds=yeni.expires_in)
         claims = yeni.claims
     else:
-        # Saklanan token'i her istekte yeniden dogrularim (imza + issuer +
-        # sure): yetki karari her zaman token'dan okunur, veritabanindaki
-        # satirdan degil.
+        # Saklanan token her istekte yeniden dogrulanir (imza + issuer + sure):
+        # yetki karari token'dan okunur, veritabani satirindan degil.
         try:
             claims = keycloak.token_dogrula(oturum.access_token)
         except keycloak.KeycloakHatasi:
@@ -122,8 +117,7 @@ def coz(db: DbSession, oturum_id: uuid.UUID) -> OturumBaglami | None:
             return None
 
     roller = keycloak.rolleri_oku(claims)
-    # Rol aynasi: SQL sorgulari (ekip listeleri, otomatik atama) kolonu okur,
-    # bu yuzden token'daki rolle farkliysa guncellenir.
+    # Rol aynasi: SQL sorgulari kolonu okudugu icin token'la senkronlanir.
     yeni_rol = rolu_coz(roller)
     if user.role != yeni_rol:
         user.role = yeni_rol

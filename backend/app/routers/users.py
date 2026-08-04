@@ -46,8 +46,7 @@ def create_user(
             yaka=data.yaka.value if data.yaka else None,
         )
     except keycloak.KeycloakHatasi as e:
-        # Yerel satir acilmadi: Keycloak'a yazamadigimizda giris yapamayacak
-        # bir "hayalet hesap" birakmayiz.
+        # Yerel satir acilmadi: giris yapamayacak bir hayalet hesap kalmasin.
         raise HTTPException(status_code=502, detail=f"Keycloak: {e}")
     return UserOut.model_validate(user)
 
@@ -74,14 +73,13 @@ def update_user(
 
     if "is_active" in gonderilen:
         aktif = bool(gonderilen["is_active"])
-        # Admin kendi hesabini kapatamaz: kendini disari kilitlemenin en kolay
-        # yolu bu olurdu ve geri almak icin veritabanina elle girmek gerekirdi.
+        # Admin kendi hesabini kapatamaz: geri almak icin veritabanina elle
+        # girmek gerekirdi.
         if user.id == admin_user.id and not aktif:
             raise HTTPException(
                 status_code=409, detail="Kendi hesabinizi devre disi birakamazsiniz"
             )
-        # Son aktif admin'i dusurmek sistemi yonetilemez birakir - hicbir admin
-        # kalmadiginda hesap acacak/geri acacak kimse olmaz.
+        # Son aktif admin dusurulurse hesap acacak/geri acacak kimse kalmaz.
         if not aktif and user.role is UserRole.admin and crud.aktif_admin_sayisi(db) <= 1:
             raise HTTPException(
                 status_code=409, detail="Sistemde en az bir aktif yonetici kalmali"
@@ -89,7 +87,7 @@ def update_user(
         try:
             user = crud.set_active(db, user, aktif, actor=admin_user)
         except keycloak.KeycloakHatasi as e:
-            # Keycloak'a yazamadik: yerel satira DOKUNMADIK, yoksa "kapattim
+            # Keycloak'a yazilamadi: yerel satira dokunulmadi, yoksa "kapattim
             # sandim ama giris yapabiliyor" durumu olusurdu.
             raise HTTPException(status_code=502, detail=f"Keycloak: {e}")
 

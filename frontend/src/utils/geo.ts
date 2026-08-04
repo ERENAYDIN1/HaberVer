@@ -25,9 +25,8 @@ export function toplamMesafeMetre(noktalar: [number, number][]): number {
   return toplam;
 }
 
-/** Poligon alani (m2). Enlem/boylam, poligon merkezinin enlemine gore
- *  yerel bir metre duzlemine izdusurulup shoelace formuluyle hesaplanir.
- *  Sehir olcegindeki alanlar icin yeterince dogru bir yaklastirmadir. */
+/** Poligon alani (m2): koordinatlar yerel bir metre duzlemine izdusurulup
+ *  shoelace ile hesaplanir. Sehir olceginde yeterince dogru bir yaklastirma. */
 export function poligonAlaniM2(noktalar: [number, number][]): number {
   if (noktalar.length < 3) return 0;
 
@@ -52,11 +51,9 @@ export function poligonMerkezi(noktalar: [number, number][]): [number, number] {
   return [lon, lat];
 }
 
-/** Bir cizginin UZUNLUGUNUN ortasindaki nokta (etiket yerlesimi icin).
- *  Cizgilerde `poligonMerkezi` KULLANILMAZ: nokta ortalamasi, L seklindeki ya
- *  da kavisli bir guzergahta hattin hic gecmedigi bir yere duser - yakinlastikca
- *  etiket cizgiden gorunur sekilde kopar. Buradaki nokta hattin uzunlugu boyunca
- *  yuruyerek bulundugu icin her zaman cizginin UZERINDEDIR. */
+/** Bir cizginin uzunlugunun ortasindaki nokta (etiket yerlesimi icin).
+ *  Cizgilerde `poligonMerkezi` kullanilmaz: nokta ortalamasi L seklindeki bir
+ *  guzergahta hattin hic gecmedigi bir yere duser. */
 export function cizgiOrtaNoktasi(noktalar: [number, number][]): [number, number] {
   if (noktalar.length === 0) return [0, 0];
   if (noktalar.length === 1) return noktalar[0];
@@ -77,17 +74,13 @@ export function cizgiOrtaNoktasi(noktalar: [number, number][]): [number, number]
   return noktalar[noktalar.length - 1];
 }
 
-/** Birden fazla halkanin (ayri kara parcalari - orn. Istanbul'un Bogaz'la
- *  ayrilmis Avrupa/Anadolu yakalari, ya da tamamen adalardan olusan bir ilce)
- *  toplam alani. Kullanici tek bir alan cizdiginde bu tek elemanli bir
- *  liste olur, poligonAlaniM2 ile ayni sonucu verir. */
+/** Cok parcali bir alanin (orn. adalardan olusan bir ilce) toplam alani.
+ *  Tek halkada `poligonAlaniM2` ile ayni sonucu verir. */
 export function cokHalkaliAlanM2(halkalar: [number, number][][]): number {
   return halkalar.reduce((toplam, halka) => toplam + poligonAlaniM2(halka), 0);
 }
 
-/** Birden fazla halka arasindan en genis alanli olanin merkezini dondurur -
- *  etiketi/marker'i en buyuk kara parcasinin ustune koymak icin (orn. iki
- *  yaka arasindaki denizin ortasina degil). */
+/** En genis halkanin merkezi: etiket en buyuk parcanin ustune konsun diye. */
 export function enBuyukHalkaMerkezi(halkalar: [number, number][][]): [number, number] {
   const enBuyuk = halkalar.reduce((buyuk, halka) =>
     poligonAlaniM2(halka) > poligonAlaniM2(buyuk) ? halka : buyuk
@@ -95,10 +88,9 @@ export function enBuyukHalkaMerkezi(halkalar: [number, number][][]): [number, nu
   return poligonMerkezi(enBuyuk);
 }
 
-/** Kapali bir halkanin (son nokta ilk noktayla ayni) sondaki tekrarini atar.
- *  Backend poligonlari GeoJSON kuralinca KAPALI dondurur; sekil duzenlemede bu
- *  tekrar iki tutamagin ust uste binmesi (ve birini surukleyince digerinin
- *  yerinde kalmasi) demek olurdu. Cizim tarafi halkalari zaten kendisi kapatir. */
+/** Kapali halkalarin sondaki tekrar noktasini atar. Backend GeoJSON kuralinca
+ *  kapali dondurur; sekil duzenlemede bu tekrar iki tutamagin ust uste
+ *  binmesi demek olurdu. */
 export function halkayiAc(halka: [number, number][]): [number, number][] {
   if (halka.length < 2) return halka;
   const ilk = halka[0];
@@ -110,8 +102,7 @@ export function halkalariAc(halkalar: [number, number][][]): [number, number][][
   return halkalar.map(halkayiAc);
 }
 
-/** Nokta dizisinin sinirlayici kutusu ([[minLon,minLat],[maxLon,maxLat]]),
- *  haritayi bir bolgeye ucururken (fitBounds) kullanilir. */
+/** Nokta dizisinin sinir kutusu ([[minLon,minLat],[maxLon,maxLat]]). */
 export function poligonSinirKutusu(
   noktalar: [number, number][]
 ): [[number, number], [number, number]] {

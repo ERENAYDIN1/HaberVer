@@ -88,10 +88,8 @@ def update_asset(
 def repair_asset(
     asset_id: uuid.UUID,
     user: User = Depends(saha_dahil),
-    # `saha_dahil` de bunun uzerine kurulu; FastAPI bagimliliklari onbellekledigi
-    # icin `get_context` istek basina bir kez cozulur, iki satir ayni baglami
-    # paylasir. Rol buradan okunur, `user.role` KOLONUNDAN degil (bkz. security.py:
-    # o kolon SQL sorgulari icin tutulan bir aynadir, yetki dayanagi degildir).
+    # Rol buradan okunur, `user.role` kolonundan degil (bkz. security.py).
+    # FastAPI bagimliliklari onbellekledigi icin ek sorgu olusmaz.
     baglam: OturumBaglami = Depends(get_context),
     db: Session = Depends(get_db),
 ):

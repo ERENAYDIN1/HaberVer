@@ -25,10 +25,8 @@ def bolum(ad: str) -> None:
 
 
 def onar_sahipligi() -> None:
-    """A3: saha calisani KENDISINE ATANMAMIS bir isi kapatamamali.
-
-    Duzeltmeden once bu istek 200 donuyordu: kural yalnizca arayuzdeydi
-    (SahaEkran sadece kendi gorevlerini cizer), API'de karsiligi yoktu."""
+    """A3: saha calisani kendisine atanmamis bir isi kapatamamali. Duzeltmeden
+    once kural yalnizca arayuzdeydi, API'de karsiligi yoktu."""
     bolum("A3 - /onar sahiplik kontrolu")
     personel = admin_girisi()
     saha = giris("sahaekibi1@greenasset.com", "saha1234")
@@ -156,8 +154,8 @@ def azp_dogrulamasi() -> None:
     bolum("A6 - azp dogrulamasi")
     from app import keycloak  # noqa: PLC0415
 
-    # Servis hesabi token'inin azp'si de greenasset-bff oldugu icin gecerli;
-    # burada dogrulanan, kontrolun GERCEKTEN calistigi (elle bozulmus azp).
+    # Servis hesabi token'i gecerlidir; kontrolun calistigi, elle bozulmus bir
+    # azp ile dogrulanir.
     token = keycloak._admin_token_al()
     claims = keycloak.token_dogrula(token)
     assert claims["azp"] == keycloak.settings.keycloak_client_id

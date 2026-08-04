@@ -16,9 +16,8 @@ const RENK_PALETI = [
 
 const OZEL_RENK_ANAHTARI = "greenasset-ozel-renkler";
 
-/** Net alan, kendi alanindan bu orandan daha kucukse "cakisiyor" sayilir.
- *  Tam esitlik aranmaz: PostGIS'in jeodezik olcusunde yuzen nokta gurultusu
- *  yuzunden hic cakismayan alanlarda bile son hanede fark olabilir. */
+/** Net alan kendi alanindan bu orandan kucukse "cakisiyor" sayilir. Tam
+ *  esitlik aranmaz: jeodezik olcude son hanede kayan nokta gurultusu olur. */
 const CAKISMA_ESIGI = 0.999;
 
 interface CizimPaneliProps {
@@ -35,15 +34,14 @@ interface CizimPaneliProps {
   tamamlananAlanlar: TamamlananAlan[];
   onAlanKaldir: (id: string) => void;
   onTumAlanlariTemizle: () => void;
-  /** PostGIS'ten gelen olculer (id -> kendi/net m2). Cakisan alanlar iki kez
-   *  sayilmasin diye toplam bunlardan hesaplanir; gelmediyse yerel (shoelace)
-   *  hesaba dusulur. */
+  /** PostGIS'ten gelen olculer (id -> kendi/net m2). Gelmezse yerel hesaba
+   *  dusulur. */
   alanOlculeri?: Record<string, AlanOlcusu>;
   /** Cakismalar tek kez sayilmis toplam (birlesim alani). */
   toplamNetM2?: number;
-  /** Cakisma dusulmeden onceki ham toplam - "ne kadari mukerrerdi" bilgisi. */
+  /** Cakisma dusulmeden onceki ham toplam. */
   hamToplamM2?: number;
-  /** Kaydedilmis bolge olusturma yetkisi (personel). */
+  /** Bolge kaydetme yetkisi (personel). */
   kaydedebilir?: boolean;
   onAlanKaydet?: (alan: TamamlananAlan, sira: number) => void;
   onOlcumKaydet?: () => void;
@@ -57,8 +55,7 @@ interface CizimPaneliProps {
   onOlcumTemizle: () => void;
 }
 
-/** Cizim/olcum araclari aktifken ekranin alt ortasinda beliren, etkilesimi
- *  kolaylastiran kucuk ve yumusak temali bir arac paneli. */
+/** Cizim/olcum araclari aktifken ekranin alt ortasinda beliren arac paneli. */
 export default function CizimPaneli({
   cizimModu,
   cizimNoktalari,
@@ -90,8 +87,8 @@ export default function CizimPaneli({
 
   if (!cizimModu && !olcumModu && !alanBitti && !olcumBitti) return null;
 
-  // Cakisma varsa toplam, alanlarin basit toplami DEGIL birlesim alanidir:
-  // ayni yerin uzerinden ikinci kez gecmek toplami buyutmez.
+  // Toplam, alanlarin basit toplami degil birlesim alanidir: ayni yerin
+  // uzerinden ikinci kez gecmek toplami buyutmez.
   const cakismaM2 =
     toplamNetM2 != null && hamToplamM2 != null
       ? Math.max(0, hamToplamM2 - toplamNetM2)
@@ -155,8 +152,7 @@ export default function CizimPaneli({
                 <IconLasso className="h-3 w-3" />
               </span>
               Seçili Alanlar
-              {/* Secimden cikis: alanlar haritadan kalkar ve bu panel kapanir.
-                  Kaydedilmis bolgeleri ETKILEMEZ - onlar kalici, ayri katman. */}
+              {/* Secimden cikis; kaydedilmis bolgeleri etkilemez. */}
               <button
                 onClick={onTumAlanlariTemizle}
                 title="Alan seçiminden çık"
@@ -170,9 +166,7 @@ export default function CizimPaneli({
               {tamamlananAlanlar.map((alan, i) => {
                 const olcu = alanOlculeri?.[alan.id];
                 const kendiM2 = olcu?.kendi_m2 ?? cokHalkaliAlanM2(alan.noktalar);
-                // Alanin toplama net katkisi: kendisinden ONCEKI alanlarla
-                // cakisan kismi dusulmus hali. Ayni yerin uzerine tekrar
-                // cizilirse 0 olur ve toplam degismez.
+                // Net katki: oncekilerle cakisan kismi dusulmus alan.
                 const netM2 = olcu?.net_m2;
                 const cakisiyor = netM2 != null && netM2 < kendiM2 * CAKISMA_ESIGI;
                 return (
@@ -317,8 +311,7 @@ export default function CizimPaneli({
   );
 }
 
-/** Hazir palet + kullanicinin kendi sectigi/kaydettigi renkler. Kayitlar
- *  tarayicida (localStorage) tutulur, boylece bir sonraki oturumda da durur. */
+/** Hazir palet + kullanicinin kaydettigi renkler (localStorage'da tutulur). */
 function RenkSecici({
   secili,
   onSec,
@@ -386,6 +379,5 @@ function RenkSecici({
   );
 }
 
-/** Cizim panelindeki renk paleti disaridan da kullanilabilsin (bolge kaydetme
- *  formu ayni paletle calisir). */
+/** Bolge kaydetme formu da ayni paleti kullanir. */
 export { RENK_PALETI };

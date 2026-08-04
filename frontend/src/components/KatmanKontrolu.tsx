@@ -27,27 +27,23 @@ export interface AltFiltre {
   etiket: string;
   /** Haritadaki isaretci rengiyle ayni renk noktasi (lejant). */
   renk: string;
-  /** Haritada TEK bir renkle cizilmeyen secenekler icin dilimli swatch
-   *  (varlik durumlari: haritada dolgu her zaman TUR/grup rengidir, tek bir
-   *  "iyi rengi" ya da "bakim rengi" yoktur). Verilirse dolgu bu dilimlerden
-   *  olusur, `renk` ise KENARLIGA duser - "Bakım Lazım"da kenarlik amber,
-   *  cunku haritada durumu anlatan sey dolgu degil amber uyari halkasi. */
+  /** Haritada tek renkle cizilmeyen secenekler icin dilimli swatch (varlik
+   *  durumlarinda dolgu her zaman tur rengidir). Verilirse dolgu dilimlerden
+   *  olusur ve `renk` kenarliga duser. */
   renkler?: string[];
   secili: boolean;
   sayi: number;
 }
 
-/** Bir katmanin alt-filtrelerinin bir kirilimi. Varliklar katmaninda iki grup
- *  vardir (Tur / Durum), ihbarlarda tek grup (durum) - tek grupta baslik
- *  gereksiz kalabalik olacagindan `baslik` opsiyoneldir. */
+/** Alt-filtrelerin bir kirilimi. Varliklarda iki grup (tur/durum), ihbarlarda
+ *  tek grup vardir; tek grupta baslik gereksiz oldugu icin opsiyoneldir. */
 export interface AltGrup {
   baslik?: string;
   secenekler: AltFiltre[];
   onSec: (anahtar: string) => void;
 }
 
-/** Birden fazla rengi keskin geciste yan yana dizen swatch arka plani
- *  ("bu secenek tek bir renkle cizilmez" anlamini tasir). */
+/** Birden fazla rengi keskin geciste yan yana dizen swatch arka plani. */
 function dilimliArkaPlan(renkler: string[]): string {
   const dilim = 100 / renkler.length;
   const duraklar = renkler
@@ -64,12 +60,10 @@ interface KatmanTanimi {
   ikon: (p: { className?: string }) => ReactElement;
 }
 
-/** Katman sirasi/etiketleri tek yerde. Buradaki renkler ANA KATMAN kimligidir
- *  (kenar cubugu/lejant ikonu), tek tek isaretcilerin rengi degil - isaretciler
- *  turlerinin grup rengini tasir. Bolgeler/guzergahlar bilincli olarak ihbarlarla
- *  saha ekipleri ARASINDA durur: ustteki ikisi "is", alttaki "kim" - ikisi de
- *  bunlari baglayan gorev alani. Gorev bolgeleri (alan) ve guzergahlar (cizgi)
- *  ayri ayri acilip kapatilir; sol paneldeki iki ayri sekmeyle birebir eslesir. */
+/** Katman sirasi ve etiketleri. Buradaki renkler ana katman kimligidir
+ *  (lejant ikonu), tekil isaretcilerin rengi degil. Bolgeler/guzergahlar
+ *  bilincli olarak ihbarlarla ekipler arasinda durur: ustteki ikisi "is",
+ *  alttaki "kim", bolge de ikisini baglayan calisma alani. */
 const KATMANLAR: KatmanTanimi[] = [
   { anahtar: "varliklar", etiket: "Varlıklar", renk: "#059669", ikon: IconPin },
   { anahtar: "ihbarlar", etiket: "İhbarlar", renk: "#9333ea", ikon: IconInbox },
@@ -83,10 +77,9 @@ interface KatmanKontroluProps {
   onDegistir: (anahtar: KatmanAnahtari) => void;
   /** Her katmanin o an haritadaki adedi (rozet). */
   sayilar: Record<KatmanAnahtari, number>;
-  /** Varliklar katmaninin alt-filtreleri: tur (agac/direk/sulama) + durum
-   *  (iyi/bakim lazim) olmak uzere iki grup. */
+  /** Varliklar katmaninin alt-filtreleri: tur + durum olmak uzere iki grup. */
   varlikAlt: AltGrup[];
-  /** Ihbarlar katmaninin durum alt-filtreleri (beklemede/onaylandi/reddedildi). */
+  /** Ihbarlar katmaninin gorunum alt-filtreleri. */
   ihbarAlt: AltGrup[];
 }
 

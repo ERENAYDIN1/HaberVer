@@ -28,20 +28,12 @@ logger = logging.getLogger(__name__)
 
 
 async def _bakim_dongusu() -> None:
-    """Zamana bagli temizlik isleri: suresi gecmis oturumlar + tamir edilip
-    saklama suresi dolmus ihbar varliklari.
+    """Zamana bagli temizlik: suresi gecmis oturumlar + saklama suresi dolmus
+    ihbar varliklari.
 
-    **Neden okuma uclarinda degil.** Ikisi de bir zamanlar (ya da hic) yanlis
-    yerdeydi: `session.temizle` HICBIR YERDEN cagrilmiyordu, `asset.purge_
-    expired_repaired` ise her `GET /api/assets` ve `POST /within` icinde
-    calisiyordu. Ikincisi GET'i yazma islemine cevirir - frontend bu uclari
-    duzenli olarak yokladigi icin her poll bir DELETE + COMMIT uretiyordu, es
-    zamanli okuyucular ayni satirlar icin yarisiyor ve okuma gecikmesi
-    silinecek kayit sayisina bagli hale geliyordu. Ikisinin de dogru yeri
-    burasi: is zamana bagli, isteklere degil.
-
-    Sikligin hassas olmasi gerekmiyor - saklama suresi 5 GUN (`TAMIR_SAKLAMA_
-    GUN`), yani birkac saatlik gecikme davranisi degistirmez."""
+    Bu isler okuma uclarina iliştirilmez; oyle yapildiginda her GET bir
+    DELETE + COMMIT uretiyor ve okuma gecikmesi silinecek kayit sayisina bagli
+    hale geliyordu. Siklik hassas degil: saklama suresi gunlerle olculur."""
     aralik = max(1, settings.oturum_temizleme_saat) * 3600
     while True:
         try:
@@ -89,18 +81,13 @@ IZINLI_ORIGINLER = {settings.app_base_url.rstrip("/"), settings.frontend_origin.
 
 @app.middleware("http")
 async def origin_kontrolu(request: Request, call_next):
-    """CSRF savunmasinin ikinci katmani.
+    """CSRF savunmasinin ikinci katmani. Cookie `SameSite=Lax` oldugu icin
+    capraz siteden gelen POST'ta tarayici cookie'yi zaten gondermez; bu ara
+    katman ayni kurali sunucu tarafinda da dogrular (form tabanli multipart
+    yuklemeler icin onemli).
 
-    Oturum cookie'si `SameSite=Lax` oldugu icin capraz siteden gelen POST
-    isteklerine tarayici cookie'yi zaten eklemez; bu ara katman ayni seyi
-    sunucu tarafinda da dogrular (eski tarayicilar, `Lax`'i esneten kenar
-    durumlar ve form tabanli multipart yuklemeler icin - ihbar fotografi
-    yukleme ucu boyle bir uctur).
-
-    Origin basligi olmayan istekler yalnizca ortada bir oturum cookie'si
-    YOKKEN gecirilir: tarayici disi istemciler (curl, testler) calismaya devam
-    eder, cookie ile gelen bir istek ise her zaman kaynagini kanitlamak
-    zorundadir."""
+    Origin basligi olmayan istekler yalnizca oturum cookie'si yokken gecer:
+    curl/testler calisir, cookie'li istek ise her zaman kaynagini kanitlar."""
     if request.method not in GUVENLI_METOTLAR:
         origin = request.headers.get("origin")
         if origin is None:
@@ -131,9 +118,9 @@ app.include_router(bolgeler.router)
 app.include_router(sinirlar.router)
 app.include_router(geo.router)
 app.include_router(logs.router)
-# Yuklenen ihbar fotograflari. Eskiden `app.mount(StaticFiles(...))` idi; o mount
-# tum router'larin ve security.py'nin DISINDA kaldigi icin dosyalar kimlik
-# dogrulamasi olmadan servis ediliyordu. Artik normal bir router (bkz. media.py).
+# Ihbar fotograflari bilincli olarak `StaticFiles` mount'u degil normal bir
+# router: mount security.py'nin disinda kalip dosyalari kimlik dogrulamasiz
+# servis ediyordu.
 app.include_router(media.router)
 
 

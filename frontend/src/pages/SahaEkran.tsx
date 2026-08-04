@@ -31,7 +31,7 @@ import { kacis } from "../utils/html";
 
 const GOREV_RENGI = "#d97706"; // amber - "iş bekliyor"
 
-/** Google Haritalar'da bu noktaya (kullanicinin konumundan) yol tarifi acar. */
+/** Google Haritalar'da bu noktaya yol tarifi acar. */
 function yolTarifiAc(lng: number, lat: number) {
   window.open(
     `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
@@ -61,13 +61,12 @@ export default function SahaEkran() {
   // Islem gormekte olan gorev bolgesi / guzergah (bolge id) ve onay bekleyeni.
   const [bolgeIslemde, setBolgeIslemde] = useState<string | null>(null);
   const [bolgeOnayBekleyen, setBolgeOnayBekleyen] = useState<string | null>(null);
-  // Bu oturumda geri alinan gorevler (assignment_id) - aktif listede "geri
-  // alindi" rozetiyle isaretlenir ki hangi isin geri getirildigi belli olsun.
+  // Bu oturumda geri alinan gorevler; aktif listede rozetle isaretlenir.
   const [geriAlinanlar, setGeriAlinanlar] = useState<Set<string>>(new Set());
   // Islem sonrasi bilgilendirme seridi.
   const [durum, setDurum] = useState<{ ok: boolean; metin: string } | null>(null);
 
-  // Konum yayini: mount'ta ve her 30sn'de bir tarayici konumunu backend'e gonder.
+  // Konum yayini: acilista ve her 30 sn'de bir backend'e gonderilir.
   useEffect(() => {
     if (!navigator.geolocation) {
       setKonumHatasi("Tarayıcınız konum servisini desteklemiyor");
@@ -116,9 +115,8 @@ export default function SahaEkran() {
   });
   const tamamlananlar = tamamlananSorgu.data?.features ?? [];
 
-  // Ekibe atanan gorev bolgeleri ve guzergahlar: personel bir alani "bu ekibin
-  // gorev bolgesi", bir cizgiyi "guzergahi" olarak isaretlediginde burada ve
-  // haritada gorunur. Uc tamamlananlari da dondurur - ekip geri alabilsin.
+  // Ekibe atanan gorev bolgeleri ve guzergahlar. Uc, tamamlananlari da
+  // dondurur ki ekip geri alabilsin.
   const bolgeSorgu = useQuery({
     queryKey: ["saha", "bolgelerim"],
     queryFn: bolgelerimGetir,
@@ -130,8 +128,7 @@ export default function SahaEkran() {
   const aktifAlanlar = aktifBolgeler.filter((b) => b.tip === "alan");
   const aktifGuzergahlar = aktifBolgeler.filter((b) => b.tip === "cizgi");
 
-  // Haritada yalnizca AKTIF kayitlar cizilir: tamamlanan bir bolge listede
-  // (geri alinabilsin diye) durur ama haritayi mesgul etmez.
+  // Haritada yalnizca aktif kayitlar cizilir; tamamlananlar listede durur.
   const bolgeAlanlari = useMemo<HaritaAlani[]>(
     () =>
       (bolgeSorgu.data ?? [])
@@ -146,8 +143,7 @@ export default function SahaEkran() {
     [bolgeSorgu.data]
   );
 
-  /** Gorevler, konum biliniyorsa EN YAKIN ONCE siralanir - saha ekibi gunu
-   *  sirayla planlarken listenin basindakine gitmesi yeterli olsun. Konum yoksa
+  /** Konum biliniyorsa gorevler en yakindan uzaga siralanir; bilinmiyorsa
    *  backend'in verdigi sira (atama zamani) korunur. */
   const siraliGorevler = useMemo(() => {
     const liste = (gorevSorgu.data?.features ?? []).map((g) => ({
@@ -166,7 +162,7 @@ export default function SahaEkran() {
         const p = g.properties;
         const [lng, lat] = g.geometry.coordinates;
         const foto = fotoUrl(p.photo_url);
-        // Haritadaki pine tiklaninca: foto + detay + Google yol tarifi baglantisi.
+        // Pin popup'i: foto + detay + yol tarifi baglantisi.
         const popupHtml =
           `<div style="font-family:system-ui,sans-serif;width:200px">` +
           (foto
@@ -199,8 +195,7 @@ export default function SahaEkran() {
     setTamirEdilen(assetId);
     try {
       await repairAsset(assetId);
-      // Aktif liste + tamamlananlar tazelenir; is silinmez, alttaki
-      // "Tamamlanan İşler"e taşınır ve oradan geri alınabilir.
+      // Is silinmez, "Tamamlanan İşler" listesine taşınır.
       await queryClient.invalidateQueries({ queryKey: ["saha"] });
       setDurum({ ok: true, metin: `"${ad}" işi tamamlandı olarak işaretlendi.` });
     } catch (e) {
@@ -211,8 +206,7 @@ export default function SahaEkran() {
     }
   };
 
-  /** Gorev bolgesi / guzergah kapatma ve geri alma. Bakim gorevleriyle ayni
-   *  desen: kayit silinmez, "Tamamlanan İşler" altina duser. */
+  /** Bolge/guzergah kapatma ve geri alma; bakim gorevleriyle ayni desen. */
   const bolgeDurumDegis = async (id: string, ad: string, tamamlandi: boolean) => {
     setBolgeIslemde(id);
     try {
@@ -278,8 +272,8 @@ export default function SahaEkran() {
       <div className="flex min-h-0 flex-1">
         {/* Sol: gorev listesi */}
         <aside className="flex w-[380px] shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-slate-50">
-          {/* Ust ozet: gunun is yuku tek bakista + konum yayininin canli olup
-              olmadigi (personel ekibi haritada ancak konum gelirse gorur). */}
+          {/* Ust ozet: is yuku + konum yayininin canli olup olmadigi (personel
+              ekibi haritada ancak konum gelirse gorur). */}
           <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 p-4 backdrop-blur-sm">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -356,9 +350,8 @@ export default function SahaEkran() {
             )}
           </div>
 
-          {/* Gorev bolgeleri ve guzergahlar: personelin bu ekibe atadigi calisma
-              alanlari / izlenecek hatlar. Haritada kesik cizgiyle isaretlidir.
-              Tamamlananlar buradan cikip asagidaki "Tamamlanan İşler"e duser. */}
+          {/* Ekibe atanmis calisma alanlari ve hatlar; haritada kesik cizgili.
+              Tamamlananlar asagidaki "Tamamlanan İşler"e duser. */}
           {aktifBolgeler.length > 0 && (
             <div className="space-y-4 border-b border-slate-200 bg-white px-4 py-3.5">
               {aktifAlanlar.length > 0 && (
@@ -494,8 +487,7 @@ export default function SahaEkran() {
                               <Ikon className="h-6 w-6 text-slate-400" />
                             </div>
                           )}
-                          {/* Sira rozeti: liste konum biliniyorsa en yakindan
-                              uzaga siralidir, numara "gidis sirasi" demektir. */}
+                          {/* Sira rozeti = gidis sirasi (en yakindan uzaga). */}
                           <span className="absolute -left-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white ring-2 ring-white">
                             {sira + 1}
                           </span>
@@ -585,8 +577,8 @@ export default function SahaEkran() {
               </ul>
             )}
 
-            {/* Tamamlanan İşler: tamamlanan is hemen silinmez; yanlislikla
-                isaretlenirse buradan geri alinabilir. */}
+            {/* Tamamlanan isler silinmez; yanlislikla isaretlenirse buradan
+                geri alinabilir. */}
             {tamamlananlar.length + tamamlananBolgeler.length > 0 && (
               <div className="mt-5 border-t border-slate-200 pt-4">
                 <BolumBasligi
@@ -601,8 +593,7 @@ export default function SahaEkran() {
                   getirebilirsiniz.
                 </p>
                 <ul className="mt-2 space-y-2">
-                  {/* Tamamlanan gorev bolgeleri / guzergahlar - bakim isleriyle
-                      ayni listede, tipini gosteren ikonla. */}
+                  {/* Bolgeler bakim isleriyle ayni listede, tur ikonuyla. */}
                   {tamamlananBolgeler.map((b) => (
                     <li
                       key={b.id}
@@ -694,7 +685,7 @@ export default function SahaEkran() {
   );
 }
 
-/** Bolum basligi renkleri (acik sinif adlari, bkz. OZET_RENKLERI notu). */
+/** Bolum basligi renkleri (acik Tailwind sinif adlari). */
 const BOLUM_RENKLERI = {
   amber: {
     rozet: "bg-amber-500 text-white shadow-amber-500/30",
@@ -718,10 +709,8 @@ const BOLUM_RENKLERI = {
   },
 };
 
-/** Sol paneldeki bolum basligi: renkli ikon rozeti + kalin ad + alt aciklama +
- *  sayac. Bilincli olarak belirgin - ekran artik uc ayri is turunu (bakim isi,
- *  gorev bolgesi, guzergah) yan yana listeliyor, hangisine bakildigi bir
- *  bakista anlasilmali. Personel tarafindaki BolgePaneli ile ayni dil. */
+/** Sol paneldeki bolum basligi (BolgePaneli'ndeki ile ayni dil): ekran uc ayri
+ *  is turunu yan yana listeledigi icin bilincli olarak belirgin. */
 function BolumBasligi({
   baslik,
   altBaslik,
@@ -760,9 +749,8 @@ function BolumBasligi({
   );
 }
 
-/** Ekibe atanmis bir gorev bolgesi / guzergah karti: tiklayinca haritada o
- *  kayda ucar, "Tamamlandı" ile kapatilir (iki adimli onay - bakim isindeki
- *  "Tamir Edildi" ile ayni davranis). */
+/** Bolge/guzergah karti: tiklayinca haritada o kayda ucar, "Tamamlandı" ile
+ *  iki adimli onaydan gecerek kapatilir. */
 function BolgeKarti({
   bolge,
   olcu,
@@ -790,8 +778,7 @@ function BolgeKarti({
         onClick={onGit}
         className={`flex w-full items-stretch gap-2.5 p-2.5 text-left transition hover:shadow ${vurgu}`}
       >
-        {/* Kaydin rengini tasiyan dikey serit - bilincli olarak ince (1px):
-            kimlik icin yeterli, karti bolmeden yaninda durur. */}
+        {/* Kaydin rengini tasiyan ince dikey serit. */}
         <span
           className="w-px shrink-0 rounded-full"
           style={{ background: bolge.renk }}
@@ -843,8 +830,7 @@ function BolgeKarti({
   );
 }
 
-/** Renk basina tam Tailwind sinif adlari - JIT taramasi `bg-${renk}-50` gibi
- *  sablon dizgilerini yakalayamadigindan siniflar burada acik yazilir. */
+/** Ozet kutusu renkleri; Tailwind JIT sablon dizgilerini taramaz. */
 const OZET_RENKLERI: Record<string, string> = {
   amber: "border-amber-200 bg-amber-50 text-amber-700",
   emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",

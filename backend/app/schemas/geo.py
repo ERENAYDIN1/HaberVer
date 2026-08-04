@@ -1,10 +1,8 @@
 from pydantic import BaseModel, Field, model_validator
 
-# Bir alanin halka basina kabul edilen azami nokta sayisi. Sinir PostGIS'i
-# korur: alan sayisi (50) sinirlandirilmisti ama nokta sayisi degildi, yani
-# "50 alan" yerine "1 alan, 500.000 kose" gondererek ayni yuk uretilebiliyordu.
-# En buyuk mesru girdi Istanbul il siniri (~900 nokta) ve elle cizilen alanlar
-# (onlarca nokta); 20.000 rahat bir tavandir.
+# Halka basina azami nokta sayisi; PostGIS'i asiri yukten korur. Alan sayisi
+# sinirliydi ama nokta sayisi degildi, yani tek alanla ayni yuk uretilebiliyordu.
+# En buyuk mesru girdi il siniri (~900 nokta), 20.000 rahat bir tavan.
 MAKS_HALKA_NOKTASI = 20_000
 
 
