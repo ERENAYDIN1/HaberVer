@@ -15,13 +15,14 @@ import {
 } from "../types/asset";
 import {
   MAKS_AKTIF_GOREV,
+  MAKS_ATAMA_MESAFE_KM,
   YAKA_KISA,
   yakaEtiketi,
   type EkipOzet,
   type Yaka,
 } from "../types/saha";
-import { AksiyonButonu, AksiyonSeridi, SilOnayi } from "./Aksiyonlar";
-import { IconCheck } from "./icons";
+import { AksiyonAyraci, AksiyonButonu, AksiyonSeridi, SilOnayi } from "./Aksiyonlar";
+import { IconCheck, IconPin } from "./icons";
 import Modal from "./Modal";
 
 interface AssetDetayModalProps {
@@ -279,16 +280,6 @@ export default function AssetDetayModal({
         {/* Tamir/duzenleme/silme; serit her cagri yerinde aynidir. */}
         {islemModu && (
           <AksiyonSeridi>
-            {onGit && (
-              <AksiyonButonu
-                onClick={() => {
-                  onGit(asset);
-                  onKapat();
-                }}
-              >
-                Konuma Git
-              </AksiyonButonu>
-            )}
             {bakim && (
               <AksiyonButonu
                 tur="birincil"
@@ -303,6 +294,24 @@ export default function AssetDetayModal({
             )}
             {tamCrudYetkisi && onDuzenle && (
               <AksiyonButonu onClick={() => onDuzenle(asset)}>Düzenle</AksiyonButonu>
+            )}
+            {/* Gezinme, kaydi degistiren islemlerin sagina bosluklu olarak
+                ayrilir: yanlislikla "Konuma Git"e basmak veri kaybettirmez ama
+                iki kume gorsel olarak da karismasin. */}
+            {onGit && (
+              <>
+                {(bakim || (tamCrudYetkisi && onDuzenle)) && <AksiyonAyraci />}
+                <AksiyonButonu
+                  tur="gezinme"
+                  onClick={() => {
+                    onGit(asset);
+                    onKapat();
+                  }}
+                >
+                  <IconPin className="h-3.5 w-3.5" />
+                  Konuma Git
+                </AksiyonButonu>
+              </>
             )}
             {tamCrudYetkisi && onSilindi && (
               <SilOnayi
@@ -353,7 +362,7 @@ export default function AssetDetayModal({
                   . Başka bir ekip seçip yeniden yönlendirebilirsiniz.
                 </>
               ) : (
-                "Henüz bir ekibe atanmadı — havuzda bekliyor (aynı yakada menzilde uygun ekip yok)."
+                `Henüz bir ekibe atanmadı — havuzda bekliyor (aynı yakada ~${MAKS_ATAMA_MESAFE_KM} km içinde konumu bilinen boş ekip yok).`
               )}
             </div>
 

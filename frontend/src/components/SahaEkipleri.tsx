@@ -12,6 +12,7 @@ import {
 } from "../types/asset";
 import {
   MAKS_AKTIF_GOREV,
+  ATAMA_MESAFE_KADEMELERI_KM,
   MAKS_ATAMA_MESAFE_KM,
   YAKA_KISA,
   yakaEtiketi,
@@ -414,9 +415,11 @@ export default function SahaEkipleri() {
           <p className="text-xs text-slate-500">
             Hangi ekipte hangi görevin olduğunu görün; görevleri başka ekibe taşıyın,
             havuza alın veya havuzdaki işleri elle atayın. Otomatik atama{" "}
-            <strong>aynı yakadaki</strong>, ~{MAKS_ATAMA_MESAFE_KM} km içindeki en
-            yakın uygun ekibe yapılır — bir ekip Boğaz'ın karşısına otomatik
-            gönderilmez. Elle atarken karşı yakadaki ekipler ⚠ ile işaretlenir.
+            <strong>aynı yakadaki</strong> en yakın uygun ekibe yapılır: önce ~
+            {ATAMA_MESAFE_KADEMELERI_KM[0]} km içine bakılır, o mesafede boş ekip
+            yoksa ~{MAKS_ATAMA_MESAFE_KM} km'ye genişletilir. Bir ekip Boğaz'ın
+            karşısına otomatik gönderilmez ve konumu bilinmeyen ekibe otomatik iş
+            düşmez. Elle atarken karşı yakadaki ekipler ⚠ ile işaretlenir.
           </p>
         </div>
         <button
@@ -472,9 +475,10 @@ export default function SahaEkipleri() {
           <span className="text-xs font-normal text-slate-400">({havuz.length})</span>
         </h3>
         <p className="mb-2 text-xs text-slate-500">
-          Kendi yakasında menzilde uygun (boş) ekip olmadığı için bekleyen işler.
-          Aynı yakadaki bir ekip kapasite açınca otomatik yönlendirilir; dilerseniz
-          aşağıdan elle atayabilirsiniz.
+          Kendi yakasında ~{MAKS_ATAMA_MESAFE_KM} km içinde uygun (boş, konumu
+          bilinen) ekip olmadığı için bekleyen işler. Aynı yakadaki bir ekip
+          kapasite açınca ya da menzile girecek şekilde yer değiştirince otomatik
+          yönlendirilir; dilerseniz aşağıdan elle atayabilirsiniz.
         </p>
 
         {havuz.length > 0 && (

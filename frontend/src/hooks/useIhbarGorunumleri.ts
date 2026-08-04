@@ -43,14 +43,21 @@ export function onayliEslemeKur(onaylananlar: readonly ReportFeature[]): OnayliE
 
 /** Ihbarlari gorunume gore gruplar ve her kayda `properties.gorunum` yazar.
  *  `ihbardanDoganVarliklar` undefined ise (sorgu henuz yuklenmedi) siniflama
- *  yapilmaz, yoksa acilista her sey bir an "Tamir Edildi"ye duserdi. */
+ *  yapilmaz, yoksa acilista her sey bir an "Tamir Edildi"ye duserdi.
+ *
+ *  Onaylanmis bir ihbarin KONUMU da olusan varliktan alinir: personel varligin
+ *  koordinatini duzeltince (vatandas yanlis yere isaretlemis olabilir) harita
+ *  isaretcisi de tasinmali. Ham ihbar noktasi veritabaninda oldugu gibi kalir,
+ *  yalnizca gosterim isin guncel yerini izler. */
 export function gorunumlereAyir(
   durumaGoreIhbarlar: Record<ReportStatus, readonly ReportFeature[] | undefined>,
   ihbardanDoganVarliklar: readonly AssetFeature[] | undefined
 ): Record<IhbarGorunumu, ReportFeature[]> {
   const varlikDurumu = new Map<string, "iyi" | "bakim_lazim">();
+  const varlikKonumu = new Map<string, AssetFeature["geometry"]>();
   for (const a of ihbardanDoganVarliklar ?? []) {
     varlikDurumu.set(a.properties.id, a.properties.status);
+    varlikKonumu.set(a.properties.id, a.geometry);
   }
   const varlikBilgisiVar = ihbardanDoganVarliklar !== undefined;
   const gruplar: Record<IhbarGorunumu, ReportFeature[]> = {
@@ -61,14 +68,18 @@ export function gorunumlereAyir(
   };
   for (const durum of REPORT_STATUSES) {
     for (const f of durumaGoreIhbarlar[durum] ?? []) {
+      const varlikId = f.properties.created_asset_id;
       const g = ihbarGorunumu(
         f.properties.status,
-        f.properties.created_asset_id
-          ? varlikDurumu.get(f.properties.created_asset_id)
-          : undefined,
+        varlikId ? varlikDurumu.get(varlikId) : undefined,
         varlikBilgisiVar
       );
-      gruplar[g].push({ ...f, properties: { ...f.properties, gorunum: g } });
+      const konum = varlikId ? varlikKonumu.get(varlikId) : undefined;
+      gruplar[g].push({
+        ...f,
+        geometry: konum ?? f.geometry,
+        properties: { ...f.properties, gorunum: g },
+      });
     }
   }
   return gruplar;

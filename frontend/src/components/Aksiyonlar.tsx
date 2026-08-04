@@ -5,7 +5,8 @@ import { useState, type ReactNode } from "react";
  *  yerlesimi ve ayni renk kodunu gosterir.
  *
  *  Renk kodu: yesil = ilerleten ana islem, gri = ikincil, kirmizi = yikici,
- *  amber = geri alan/uyaran, mor = bolge islemleri. */
+ *  amber = geri alan/uyaran, mor = bolge islemleri, mavi = haritada gezinme
+ *  (kayda dokunmaz, yalnizca goruntuyu tasir). */
 
 export type AksiyonTuru =
   | "birincil"
@@ -13,7 +14,8 @@ export type AksiyonTuru =
   | "tehlike"
   | "tehlikeIkincil"
   | "uyari"
-  | "mor";
+  | "mor"
+  | "gezinme";
 
 const TUR_SINIFLARI: Record<AksiyonTuru, string> = {
   birincil:
@@ -25,6 +27,9 @@ const TUR_SINIFLARI: Record<AksiyonTuru, string> = {
   uyari:
     "border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100",
   mor: "border border-violet-600 bg-violet-600 text-white hover:bg-violet-500",
+  // Harita/konum dilinin rengi (ekip isaretcisi, aydinlatma grubu vb. ile ayni
+  // sky tonu): "veriye dokunmaz, seni oraya goturur".
+  gezinme: "border border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100",
 };
 
 const TEMEL_SINIF =
@@ -57,6 +62,13 @@ export function AksiyonButonu({
       {children}
     </button>
   );
+}
+
+/** Serit icinde iki islem kumesini ayiran bosluk. Kaydi degistiren islemler
+ *  (tamir/duzenle) ile yalnizca goruntuyu tasiyan gezinme islemi yan yana
+ *  dizilmesin diye. */
+export function AksiyonAyraci() {
+  return <span aria-hidden className="w-3" />;
 }
 
 /** Modal govdesinin altindaki islem seridi: ust cizgiyle ayrilir, butonlar

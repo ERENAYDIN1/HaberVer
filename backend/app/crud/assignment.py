@@ -20,9 +20,19 @@ from .log import add_log
 # Bir ekibe ayni anda dusebilecek en fazla aktif gorev.
 MAKS_AKTIF_GOREV = 3
 
-# Otomatik atamada izin verilen azami mesafe (metre). Bundan uzaktaki bos bir
-# ekip bile olsa varlik atanmaz, havuzda bekler. Elle atamada uygulanmaz.
-MAKS_ATAMA_MESAFE_M = 5000
+# Otomatik atamada mesafe kademeleri (metre). Once 5 km icindeki uygun ekiplere
+# bakilir; o halkada kimse yoksa 10 km'ye genisletilir. En genis kademede de
+# uygun ekip yoksa varlik atanmaz, havuzda bekler. Elle atamada uygulanmaz.
+#
+# Kademeler ayni sirada denenir ve her kademe kendi icinde EN YAKIN ekibi secer,
+# yani 3 km'deki bir ekip hicbir zaman 8 km'dekine yenilmez. Kademeleri ayri
+# yazmanin degeri kuralin okunur ve ayarlanabilir kalmasi: "yakindaki bos ekip
+# varken uzagi hic dusunme" cumlesi kodda birebir duruyor.
+ATAMA_MESAFE_KADEMELERI_M = (5000, 10000)
+
+# Geriye donuk ad: en genis kademe. Ekipler/havuz metinleri ve testler "otomatik
+# atamanin en uzak menzili" olarak bunu okur.
+MAKS_ATAMA_MESAFE_M = ATAMA_MESAFE_KADEMELERI_M[-1]
 
 # Ekip basina dondurulen "son tamamlanan is" sayisi; haritadaki ekip popup'i
 # dar oldugu icin kisa tutulur.
@@ -58,8 +68,14 @@ def _aktif_sayi_subq():
 
 def en_yakin_uygun_ekip(db: Session, asset_geom) -> User | None:
     """Varliga en yakin uygun ekibi dondurur: konumu bilinen, aktif, kapasitesi
-    olan, varlikla ayni yakada ve en fazla MAKS_ATAMA_MESAFE_M mesafedeki saha
-    calisanlari arasindan. Uygun ekip yoksa None doner ve varlik havuzda bekler.
+    olan, varlikla ayni yakada ve ATAMA_MESAFE_KADEMELERI_M kademelerinden
+    birine giren saha calisanlari arasindan. Once dar kademe (5 km) denenir,
+    orada uygun ekip yoksa genis kademeye (10 km) inilir. Hicbir kademede uygun
+    ekip yoksa None doner ve varlik havuzda bekler.
+
+    KONUMU BILINMEYEN ekip hicbir kademede degerlendirilmez: "Gaziosmanpasa
+    ekibi" bilgisi tek basina o ekibin Eyup'e mi Sultangazi'ye mi yakin
+    oldugunu soylemez, dolayisiyla mesafe kurali uygulanamaz.
 
     Yaka kisiti mesafe esiginin yerine degil ustune gelir: Bogaz'in iki yakasi
     kus ucusu yakin gorunse de arac ancak kopruden gecer."""
@@ -70,16 +86,24 @@ def en_yakin_uygun_ekip(db: Session, asset_geom) -> User | None:
         User.role == UserRole.saha_calisani,
         User.is_active.is_(True),
         User.last_location.isnot(None),
-        mesafe <= MAKS_ATAMA_MESAFE_M,
+        # En genis kademe: sorgu tek seferde cekilir, kademeler Python'da
+        # ayrilir. Aksi halde her kademe icin ayri bir SQL turu olurdu.
+        mesafe <= ATAMA_MESAFE_KADEMELERI_M[-1],
     ]
     # asset_yaka None ise (yakalar tablosu bos) kisit uygulanmaz; sessizce
     # hicbir sey atanmamasindansa mesafe kuralina duselim.
     if asset_yaka is not None:
         kosullar.append(yaka_crud.ekip_yakasi_ifadesi() == asset_yaka)
-    rows = db.execute(select(User, cnt).where(*kosullar).order_by(mesafe.asc())).all()
-    for user, aktif in rows:
-        if aktif < MAKS_AKTIF_GOREV:
-            return user
+    rows = db.execute(
+        select(User, cnt, mesafe.label("mesafe"))
+        .where(*kosullar)
+        .order_by(mesafe.asc())
+    ).all()
+
+    for kademe in ATAMA_MESAFE_KADEMELERI_M:
+        for user, aktif, uzaklik in rows:
+            if uzaklik is not None and uzaklik <= kademe and aktif < MAKS_AKTIF_GOREV:
+                return user
     return None
 
 

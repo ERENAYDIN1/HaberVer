@@ -33,7 +33,8 @@ router = APIRouter(prefix="/api/saha", tags=["saha"])
 # Havuz dagitimini tetiklemek icin gereken en kucuk yer degistirme (metre).
 # Konum ~30 sn'de bir bildirildigi icin her ping'te dagitim yapmak, ekip
 # yerinde dursa bile havuzdaki her is icin ayri sorgu demekti. Bu esigin
-# altindaki hareket, 5 km'lik menzil sinirinda sonucu degistiremez.
+# altindaki hareket, kilometrelerle olculen menzil kademelerinde sonucu
+# degistiremez.
 KONUM_DAGITIM_ESIGI_M = 250
 
 

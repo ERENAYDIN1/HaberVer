@@ -96,6 +96,38 @@ describe("gorunumlereAyir", () => {
     expect(g.tamir[0].properties.gorunum).toBe("tamir");
   });
 
+  it("onayli ihbarin konumunu olusan varliktan alir", () => {
+    // Regresyon: personel varligin enlem/boylamini duzeltince haritadaki ihbar
+    // isaretcisi eski (vatandasin isaretledigi) noktada kaliyordu.
+    const tasinmis = varlik({
+      status: "bakim_lazim",
+      source: "ihbar",
+      koordinat: [29.5, 40.9],
+    });
+    const raporu = ihbar({
+      status: "onaylandi",
+      created_asset_id: tasinmis.properties.id,
+      koordinat: [28.98, 41.01],
+    });
+    const g = gorunumlereAyir(
+      { beklemede: [], onaylandi: [raporu], reddedildi: [] },
+      [tasinmis]
+    );
+    expect(g.onaylandi[0].geometry.coordinates).toEqual([29.5, 40.9]);
+    // Ham kayit degismez.
+    expect(raporu.geometry.coordinates).toEqual([28.98, 41.01]);
+  });
+
+  it("varligi bilinmeyen ihbarin kendi konumunu korur", () => {
+    const g = gorunumlereAyir(
+      { beklemede: [bekleyen], onaylandi: [], reddedildi: [] },
+      [acikIs]
+    );
+    expect(g.beklemede[0].geometry.coordinates).toEqual(
+      bekleyen.geometry.coordinates
+    );
+  });
+
   it("kaynak nesneleri DEGISTIRMEZ (kopya uzerine yazar)", () => {
     gorunumlereAyir(
       { beklemede: [], onaylandi: [tamirIhbari], reddedildi: [] },

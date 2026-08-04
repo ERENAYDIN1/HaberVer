@@ -4,8 +4,15 @@ import type { AssetSource, AssetStatus, AssetType, PointGeometry } from "./asset
  *  MAKS_AKTIF_GOREV ile ayni olmali). */
 export const MAKS_AKTIF_GOREV = 3;
 
-/** Otomatik atamadaki azami mesafe (km); yalnizca metin gostermek icin. */
-export const MAKS_ATAMA_MESAFE_KM = 5;
+/** Otomatik atamanin mesafe kademeleri (km); backend'deki
+ *  ATAMA_MESAFE_KADEMELERI_M ile ayni olmali. Yalnizca metin gostermek icin:
+ *  karari her zaman backend verir. Once dar kademe denenir, orada uygun ekip
+ *  yoksa genis kademeye inilir. */
+export const ATAMA_MESAFE_KADEMELERI_KM = [5, 10] as const;
+
+/** En genis kademe: "bundan uzagi otomatik atanmaz" sinirini anlatan metinler. */
+export const MAKS_ATAMA_MESAFE_KM =
+  ATAMA_MESAFE_KADEMELERI_KM[ATAMA_MESAFE_KADEMELERI_KM.length - 1];
 
 /** Yaka kodlari; backend'deki `yakalar` tablosunun kod degerleri. Otomatik
  *  atamada ekip ile varligin yakasi ayni olmali: Bogaz'in iki yakasi kus
