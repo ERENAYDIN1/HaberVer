@@ -122,6 +122,35 @@ export function poligonSinirKutusu(
   ];
 }
 
+/** Ray-casting: nokta halkanin icinde mi? Halka kapali gelebilir (son nokta =
+ *  ilk nokta); algoritma kenarlari cift saymadigi icin bu sorun degildir. */
+export function noktaHalkadaMi(
+  nokta: [number, number],
+  halka: [number, number][]
+): boolean {
+  const [x, y] = nokta;
+  let icinde = false;
+  for (let i = 0, j = halka.length - 1; i < halka.length; j = i++) {
+    const [xi, yi] = halka[i];
+    const [xj, yj] = halka[j];
+    // Kenar noktanin yatay isinini kesiyor mu?
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+      icinde = !icinde;
+    }
+  }
+  return icinde;
+}
+
+/** Halka listesi bu projede her zaman "ayri parcalar" demektir (delik degil):
+ *  Adalar gibi cok parcali ilcelerde her halka bagimsiz bir poligondur. Bu
+ *  yuzden nokta HERHANGI bir halkanin icindeyse alandadir. */
+export function noktaAlandaMi(
+  nokta: [number, number],
+  halkalar: [number, number][][]
+): boolean {
+  return halkalar.some((halka) => noktaHalkadaMi(nokta, halka));
+}
+
 export function alanEtiketi(m2: number): string {
   if (m2 >= 1_000_000) return `${(m2 / 1_000_000).toFixed(2)} km²`;
   if (m2 >= 10_000) return `${(m2 / 10_000).toFixed(2)} ha`;

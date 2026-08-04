@@ -7,6 +7,8 @@ import {
   halkalariAc,
   halkayiAc,
   mesafeMetre,
+  noktaAlandaMi,
+  noktaHalkadaMi,
   poligonAlaniM2,
   poligonMerkezi,
   poligonSinirKutusu,
@@ -167,5 +169,44 @@ describe("poligonSinirKutusu", () => {
       [28.9, 40.8],
       [29.3, 41.2],
     ]);
+  });
+});
+
+/** Nokta-icinde-mi testi lejantin ilce/mahalle filtresini besler: ihbar,
+ *  bolge ve ekip katmanlari secili sinira gore burada elenir. */
+describe("noktaHalkadaMi / noktaAlandaMi", () => {
+  // Basit kare: [29,41] - [30,42].
+  const kare: [number, number][] = [
+    [29, 41],
+    [30, 41],
+    [30, 42],
+    [29, 42],
+  ];
+  // Ayni kare kapali yazimla (son nokta = ilk nokta); API poligonlari boyle doner.
+  const kapaliKare: [number, number][] = [...kare, [29, 41]];
+  // Uzakta, ayri bir parca - "Adalar gibi cok halkali sinir" durumu.
+  const ikinciParca: [number, number][] = [
+    [31, 40],
+    [31.5, 40],
+    [31.5, 40.5],
+    [31, 40.5],
+  ];
+
+  it("icerideki noktayi bulur, disaridakini elemez", () => {
+    expect(noktaHalkadaMi([29.5, 41.5], kare)).toBe(true);
+    expect(noktaHalkadaMi([28.5, 41.5], kare)).toBe(false);
+    expect(noktaHalkadaMi([29.5, 42.5], kare)).toBe(false);
+  });
+
+  it("halkanin kapali yazilmis olmasi sonucu degistirmez", () => {
+    expect(noktaHalkadaMi([29.5, 41.5], kapaliKare)).toBe(true);
+    expect(noktaHalkadaMi([28.5, 41.5], kapaliKare)).toBe(false);
+  });
+
+  it("cok halkali sinirda her parca bagimsiz poligondur (delik degil)", () => {
+    const halkalar = [kare, ikinciParca];
+    expect(noktaAlandaMi([29.5, 41.5], halkalar)).toBe(true);
+    expect(noktaAlandaMi([31.2, 40.2], halkalar)).toBe(true);
+    expect(noktaAlandaMi([30.5, 41.5], halkalar)).toBe(false);
   });
 });

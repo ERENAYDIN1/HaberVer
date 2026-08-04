@@ -85,7 +85,7 @@ import type {
   ReportFeature,
   ReportFeatureCollection,
 } from "./types/report";
-import { mesafeEtiketi, poligonSinirKutusu } from "./utils/geo";
+import { mesafeEtiketi, noktaAlandaMi, poligonSinirKutusu } from "./utils/geo";
 import { ISTANBUL_MERKEZI } from "./utils/istanbulMaskesi";
 
 /** Lejanttaki durum swatch'inin KENARLIK rengi. Haritada her iki durumdaki
@@ -374,6 +374,40 @@ export default function App() {
     [seciliIhbarId, panelAcik, onayliEsleme]
   );
 
+  // --- Secili alan(lar) diger katmanlari da suzer -------------------------
+  // Varliklar zaten backend'de suzuluyor (`assetsWithin`); ihbar, bolge ve
+  // ekip katmanlari ayni sinirla burada, client-side elenir - yoksa lejant
+  // "ilce secili" derken ilcenin disindaki ihbarlari/ekipleri saymaya devam
+  // ederdi. Olcut varliklarinkiyle ayni: nokta secili alanlardan HERHANGI
+  // birinin icinde mi (alanlar birlestirilerek degil tek tek denenir; varlik
+  // sonuclari da id'ye gore birlestiriliyor).
+  const alandaMi = useMemo(() => {
+    if (tamamlananAlanlar.length === 0) return null;
+    // Sinir kutusu on elemesi: ilce/mahalle halkalari binlerce noktali,
+    // uzaktaki bir nokta icin ray-casting'e hic girilmemeli.
+    const parcalar = tamamlananAlanlar.map((a) => ({
+      halkalar: a.noktalar,
+      kutu: poligonSinirKutusu(a.noktalar.flat()),
+    }));
+    return (nokta: [number, number]) =>
+      parcalar.some(
+        ({ halkalar, kutu }) =>
+          nokta[0] >= kutu[0][0] &&
+          nokta[0] <= kutu[1][0] &&
+          nokta[1] >= kutu[0][1] &&
+          nokta[1] <= kutu[1][1] &&
+          noktaAlandaMi(nokta, halkalar)
+      );
+  }, [tamamlananAlanlar]);
+
+  /** Bir bolge/guzergah secili alana degiyor mu: koselerinden biri icerideyse
+   *  yeter. Kismen kesisen bir gorev bolgesi de o ilcenin isidir, tamamen
+   *  disarida kalanlar elenir. */
+  const bolgeAlanda = useCallback(
+    (bolge: Bolge) => !alandaMi || bolge.noktalar.some((h) => h.some(alandaMi)),
+    [alandaMi]
+  );
+
   // --- Bildirimler (header zili) ------------------------------------------
   // Bakim bekleyen varliklar - ana listeden bagimsiz sorgu.
   const bakimSorgu = useAssets({ status: "bakim_lazim" });
@@ -396,12 +430,14 @@ export default function App() {
   // Alanlar ve guzergahlar ayri katmanlar oldugu icin gorunur listeleri de
   // ayri hesaplanir; MapView'a yalnizca acik olanlarin birlesimi gider.
   const [gorunurAlanlar, gorunurGuzergahlar] = useMemo(() => {
-    const gorunur = (bolgeSorgu.data ?? []).filter((b) => !gizliBolgeler.has(b.id));
+    const gorunur = (bolgeSorgu.data ?? [])
+      .filter((b) => !gizliBolgeler.has(b.id))
+      .filter((b) => bolgeAlanda(b));
     return [
       gorunur.filter((b) => b.tip === "alan"),
       gorunur.filter((b) => b.tip === "cizgi"),
     ];
-  }, [bolgeSorgu.data, gizliBolgeler]);
+  }, [bolgeSorgu.data, gizliBolgeler, bolgeAlanda]);
   const haritaBolgeleri = useMemo(() => {
     const liste = [
       ...(katmanlar.bolgeler ? gorunurAlanlar : []),
@@ -560,15 +596,28 @@ export default function App() {
     };
   }, [varlikKatmanTaban, katmanTurleri, katmanVarlikDurumlari]);
 
+  /** Ihbar gruplarinin secili alanla sinirlanmis hali; hem harita katmani hem
+   *  lejant sayaclari bunu okur. Bildirim zilinin sayaci bilincli olarak ham
+   *  sorgudan gelir: zil sistemin tamamini anlatir, haritanin secimini degil. */
+  const ihbarGorunumleriAlanda = useMemo(() => {
+    if (!alandaMi) return ihbarGorunumleri;
+    return Object.fromEntries(
+      IHBAR_GORUNUMLERI.map((g) => [
+        g,
+        ihbarGorunumleri[g].filter((f) => alandaMi(f.geometry.coordinates)),
+      ])
+    ) as Record<IhbarGorunumu, ReportFeature[]>;
+  }, [ihbarGorunumleri, alandaMi]);
+
   // Ihbar katmani: secili gorunumlerin ihbarlari id'ye gore tekillestirilir.
   const ihbarKatmanVeri = useMemo<ReportFeatureCollection>(() => {
     const gorulen = new Map<string, ReportFeature>();
     for (const gorunum of IHBAR_GORUNUMLERI) {
       if (!katmanDurumlari[gorunum]) continue;
-      for (const f of ihbarGorunumleri[gorunum]) gorulen.set(f.properties.id, f);
+      for (const f of ihbarGorunumleriAlanda[gorunum]) gorulen.set(f.properties.id, f);
     }
     return { type: "FeatureCollection", features: [...gorulen.values()] };
-  }, [katmanDurumlari, ihbarGorunumleri]);
+  }, [katmanDurumlari, ihbarGorunumleriAlanda]);
 
   // Secilen ihbarin gorunumu panelin alt sekmesini de belirler, yoksa secili
   // kayit acilan listede gorunmezdi. Ham durum degil gorunum kullanilir:
@@ -581,12 +630,25 @@ export default function App() {
     if (secili) setIhbarDurum(secili.gorunum ?? secili.status);
   }, [seciliIhbarId, ihbarKatmanVeri]);
 
+  /** Haritada gosterilen ekipler. Yalnizca KATMAN suzulur: atama acilirlari
+   *  (AssetDetayModal, SahaEkipleri, BolgePaneli) tam listeyi gormeye devam
+   *  eder - secili ilcenin disindaki bir ekibe elle is verilebilmeli. Konumu
+   *  bilinmeyen ekip zaten haritada cizilmiyor, alan testinden de gecmez. */
+  const haritaEkipleri = useMemo(() => {
+    const ekipler = ekipSorgu.data;
+    if (!ekipler || !alandaMi) return ekipler;
+    return ekipler.filter(
+      (e) =>
+        e.longitude != null && e.latitude != null && alandaMi([e.longitude, e.latitude])
+    );
+  }, [ekipSorgu.data, alandaMi]);
+
   const katmanSayilari: Record<KatmanAnahtari, number> = {
     varliklar: varlikKatmanVeri?.features.length ?? 0,
     ihbarlar: ihbarKatmanVeri.features.length,
     bolgeler: gorunurAlanlar.length,
     guzergahlar: gorunurGuzergahlar.length,
-    ekipler: ekipSorgu.data?.length ?? 0,
+    ekipler: haritaEkipleri?.length ?? 0,
   };
 
   // Sag-ustteki katman kontrolune gecen alt-filtre tanimlari (etiket/renk/sayi).
@@ -637,11 +699,11 @@ export default function App() {
           etiket: REPORT_STATUS_LABELS[d],
           renk: IHBAR_DURUM_RENGI[d],
           secili: katmanDurumlari[d],
-          sayi: ihbarGorunumleri[d].length,
+          sayi: ihbarGorunumleriAlanda[d].length,
         })),
       },
     ],
-    [katmanDurumlari, ihbarGorunumleri, katmanDurumuDegistir]
+    [katmanDurumlari, ihbarGorunumleriAlanda, katmanDurumuDegistir]
   );
 
   // --- Sekme -> lejant (ana katmanlar) senkronu ---------------------------
@@ -1094,7 +1156,7 @@ export default function App() {
           // alma ve sekil duzenleme acilan detay modallerinin isidir.
           onVarlikDetay={() => setDetayAsset(seciliVarlik)}
           onIhbarDetay={() => setDetayRapor(seciliRapor)}
-          ekipler={katmanlar.ekipler ? ekipSorgu.data : undefined}
+          ekipler={katmanlar.ekipler ? haritaEkipleri : undefined}
           onEkipGorevSec={personel ? ekipGoreviAcildi : undefined}
           bolgeler={haritaBolgeleri}
           seciliBolgeId={seciliBolgeId}
@@ -1117,6 +1179,8 @@ export default function App() {
           sayilar={katmanSayilari}
           varlikAlt={varlikAltFiltre}
           ihbarAlt={ihbarAltFiltre}
+          // Ilce/mahalle secimi AssetList'teki acilirlarla ayni state.
+          bolge={{ ilceKodu, onIlceSec: ilceSec, mahalleKodu, onMahalleSec: mahalleSec }}
         />
 
         <MapStilKontrolu aktifId={aktifStilId} onSec={setAktifStilId} />
@@ -1207,12 +1271,16 @@ export default function App() {
                   onVarlikSec={varlikSecildi}
                   ekipler={ekipSorgu.data}
                   onVarligaGit={varligaGit}
+                  // Lejant/harita ile ayni sinir: secili ilce-mahalle disindaki
+                  // ihbarlar listede de gorunmez.
+                  alandaMi={alandaMi}
                 />
               )}
 
               {bolgeSekmesi(sekme) && (
                 <BolgePaneli
                   tip={BOLGE_SEKMELERI[sekme].tip}
+                  alanda={alandaMi ? bolgeAlanda : null}
                   ekipler={ekipSorgu.data}
                   gizliler={gizliBolgeler}
                   onGorunurlukDegis={bolgeGorunurlukDegis}

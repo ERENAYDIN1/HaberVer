@@ -74,6 +74,9 @@ interface BolgePaneliProps {
   /** Haritada secili kayit: karti vurgular ve gorunur alana kaydirir. */
   seciliId?: string | null;
   onDetay?: (bolge: Bolge) => void;
+  /** Haritada bir alan (ilce/mahalle ya da cizilen poligon) seciliyse liste de
+   *  o sinirla daralir: kaydin koselerinden biri alanin icindeyse gorunur. */
+  alanda?: ((bolge: Bolge) => boolean) | null;
 }
 
 /** Kaydedilmis bolgeler/guzergahlar paneli: listeler, ad/renk/aciklama
@@ -93,6 +96,7 @@ export default function BolgePaneli({
   sekilDuzenlenenId,
   seciliId,
   onDetay,
+  alanda,
 }: BolgePaneliProps) {
   const queryClient = useQueryClient();
   const sorgu = useQuery({ queryKey: ["bolgeler"], queryFn: bolgeleriGetir });
@@ -130,7 +134,9 @@ export default function BolgePaneli({
 
   // Panel yalnizca kendi turunu listeler.
   const gorunum = TIP_GORUNUMU[tip];
-  const bolgeler = (sorgu.data ?? []).filter((b) => b.tip === tip);
+  const bolgeler = (sorgu.data ?? []).filter(
+    (b) => b.tip === tip && (!alanda || alanda(b))
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   approveReport,
@@ -71,6 +71,9 @@ interface IhbarPaneliProps {
   /** Saha ekipleri: varlik detayindan ekibe atama yapilabilsin diye. */
   ekipler?: EkipOzet[];
   onVarligaGit?: (asset: AssetFeature) => void;
+  /** Haritada bir alan (ilce/mahalle ya da cizilen poligon) seciliyse liste de
+   *  o sinirla daralir; yoksa null. Lejant sayaclariyla ayni olcut. */
+  alandaMi?: ((nokta: [number, number]) => boolean) | null;
 }
 
 export default function IhbarPaneli({
@@ -85,6 +88,7 @@ export default function IhbarPaneli({
   onVarlikSec,
   ekipler,
   onVarligaGit,
+  alandaMi,
 }: IhbarPaneliProps) {
   const { user } = useAuth();
   const tamCrudYetkisi = user?.role !== "saha_calisani";
@@ -114,7 +118,14 @@ export default function IhbarPaneli({
     queryFn: () => listReports(durum as ReportStatus),
     enabled: !varlikListesi,
   });
-  const ihbarlar = varlikListesi ? BOS_IHBARLAR : ihbarSorgu.data?.features ?? BOS_IHBARLAR;
+  // Alan suzgeci uygulanmis liste memo'lanir: her render'da yeni bir dizi
+  // uretmek `onIhbarlarChange` efektini surekli tetiklerdi.
+  const ihbarlar = useMemo(() => {
+    if (varlikListesi) return BOS_IHBARLAR;
+    const tumu = ihbarSorgu.data?.features ?? BOS_IHBARLAR;
+    if (!alandaMi) return tumu;
+    return tumu.filter((f) => alandaMi(f.geometry.coordinates));
+  }, [varlikListesi, ihbarSorgu.data, alandaMi]);
   const yukleniyor = !varlikListesi && ihbarSorgu.isLoading;
   const hata = islemHatasi ?? (ihbarSorgu.error as Error | null)?.message ?? null;
 
@@ -193,10 +204,12 @@ export default function IhbarPaneli({
   // Ihbardan olusan varliklar iki sekmeye bolunur: hala bakim bekleyenler
   // ("Onaylandı") ve tamir edilmis olanlar ("Tamir Edildi").
   const onayliVarliklar = ihbarVarlikSorgu.data?.features ?? [];
-  const gosterilenVarliklar = onayliVarliklar.filter((a) =>
-    durum === "tamir"
-      ? a.properties.status === "iyi"
-      : a.properties.status === "bakim_lazim"
+  const gosterilenVarliklar = onayliVarliklar.filter(
+    (a) =>
+      (durum === "tamir"
+        ? a.properties.status === "iyi"
+        : a.properties.status === "bakim_lazim") &&
+      (!alandaMi || alandaMi(a.geometry.coordinates))
   );
 
   // Iki bolum de ayni VarlikSatiri kurulumunu kullanir.

@@ -1,9 +1,13 @@
 import { useState, type ReactElement } from "react";
 
+import { useIlceler, useMahalleler } from "../hooks/useSinirlar";
+import { IDARI_ALAN_RENK } from "../hooks/useAlanSecimi";
+import { ISTANBUL_IL_KODU } from "../utils/istanbulMaskesi";
 import {
   IconCheck,
   IconChevronRight,
   IconInbox,
+  IconLasso,
   IconLayers,
   IconLegend,
   IconPin,
@@ -72,6 +76,16 @@ const KATMANLAR: KatmanTanimi[] = [
   { anahtar: "ekipler", etiket: "Saha Ekipleri", renk: "#4f46e5", ikon: IconUsers },
 ];
 
+/** Lejantin altindaki idari sinir (ilce/mahalle) filtresi. Ayni state'i
+ *  `AssetList`'teki acilirlarla paylasir: iki yuzeyden biri degistirince
+ *  digeri de aninda ayni secimi gosterir. */
+export interface BolgeFiltresi {
+  ilceKodu: string | null;
+  onIlceSec: (kod: string | null) => void;
+  mahalleKodu: string | null;
+  onMahalleSec: (kod: string | null) => void;
+}
+
 interface KatmanKontroluProps {
   gorunur: KatmanGorunurluk;
   onDegistir: (anahtar: KatmanAnahtari) => void;
@@ -81,6 +95,117 @@ interface KatmanKontroluProps {
   varlikAlt: AltGrup[];
   /** Ihbarlar katmaninin gorunum alt-filtreleri. */
   ihbarAlt: AltGrup[];
+  /** Verilirse lejantin altinda ilce/mahalle filtresi gorunur. */
+  bolge?: BolgeFiltresi;
+}
+
+const selectClass =
+  "w-full rounded-lg border border-slate-300 bg-white px-1.5 py-1 text-[11px] text-slate-700 focus:border-cyan-500 focus:outline-none";
+
+/** Lejantin ilce/mahalle bolumu. Acilirlarin verisi `AssetList` ile ayni
+ *  react-query anahtarlarindan gelir, ek istek dogurmaz. */
+function BolgeBolumu({ bolge }: { bolge: BolgeFiltresi }) {
+  const { ilceKodu, onIlceSec, mahalleKodu, onMahalleSec } = bolge;
+  // Secim varken acik baslar: kullanici hangi sinirin uygulandigini gormeli.
+  const [acik, setAcik] = useState(ilceKodu != null);
+  const ilcelerSorgu = useIlceler(ISTANBUL_IL_KODU);
+  // Mahalleler yalnizca bir ilce secildiginde getirilir (kademeli filtre).
+  const mahallelerSorgu = useMahalleler(ilceKodu);
+  const seciliIlce = ilcelerSorgu.data?.find((i) => i.kod === ilceKodu);
+  const seciliMahalle = mahallelerSorgu.data?.find((m) => m.kod === mahalleKodu);
+  const aktif = ilceKodu != null;
+  const ozet = seciliMahalle
+    ? `${seciliMahalle.ad} · ${seciliIlce?.ad ?? ""}`
+    : (seciliIlce?.ad ?? "Tüm İstanbul");
+
+  return (
+    <div className="border-t border-slate-200/70 p-1.5">
+      <div className="flex items-center gap-1.5 rounded-xl pr-1 transition hover:bg-slate-50">
+        {/* Kutucuk: secim varken dolu; tiklayinca sinir filtresini kaldirir. */}
+        <button
+          onClick={() => (aktif ? onIlceSec(null) : setAcik((a) => !a))}
+          aria-pressed={aktif}
+          title={aktif ? "Sınır filtresini kaldır" : "İlçe / mahalle seç"}
+          className="flex items-center gap-2 py-2 pl-2"
+        >
+          <span
+            className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md border-2 transition"
+            style={{
+              borderColor: aktif ? IDARI_ALAN_RENK : "#cbd5e1",
+              backgroundColor: aktif ? IDARI_ALAN_RENK : "transparent",
+            }}
+          >
+            <IconLasso
+              className={`h-3.5 w-3.5 ${aktif ? "text-white" : "text-slate-400"}`}
+            />
+          </span>
+        </button>
+
+        <button
+          onClick={() => setAcik((a) => !a)}
+          className="flex min-w-0 flex-1 items-center gap-1.5 py-2 text-left"
+        >
+          <span className="min-w-0 flex-1">
+            <span
+              className={`block text-[13px] font-semibold leading-tight ${
+                aktif ? "text-slate-800" : "text-slate-400"
+              }`}
+            >
+              Bölge
+            </span>
+            <span
+              className="block truncate text-[11px] font-medium leading-tight"
+              style={{ color: aktif ? IDARI_ALAN_RENK : "#94a3b8" }}
+              title={ozet}
+            >
+              {ozet}
+            </span>
+          </span>
+          <IconChevronRight
+            className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition ${
+              acik ? "rotate-90" : ""
+            }`}
+          />
+        </button>
+      </div>
+
+      {acik && (
+        <div className="mb-1 ml-4 space-y-1 border-l border-slate-200 pl-1.5">
+          <select
+            className={selectClass}
+            value={ilceKodu ?? ""}
+            onChange={(e) => onIlceSec(e.target.value || null)}
+          >
+            <option value="">Tüm ilçeler (İstanbul)</option>
+            {ilcelerSorgu.data?.map((ilce) => (
+              <option key={ilce.kod} value={ilce.kod}>
+                {ilce.ad}
+              </option>
+            ))}
+          </select>
+
+          {/* Mahalle secimi yalnizca bir ilce secildiginde gorunur. */}
+          {ilceKodu && (
+            <select
+              className={selectClass}
+              value={mahalleKodu ?? ""}
+              onChange={(e) => onMahalleSec(e.target.value || null)}
+              disabled={mahallelerSorgu.isLoading}
+            >
+              <option value="">
+                {mahallelerSorgu.isLoading ? "Yükleniyor…" : "Tüm mahalleler"}
+              </option>
+              {mahallelerSorgu.data?.map((mahalle) => (
+                <option key={mahalle.kod} value={mahalle.kod}>
+                  {mahalle.ad}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -96,6 +221,7 @@ export default function KatmanKontrolu({
   sayilar,
   varlikAlt,
   ihbarAlt,
+  bolge,
 }: KatmanKontroluProps) {
   const [acik, setAcik] = useState(true);
   // Hangi ana katmanlarin alt-filtresi genisletilmis (varsayilan: kapali).
@@ -261,6 +387,9 @@ export default function KatmanKontrolu({
           );
         })}
       </div>
+
+      {/* Idari sinir filtresi: katman listesinin altinda, kendi seridinde. */}
+      {bolge && <BolgeBolumu bolge={bolge} />}
     </div>
   );
 }
