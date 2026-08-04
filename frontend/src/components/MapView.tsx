@@ -73,8 +73,9 @@ import {
  *                    halkasiz + sonuk = kapanmis (tamir "✓" / red "✕")
  *   GLIF          -> tur ikonu (data/tipGlifleri.ts) */
 
-/** Secime ucarken kullanilan zoom/sure: haritadan secimde daha yakin. */
-const SECIM_UCUS_HARITADAN = { zoom: 14, duration: 1500 };
+/** Secime ucarken kullanilan zoom/sure: zoom ayni, haritadan secimde ucus
+ *  daha kisa surer (kullanici zaten hedefe bakiyor). */
+const SECIM_UCUS_HARITADAN = { zoom: 12.5, duration: 1500 };
 const SECIM_UCUS_LISTEDEN = { zoom: 12.5, duration: 2000 };
 const UCUS_SURESI_VARSAYILAN = 1600;
 
@@ -155,15 +156,10 @@ interface MapViewProps {
   aktifStilId: HaritaStilId;
   /** Verildiginde harita bu hedefe ucar (ilce secimi, arama sonucu vb.). */
   ucusHedefi?: UcusHedefi | null;
+  /** Popup'in TEK islem dugmesi. Duzenleme, atama, reddi geri alma vb. acilan
+   *  detay modalinin isidir (bkz. haritaPopup.ts::detayDugmesi). */
   onVarlikDetay?: (id: string) => void;
-  /** Verilmezse popup'ta "Düzenle" dugmesi cizilmez (yetkisiz roller). */
-  onVarlikDuzenle?: (id: string) => void;
   onIhbarDetay?: (id: string) => void;
-  /** Onaylanmis ihbardan olusan varligin detay modalini acar. Verilmesi ayni
-   *  zamanda popup'in personel modunda oldugunu belirtir. */
-  onIhbarVarlikYonet?: (id: string) => void;
-  /** Reddedilmis ihbari "beklemede"ye ceker. Verilmezse dugme cizilmez. */
-  onIhbarGeriAl?: (id: string) => void;
   /** Gorunen alani bildirir (konum aramasini onceliklendirmek icin). */
   onGorunumDegisti?: (bounds: [[number, number], [number, number]]) => void;
   /** Canli saha ekibi konumlari (personel gorunumu). */
@@ -175,7 +171,6 @@ interface MapViewProps {
   onBolgeDetay?: (id: string) => void;
   seciliBolgeId?: string | null;
   onBolgeSec?: (id: string) => void;
-  onSekilDuzenle?: (id: string) => void;
   /** Adi harita etiketi uzerinden degistirir. Verilmezse etiketler salt
    *  okunurdur; donen soz reddedilirse etiket eski ada doner. */
   onBolgeAdDegis?: (id: string, ad: string) => void | Promise<void>;
@@ -207,17 +202,13 @@ export default function MapView({
   ucusHedefi,
   onGorunumDegisti,
   onVarlikDetay,
-  onVarlikDuzenle,
   onIhbarDetay,
-  onIhbarVarlikYonet,
-  onIhbarGeriAl,
   ekipler,
   onEkipGorevSec,
   bolgeler,
   onBolgeDetay,
   seciliBolgeId,
   onBolgeSec,
-  onSekilDuzenle,
   onBolgeAdDegis,
   sekilDuzenleme,
   onSekilDegis,
@@ -265,7 +256,6 @@ export default function MapView({
   const onBolgeDetayRef = useRef(onBolgeDetay);
   const seciliBolgeIdRef = useRef(seciliBolgeId);
   const onBolgeSecRef = useRef(onBolgeSec);
-  const onSekilDuzenleRef = useRef(onSekilDuzenle);
   const onBolgeAdDegisRef = useRef(onBolgeAdDegis);
   const sekilDuzenlemeRef = useRef(sekilDuzenleme);
   const onSekilDegisRef = useRef(onSekilDegis);
@@ -281,10 +271,7 @@ export default function MapView({
   const cizimNoktalariRef = useRef(cizimNoktalari);
   const seciliIdRef = useRef(seciliId);
   const onVarlikDetayRef = useRef(onVarlikDetay);
-  const onVarlikDuzenleRef = useRef(onVarlikDuzenle);
   const onIhbarDetayRef = useRef(onIhbarDetay);
-  const onIhbarVarlikYonetRef = useRef(onIhbarVarlikYonet);
-  const onIhbarGeriAlRef = useRef(onIhbarGeriAl);
   const onEkipGorevSecRef = useRef(onEkipGorevSec);
   /** Cizim/olcum sirasinda son bilinen fare konumu (elastik cizgi icin). */
   const sonFareRef = useRef<[number, number] | null>(null);
@@ -301,7 +288,6 @@ export default function MapView({
     onBolgeDetayRef.current = onBolgeDetay;
     seciliBolgeIdRef.current = seciliBolgeId;
     onBolgeSecRef.current = onBolgeSec;
-    onSekilDuzenleRef.current = onSekilDuzenle;
     onBolgeAdDegisRef.current = onBolgeAdDegis;
     sekilDuzenlemeRef.current = sekilDuzenleme;
     onSekilDegisRef.current = onSekilDegis;
@@ -317,10 +303,7 @@ export default function MapView({
     cizimNoktalariRef.current = cizimNoktalari;
     seciliIdRef.current = seciliId;
     onVarlikDetayRef.current = onVarlikDetay;
-    onVarlikDuzenleRef.current = onVarlikDuzenle;
     onIhbarDetayRef.current = onIhbarDetay;
-    onIhbarVarlikYonetRef.current = onIhbarVarlikYonet;
-    onIhbarGeriAlRef.current = onIhbarGeriAl;
     onEkipGorevSecRef.current = onEkipGorevSec;
   });
 
@@ -381,12 +364,10 @@ export default function MapView({
     popupRef.current = popup;
     popupTuruRef.current = "bolge";
     const el = popup.getElement();
+    // Sekil duzenleme "Detay" modalinin icindedir (BolgeDetayModal): popup her
+    // kayit turunde tek dugme gosterir.
     el?.querySelector(".popup-detay-btn")?.addEventListener("click", () => {
       onBolgeDetayRef.current?.(bolge.id);
-    });
-    el?.querySelector(".popup-sekil-btn")?.addEventListener("click", () => {
-      popup.remove();
-      onSekilDuzenleRef.current?.(bolge.id);
     });
   });
 
@@ -1062,18 +1043,15 @@ export default function MapView({
       anchor: "bottom",
     })
       .setLngLat(secili.geometry.coordinates)
-      .setHTML(popupIcerigi(secili, Boolean(onVarlikDuzenleRef.current)))
+      .setHTML(popupIcerigi(secili))
       .addTo(map);
     popupRef.current = popup;
     popupTuruRef.current = "varlik";
     konumSatiriDoldur(popup, secili);
-    const el = popup.getElement();
-    el
+    popup
+      .getElement()
       ?.querySelector(".popup-detay-btn")
       ?.addEventListener("click", () => onVarlikDetayRef.current?.(secili.properties.id));
-    el
-      ?.querySelector(".popup-duzenle-btn")
-      ?.addEventListener("click", () => onVarlikDuzenleRef.current?.(secili.properties.id));
   }
 
   /** Secili bolgeyi belirgin kenarlikla isaretler. Acik popup'a dokunmaz:
@@ -1108,29 +1086,16 @@ export default function MapView({
       anchor: "bottom",
     })
       .setLngLat(secili.geometry.coordinates)
-      // Islem dugmelerinden biri baglanmissa popup personel modunda cizilir.
-      .setHTML(
-        ihbarPopupIcerigi(
-          secili,
-          Boolean(onIhbarVarlikYonetRef.current || onIhbarGeriAlRef.current)
-        )
-      )
+      .setHTML(ihbarPopupIcerigi(secili))
       .addTo(map);
     popupRef.current = popup;
     popupTuruRef.current = "ihbar";
-    const el = popup.getElement();
-    el
+    // Onay/ret, "Varlığı Yönet" ve "Reddi Geri Al" ihbar detay modalindedir:
+    // popup her kayit turunde yalnizca kaydin kartini acar.
+    popup
+      .getElement()
       ?.querySelector(".popup-detay-btn")
       ?.addEventListener("click", () => onIhbarDetayRef.current?.(secili.properties.id));
-    el
-      ?.querySelector(".popup-varlik-btn")
-      ?.addEventListener("click", () =>
-        onIhbarVarlikYonetRef.current?.(secili.properties.id)
-      );
-    el?.querySelector(".popup-geri-al-btn")?.addEventListener("click", () => {
-      popup.remove();
-      onIhbarGeriAlRef.current?.(secili.properties.id);
-    });
   }
 
   /** Bir katmana tiklama + imlec dinleyicilerini baglar. Once `off` cagrilir:

@@ -1,8 +1,16 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { getAsset } from "../api/assets";
 import { approveReport, fotoUrl, rejectReport, reopenReport } from "../api/reports";
+import { gorevDurumu } from "../api/saha";
 import { useKonumCozumu } from "../hooks/useSinirlar";
-import { ASSET_TYPES, ASSET_TYPE_LABELS, type AssetType } from "../types/asset";
+import {
+  ASSET_TYPES,
+  ASSET_TYPE_LABELS,
+  durumEtiketi,
+  type AssetType,
+} from "../types/asset";
 import type { ReportFeature } from "../types/report";
 import { AksiyonButonu, AksiyonSeridi } from "./Aksiyonlar";
 import { IconCheck } from "./icons";
@@ -45,6 +53,29 @@ export default function ReportDetayModal({
   const [tipSecim, setTipSecim] = useState<{ raporId: string; tip: AssetType } | null>(
     null
   );
+
+  // Onaylanmis ihbarin isi artik ondan olusan VARLIK uzerinden yurur. O varligin
+  // guncel durumu burada salt-okunur gosterilir ki "Detay" bir cikmaz sokak
+  // olmasin: kullanici ne oldugunu gormeden "Varlığı Yönet"e basmak zorunda
+  // kalmasin. Islemler yine yalnizca varlik kartinda.
+  const varlikId =
+    report?.properties.status === "onaylandi"
+      ? report.properties.created_asset_id
+      : null;
+  const { data: varlik, isLoading: varlikYukleniyor } = useQuery({
+    // AssetDetayModal ile ayni anahtar sekli degil; tekil cekim burada yeterli.
+    queryKey: ["assets", "tekil", varlikId],
+    queryFn: () => getAsset(varlikId!),
+    enabled: Boolean(islemYetkisi && varlikId),
+  });
+  // Anahtar AssetDetayModal'inkiyle ayni: ikisi ayni onbellek satirini paylasir.
+  const { data: gorevDurum } = useQuery({
+    queryKey: ["saha", "gorev", varlikId],
+    queryFn: () => gorevDurumu(varlikId!),
+    enabled: Boolean(
+      islemYetkisi && varlikId && varlik?.properties.status === "bakim_lazim"
+    ),
+  });
 
   const islemYap = async (calistir: () => Promise<unknown>) => {
     setIslemde(true);
@@ -194,18 +225,48 @@ export default function ReportDetayModal({
         )}
 
         {/* Onaylanmis ihbarin isi artik ondan olusan VARLIK uzerinden yurur
-            (ekibe atama, tamir, duzenleme, silme). Bu dugme, haritadaki ihbar
-            popup'indaki "Varlığı Yönet" ile ayni modali acar - iki yol da ayni
-            yere ciksin diye. */}
-        {islemYetkisi && p.status === "onaylandi" && onVarligiYonet && (
-          <AksiyonSeridi>
-            <AksiyonButonu tur="birincil" onClick={() => onVarligiYonet(p.id)}>
-              Varlığı Yönet
-            </AksiyonButonu>
-            <span className="text-[11px] text-slate-500">
-              Ekibe atama, tamir, düzenleme ve silme varlık kartında.
-            </span>
-          </AksiyonSeridi>
+            (ekibe atama, tamir, duzenleme, silme). Once o varligin nerede
+            oldugu ozetlenir, sonra tek gecis dugmesi gelir. */}
+        {islemYetkisi && p.status === "onaylandi" && (
+          <div className="space-y-2 border-t border-slate-100 pt-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Bu ihbardan doğan varlık
+            </p>
+            <div className="border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs">
+              {varlik ? (
+                <>
+                  <div className="font-medium text-slate-900">
+                    {varlik.properties.name}
+                  </div>
+                  <div className="mt-0.5 text-slate-600">
+                    {durumEtiketi(varlik.properties.status, varlik.properties.source)}
+                    {varlik.properties.status === "bakim_lazim" &&
+                      (gorevDurum?.gorev
+                        ? ` · ${gorevDurum.gorev.worker_ad} ekibinde`
+                        : " · havuzda bekliyor")}
+                  </div>
+                </>
+              ) : varlikYukleniyor ? (
+                <span className="text-slate-500">Varlık bilgisi yükleniyor…</span>
+              ) : (
+                <span className="text-slate-500">
+                  {varlikId
+                    ? "Varlık bulunamadı — tamir sonrası otomatik silinmiş olabilir."
+                    : "Bu ihbara bağlı bir varlık kaydı yok."}
+                </span>
+              )}
+            </div>
+            {onVarligiYonet && (
+              <AksiyonSeridi>
+                <AksiyonButonu tur="birincil" onClick={() => onVarligiYonet(p.id)}>
+                  Varlığı Yönet
+                </AksiyonButonu>
+                <span className="text-[11px] text-slate-500">
+                  Ekibe atama, tamir, düzenleme ve silme varlık kartında.
+                </span>
+              </AksiyonSeridi>
+            )}
+          </div>
         )}
 
         {/* Reddi geri alma: yanlislikla reddedilen (ya da sonradan gecerli

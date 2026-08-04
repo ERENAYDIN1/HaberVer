@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAsset } from "./api/assets";
 import { bolgeler as bolgeleriGetir } from "./api/bolgeler";
 import { bolgeGuncelle } from "./api/bolgeler";
-import { reopenReport } from "./api/reports";
 import { ekipGorevleri as ekipGorevleriGetir } from "./api/saha";
 import { useAuth } from "./auth/AuthContext";
 import AssetDetayModal from "./components/AssetDetayModal";
@@ -888,21 +887,6 @@ export default function App() {
     }
   }, []);
 
-  /** "Reddi Geri Al". Secim birakilmaz: ihbar "beklemede"ye dondugu icin
-   *  alt-sekme senkronu paneli Bekleyen'e alir, kayit orada secili kalir. */
-  const ihbarGeriAl = useCallback(
-    async (raporId: string) => {
-      try {
-        await reopenReport(raporId);
-        setDetayRapor(null);
-        await queryClient.invalidateQueries({ queryKey: ["reports"] });
-      } catch (e) {
-        window.alert((e as Error).message);
-      }
-    },
-    [queryClient]
-  );
-
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100">
       {/* Ust bar (uygulama header'i) */}
@@ -1106,12 +1090,10 @@ export default function App() {
           aktifStilId={aktifStilId}
           ucusHedefi={ucusHedefi}
           onGorunumDegisti={setHaritaGorunumu}
+          // Popup'lardaki tek dugme: duzenleme, atama, onay/ret, reddi geri
+          // alma ve sekil duzenleme acilan detay modallerinin isidir.
           onVarlikDetay={() => setDetayAsset(seciliVarlik)}
-          // Yalniz personel: silme/tamir/atama detay modalinin icinde.
-          onVarlikDuzenle={personel ? () => setDuzenlenen(seciliVarlik) : undefined}
           onIhbarDetay={() => setDetayRapor(seciliRapor)}
-          onIhbarVarlikYonet={personel ? ihbarVarligiYonet : undefined}
-          onIhbarGeriAl={personel ? ihbarGeriAl : undefined}
           ekipler={katmanlar.ekipler ? ekipSorgu.data : undefined}
           onEkipGorevSec={personel ? ekipGoreviAcildi : undefined}
           bolgeler={haritaBolgeleri}
@@ -1120,10 +1102,6 @@ export default function App() {
           onBolgeDetay={(id) =>
             setDetayBolge(bolgeSorgu.data?.find((b) => b.id === id) ?? null)
           }
-          onSekilDuzenle={(id) => {
-            const bolge = bolgeSorgu.data?.find((b) => b.id === id);
-            if (bolge) sekilDuzenlemeBaslat(bolge);
-          }}
           // Ad haritadaki etiket uzerinden de degistirilebilir (yalniz personel).
           onBolgeAdDegis={personel ? bolgeAdiDegistir : undefined}
           sekilDuzenleme={sekilDuzenleme}

@@ -27,35 +27,26 @@ import { kacis } from "./html";
  *  bulaniklastiriyor. (200 + ~20 padding = 220) */
 export const POPUP_GENISLIK = "200px";
 
-/** Popup'un alt dugme seridi: "Detay" her zaman, ikinci dolu dugme yalnizca
- *  yetkiliye ve baglama gore (Düzenle / Varlığı Yönet / Reddi Geri Al). */
-interface PopupDugmesi {
-  /** MapLibre'nin tiklama dinleyicisini bagladigi sinif. */
-  sinif: string;
-  etiket: string;
-  /** Yikici islemler icin ayri vurgu rengi. */
-  renk?: string;
-}
-
-function detayDugmeleri(renk: string, ikinci?: PopupDugmesi | null): string {
-  const detay =
+/** Popup'un alt seridi: TEK bir "Detay" dugmesi, kaydin kendi rengiyle.
+ *
+ *  Islemler (Düzenle / Varlığı Yönet / Reddi Geri Al / Şekli Düzenle) bilincli
+ *  olarak burada degil, acilan detay modalinin aksiyon seridindedir. Eskiden
+ *  ikinci bir dolu dugme vardi ve ayni yer her kayit turunde baska bir iliskiyi
+ *  anlatiyordu: varlikta "Detay"in bir kisayolu ("Düzenle"), ihbarda ise baska
+ *  bir kayda atlama ("Varlığı Yönet"). Kullanici varliklardan "Detay zengindir"
+ *  diye ogrenip ihbarda ince bir kart buluyordu. Tek kural kaldi:
+ *  isaretciye tikla -> Detay -> ne yapacaksan orada. */
+function detayDugmesi(renk: string): string {
+  return (
+    `<div style="margin-top:8px">` +
     `<button type="button" class="popup-detay-btn" style="` +
-    `flex:1; padding:5px 0; border:1px solid ${renk}; border-radius:6px; ` +
-    `background:#fff; color:${renk}; font-size:11px; font-weight:600; ` +
-    `cursor:pointer;">Detay</button>`;
-  const ek = ikinci
-    ? `<button type="button" class="${ikinci.sinif}" style="` +
-      `flex:1; padding:5px 0; border:1px solid ${ikinci.renk ?? renk}; border-radius:6px; ` +
-      `background:${ikinci.renk ?? renk}; color:#fff; font-size:11px; font-weight:600; ` +
-      `cursor:pointer;">${kacis(ikinci.etiket)}</button>`
-    : "";
-  return `<div style="display:flex; gap:6px; margin-top:8px">${detay}${ek}</div>`;
+    `width:100%; padding:6px 0; border:1px solid ${renk}; border-radius:6px; ` +
+    `background:${renk}; color:#fff; font-size:11px; font-weight:600; ` +
+    `cursor:pointer;">Detay</button></div>`
+  );
 }
 
-export function popupIcerigi(
-  asset: AssetFeature,
-  duzenlenebilir = false
-): string {
+export function popupIcerigi(asset: AssetFeature): string {
   const { name, type, status, source, brand_model, install_date, photo_url } =
     asset.properties;
   const bakim = status === "bakim_lazim";
@@ -97,10 +88,7 @@ export function popupIcerigi(
       </div>
       <div style="color:#64748b; font-size:11px; margin-top:6px">${satirlar}</div>
       <div class="popup-konum" style="color:#64748b; font-size:11px; margin-top:2px"></div>
-      ${detayDugmeleri(
-        "#059669",
-        duzenlenebilir ? { sinif: "popup-duzenle-btn", etiket: "Düzenle" } : null
-      )}
+      ${detayDugmesi("#059669")}
     </div>
   `;
 }
@@ -122,9 +110,9 @@ export async function konumSatiriDoldur(
   }
 }
 
-/** Ihbar popup'i. `yetkili` ise duruma gore ikinci bir islem dugmesi cikar;
- *  bekleyen ihbarda karar "Detay"daki modalde verilir. */
-export function ihbarPopupIcerigi(report: ReportFeature, yetkili = false): string {
+/** Ihbar popup'i. Karar (onay/ret), reddi geri alma ve onaylanmis ihbardan
+ *  varliga gecis "Detay"daki modaldedir - bkz. `detayDugmesi`. */
+export function ihbarPopupIcerigi(report: ReportFeature): string {
   const { name, type, status, note, photo_url } = report.properties;
   // Rozet ham durumu degil gorunumu anlatir: tamir edilmis bir is "Onaylandı"
   // yazip acik isle ayni rengi tasimasin.
@@ -137,14 +125,6 @@ export function ihbarPopupIcerigi(report: ReportFeature, yetkili = false): strin
     tamir: { bg: "#f1f5f9", fg: "#475569" },
   };
   const dr = durumRenk[gorunum] ?? durumRenk.beklemede;
-
-  let ikinciDugme: PopupDugmesi | null = null;
-  if (yetkili && status === "onaylandi") {
-    // Tamir edilmis kayitta da durur: varlik silinene kadar yonetilebilir.
-    ikinciDugme = { sinif: "popup-varlik-btn", etiket: "Varlığı Yönet", renk: "#059669" };
-  } else if (yetkili && status === "reddedildi") {
-    ikinciDugme = { sinif: "popup-geri-al-btn", etiket: "Reddi Geri Al", renk: "#e11d48" };
-  }
 
   return `
     <div style="font-family: system-ui, sans-serif; width: ${POPUP_GENISLIK}">
@@ -167,7 +147,7 @@ export function ihbarPopupIcerigi(report: ReportFeature, yetkili = false): strin
           ? `<div style="color:#64748b; font-size:11px; margin-top:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden">${kacis(note)}</div>`
           : ""
       }
-      ${detayDugmeleri("#9333ea", ikinciDugme)}
+      ${detayDugmesi("#9333ea")}
     </div>
   `;
 }
@@ -208,16 +188,7 @@ export function bolgePopupIcerigi(bolge: Bolge): string {
             )}</div>`
           : ""
       }
-      <div style="display:flex; gap:6px; margin-top:8px">
-        <button type="button" class="popup-detay-btn" style="
-          flex:1; padding:5px 0; border:1px solid #7c3aed; border-radius:6px;
-          background:#fff; color:#7c3aed; font-size:11px; font-weight:600;
-          cursor:pointer;">Detay</button>
-        <button type="button" class="popup-sekil-btn" style="
-          flex:1; padding:5px 0; border:1px solid #7c3aed; border-radius:6px;
-          background:#7c3aed; color:#fff; font-size:11px; font-weight:600;
-          cursor:pointer;">Şekli Düzenle</button>
-      </div>
+      ${detayDugmesi("#7c3aed")}
     </div>
   `;
 }
