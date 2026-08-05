@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..models.asset import Asset, AssetStatus
 from ..models.assignment import Assignment, AssignmentStatus
 from ..models.log import LogAction
+from ..models.report import Report
 from ..models.user import User, UserRole
 from . import departman as departman_crud
 from . import yaka as yaka_crud
@@ -64,6 +65,35 @@ def _aktif_sayi_subq():
         )
         .correlate(User)
         .scalar_subquery()
+    )
+
+
+def _talep_alani_subq(ifade):
+    """Varligin dogdugu TALEP kaydindan bir alan (kayitli varliklarda NULL).
+
+    Varliga tasinmayan iki sey burada: isin SEKLI ve vatandasin ACIKLAMASI.
+    Varlik her zaman POINT'tir (envanter, atama mesafesi ve isaretci tek nokta
+    uzerinden calisir) ve `assets`te not sutunu yoktur - ama sahaya giden ekip
+    isin bir hat mi bolge mi oldugunu ve "hangi bank kirik"i okuyabilmeli.
+
+    JOIN degil korelasyonlu alt sorgu: satir sayisini degistiremez, dolayisiyla
+    ayni varliga bagli birden fazla talep kaydi cikarsa gorev listesi
+    coklanmaz."""
+    return (
+        select(ifade)
+        .where(Report.created_asset_id == Asset.id)
+        .correlate(Asset)
+        .limit(1)
+        .scalar_subquery()
+    )
+
+
+def _talep_sutunlari():
+    """Gorev satirlarina eklenen talep alanlari (sema ile ayni sirada)."""
+    return (
+        _talep_alani_subq(func.ST_AsGeoJSON(Report.geometry)).label("sekil"),
+        _talep_alani_subq(Report.note).label("talep_notu"),
+        _talep_alani_subq(Report.created_at).label("talep_tarihi"),
     )
 
 
@@ -298,13 +328,15 @@ def aktif_gorev_bilgisi(db: Session, asset_id: uuid.UUID) -> dict | None:
 
 
 def gorevlerim(db: Session, worker_id: uuid.UUID):
-    """Bir ekibin aktif gorevlerini (varlik + koordinat) dondurur."""
+    """Bir ekibin aktif gorevlerini (varlik + koordinat + talep ayrintilari)
+    dondurur."""
     stmt = (
         select(
             Assignment,
             Asset,
             func.ST_X(Asset.geometry).label("longitude"),
             func.ST_Y(Asset.geometry).label("latitude"),
+            *_talep_sutunlari(),
         )
         .join(Asset, Asset.id == Assignment.asset_id)
         .where(
@@ -340,6 +372,7 @@ def tamamlananlarim(db: Session, worker_id: uuid.UUID, limit: int = 30):
             Asset,
             func.ST_X(Asset.geometry).label("longitude"),
             func.ST_Y(Asset.geometry).label("latitude"),
+            *_talep_sutunlari(),
         )
         .join(Asset, Asset.id == Assignment.asset_id)
         .where(Assignment.id.in_(select(en_son.c.aid)))

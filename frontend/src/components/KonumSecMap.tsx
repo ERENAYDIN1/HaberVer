@@ -44,6 +44,12 @@ export interface HaritaAlani {
   /** Alanin ustunde gosterilecek etiket (orn. bolge adi). */
   etiket?: string;
   cizgi?: boolean;
+  /** Kenarlik kesikli mi cizilsin (varsayilan: evet).
+   *
+   *  Iki ayri sey ayni haritada duruyor: KESIKLI = ekibe atanmis gorev bolgesi
+   *  ("burayi tara"), DUZ = isin kendisinin sekli ("catlak bu hat boyunca").
+   *  Ayrimi renk tasiyamaz - bolgenin rengini personel seciyor. */
+  kesikli?: boolean;
 }
 
 const ALAN_SOURCE_ID = "salt-okunur-alanlar";
@@ -287,7 +293,7 @@ export default function KonumSecMap({
                 type: "MultiPolygon",
                 coordinates: a.noktalar.map((h) => [[...h, h[0]]]),
               },
-        properties: { renk: a.renk },
+        properties: { renk: a.renk, kesikli: a.kesikli !== false },
       })),
     });
 
@@ -368,15 +374,26 @@ export default function KonumSecMap({
           filter: ["!=", ["geometry-type"], "LineString"],
           paint: { "fill-color": ["get", "renk"], "fill-opacity": 0.14 },
         });
+        // Kesikli ve duz kenarlik iki ayri katman: `line-dasharray` veriye
+        // bagli bir ifade kabul etmiyor, ayrimi filtre tasiyor.
         map.addLayer({
           id: "salt-alan-yol",
           type: "line",
           source: ALAN_SOURCE_ID,
+          filter: ["to-boolean", ["get", "kesikli"]],
           paint: {
             "line-color": ["get", "renk"],
             "line-width": 2.5,
             "line-dasharray": [3, 2],
           },
+        });
+        map.addLayer({
+          id: "salt-alan-yol-duz",
+          type: "line",
+          source: ALAN_SOURCE_ID,
+          filter: ["!", ["to-boolean", ["get", "kesikli"]]],
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": ["get", "renk"], "line-width": 3.5 },
         });
       }
 

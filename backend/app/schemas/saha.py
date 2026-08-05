@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import date, datetime
 from typing import Literal
@@ -6,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..models.asset import AssetSource, AssetStatus, AssetType
 from .asset import PointGeometry
+from .report import TalepGeometrisi
 
 
 class KonumGuncelle(BaseModel):
@@ -217,6 +219,15 @@ class GorevProperties(BaseModel):
     brand_model: str | None
     photo_url: str | None
     install_date: date | None
+    # Isin dogdugu talebin HAM sekli (nokta/cizgi/alan); kayitli varliklarda
+    # None. Feature'in `geometry`si her zaman NOKTA kalir - pin, mesafe
+    # siralamasi ve yol tarifi onu okur - sekil ikincil geometri olarak burada
+    # tasinir (talep semasindaki `nokta` alaninin simetrigi).
+    sekil: TalepGeometrisi | None = None
+    # Vatandasin talep aciklamasi ve talebin acilis tarihi. `assets`te not
+    # sutunu yok: sahaya giden ekip "hangi bank kirik"i ancak buradan okur.
+    talep_notu: str | None = None
+    talep_tarihi: datetime | None = None
 
 
 class GorevFeature(BaseModel):
@@ -226,8 +237,9 @@ class GorevFeature(BaseModel):
 
     @classmethod
     def from_row(cls, row) -> "GorevFeature":
-        """(Assignment, Asset, longitude, latitude) satirini Feature'a cevirir."""
-        gorev, asset, longitude, latitude = row
+        """(Assignment, Asset, longitude, latitude, sekil, talep_notu,
+        talep_tarihi) satirini Feature'a cevirir."""
+        gorev, asset, longitude, latitude, sekil, talep_notu, talep_tarihi = row
         return cls(
             geometry=PointGeometry(coordinates=(longitude, latitude)),
             properties=GorevProperties(
@@ -242,6 +254,13 @@ class GorevFeature(BaseModel):
                 brand_model=asset.brand_model,
                 photo_url=asset.photo_url,
                 install_date=asset.install_date,
+                sekil=(
+                    TalepGeometrisi.model_validate(json.loads(sekil))
+                    if sekil
+                    else None
+                ),
+                talep_notu=talep_notu,
+                talep_tarihi=talep_tarihi,
             ),
         )
 

@@ -18,6 +18,7 @@ import KonumSecMap, {
 } from "../components/KonumSecMap";
 import {
   IconCheck,
+  IconChevronRight,
   IconLasso,
   IconLogout,
   IconMenu,
@@ -28,10 +29,27 @@ import {
 } from "../components/icons";
 import { ASSET_TYPE_LABELS } from "../types/asset";
 import type { Bolge } from "../types/bolge";
-import { alanEtiketi, mesafeEtiketi, mesafeMetre } from "../utils/geo";
+import { TALEP_SEKIL_ETIKETLERI } from "../types/report";
+import { gorevSekli } from "../types/saha";
+import {
+  alanEtiketi,
+  mesafeEtiketi,
+  mesafeMetre,
+  poligonAlaniM2,
+  toplamMesafeMetre,
+} from "../utils/geo";
 import { kacis } from "../utils/html";
 
 const GOREV_RENGI = "#d97706"; // amber - "iş bekliyor"
+
+/** Isin buyuklugu: cizgide hattin uzunlugu, alanda yuzolcum. Nokta islerde
+ *  null - pin zaten tek noktayi gosteriyor, olculecek bir sey yok. */
+function sekilOlcusu(sekil: ReturnType<typeof gorevSekli>): string | null {
+  if (!sekil) return null;
+  return sekil.tip === "LineString"
+    ? mesafeEtiketi(toplamMesafeMetre(sekil.halkalar[0]))
+    : alanEtiketi(poligonAlaniM2(sekil.halkalar[0]));
+}
 
 /** Google Haritalar'da bu noktaya yol tarifi acar. */
 function yolTarifiAc(lng: number, lat: number) {
@@ -56,6 +74,9 @@ export default function SahaEkran() {
     zoom?: number;
   } | null>(null);
   const [tamirEdilen, setTamirEdilen] = useState<string | null>(null);
+  // Ayrintisi acik olan gorev (assignment_id). Aciklama karta hep basili
+  // olsaydi liste okunmaz hale gelirdi; tek tek acilir.
+  const [acikDetay, setAcikDetay] = useState<string | null>(null);
   // "Tamir Edildi" iki adimli: ilk tik onay ister, ikinci tik tamamlar.
   const [onayBekleyen, setOnayBekleyen] = useState<string | null>(null);
   // Geri alinmakta olan tamamlanmis gorev (assignment_id).
@@ -146,6 +167,35 @@ export default function SahaEkran() {
     [bolgeSorgu.data]
   );
 
+  /** Isin KENDI sekli: vatandas bir hat ya da bolge cizdiyse haritada oyle
+   *  gorunur. Varlik nokta oldugu icin (envanter/atama tek nokta uzerinden
+   *  calisir) pin yerinde kalir; sekil pinin altina, isin buyuklugunu
+   *  gostermek icin cizilir. Kenarlik DUZ: kesikli olan gorev bolgesidir. */
+  const gorevSekilleri = useMemo<HaritaAlani[]>(
+    () =>
+      (gorevSorgu.data?.features ?? []).flatMap((g) => {
+        const sekil = gorevSekli(g.properties);
+        if (!sekil) return [];
+        return [
+          {
+            id: `gorev-${g.properties.assignment_id}`,
+            noktalar: sekil.halkalar,
+            renk: GOREV_RENGI,
+            etiket: sekilOlcusu(sekil) ?? undefined,
+            cizgi: sekil.tip === "LineString",
+            kesikli: false,
+          },
+        ];
+      }),
+    [gorevSorgu.data]
+  );
+
+  // Sekiller bolgelerden SONRA: is, uzerinde calisilan bolgenin ustunde durmali.
+  const haritaAlanlari = useMemo(
+    () => [...bolgeAlanlari, ...gorevSekilleri],
+    [bolgeAlanlari, gorevSekilleri]
+  );
+
   /** Konum biliniyorsa gorevler en yakindan uzaga siralanir; bilinmiyorsa
    *  backend'in verdigi sira (atama zamani) korunur. */
   const siraliGorevler = useMemo(() => {
@@ -165,6 +215,8 @@ export default function SahaEkran() {
         const p = g.properties;
         const [lng, lat] = g.geometry.coordinates;
         const foto = fotoUrl(p.photo_url);
+        const sekil = gorevSekli(p);
+        const olcu = sekilOlcusu(sekil);
         // Pin popup'i: foto + detay + yol tarifi baglantisi.
         const popupHtml =
           `<div style="font-family:system-ui,sans-serif;width:200px">` +
@@ -175,6 +227,16 @@ export default function SahaEkran() {
           `<div style="font-size:11px;color:#64748b;margin:2px 0 6px">${kacis(
             ASSET_TYPE_LABELS[p.type]
           )}${p.brand_model ? " · " + kacis(p.brand_model) : ""}</div>` +
+          // Isin sekli: pin tek nokta gosterir, isin gercek buyuklugu burada.
+          (sekil
+            ? `<div style="font-size:11px;color:#b45309;font-weight:600;margin-bottom:4px">` +
+              `${kacis(TALEP_SEKIL_ETIKETLERI[sekil.tip])}${olcu ? " · " + kacis(olcu) : ""}` +
+              `</div>`
+            : "") +
+          (p.talep_notu
+            ? `<div style="font-size:11px;color:#475569;line-height:1.4;margin-bottom:6px;` +
+              `border-left:2px solid #fcd34d;padding-left:6px">${kacis(p.talep_notu)}</div>`
+            : "") +
           `<div style="font-size:10px;color:#94a3b8;margin-bottom:6px">#${kacis(
             p.asset_id.slice(0, 8)
           )}</div>` +
@@ -487,6 +549,9 @@ export default function SahaEkran() {
                   const p = g.properties;
                   const Ikon = TIP_IKONU[p.type];
                   const fotoSrc = fotoUrl(p.photo_url);
+                  const sekil = gorevSekli(p);
+                  const olcu = sekilOlcusu(sekil);
+                  const detayAcik = acikDetay === p.assignment_id;
                   return (
                     <li
                       key={p.assignment_id}
@@ -532,6 +597,22 @@ export default function SahaEkran() {
                               <IconWarning className="h-3 w-3" />
                               Bakım Lazım
                             </span>
+                            {/* Isin sekli: nokta islerde rozet cizilmez, pin
+                                zaten tek yeri gosteriyor. */}
+                            {sekil && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-700 ring-1 ring-slate-300"
+                                title="İşin kapsadığı alan/hat - haritada düz çizgiyle gösterilir"
+                              >
+                                {sekil.tip === "LineString" ? (
+                                  <IconRoute className="h-3 w-3" />
+                                ) : (
+                                  <IconLasso className="h-3 w-3" />
+                                )}
+                                {TALEP_SEKIL_ETIKETLERI[sekil.tip]}
+                                {olcu ? ` · ${olcu}` : ""}
+                              </span>
+                            )}
                             {mesafe != null && (
                               <span
                                 className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"
@@ -554,6 +635,97 @@ export default function SahaEkran() {
                           </p>
                         </div>
                       </button>
+
+                      {/* Ayrinti: vatandasin aciklamasi + fotograf + kunye.
+                          `assets`te not sutunu olmadigi icin "hangi bank
+                          kirik" bilgisi yalnizca buradan okunabilir. Karta hep
+                          basili olsaydi liste okunmaz hale gelirdi; kapali
+                          durumda yalnizca ilk satiri sizar. */}
+                      <div className="border-t border-slate-100">
+                        <button
+                          onClick={() =>
+                            setAcikDetay(detayAcik ? null : p.assignment_id)
+                          }
+                          aria-expanded={detayAcik}
+                          className="flex w-full items-center gap-1 px-2.5 py-1.5 text-left text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
+                        >
+                          <IconChevronRight
+                            className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+                              detayAcik ? "rotate-90" : ""
+                            }`}
+                          />
+                          <span className="shrink-0">
+                            {detayAcik ? "Ayrıntıyı gizle" : "Ayrıntı"}
+                          </span>
+                          {!detayAcik && p.talep_notu && (
+                            <span className="min-w-0 flex-1 truncate font-normal text-slate-400">
+                              · {p.talep_notu}
+                            </span>
+                          )}
+                        </button>
+
+                        {detayAcik && (
+                          <div className="space-y-2 border-t border-slate-100 bg-slate-50 p-2.5">
+                            {p.talep_notu ? (
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                                  Vatandaşın açıklaması
+                                </p>
+                                <p className="mt-1 whitespace-pre-line rounded border-l-2 border-amber-300 bg-white px-2 py-1.5 text-xs leading-relaxed text-slate-700">
+                                  {p.talep_notu}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-400">
+                                Bu iş için bir açıklama girilmemiş.
+                              </p>
+                            )}
+
+                            {fotoSrc && (
+                              <img
+                                src={fotoSrc}
+                                alt=""
+                                className="max-h-56 w-full rounded border border-slate-200 object-cover"
+                              />
+                            )}
+
+                            <dl className="space-y-1">
+                              <DetaySatiri
+                                etiket="Tür"
+                                deger={ASSET_TYPE_LABELS[p.type]}
+                              />
+                              {p.brand_model && (
+                                <DetaySatiri
+                                  etiket="Marka / model"
+                                  deger={p.brand_model}
+                                />
+                              )}
+                              {olcu && (
+                                <DetaySatiri etiket="İşin büyüklüğü" deger={olcu} />
+                              )}
+                              {p.talep_tarihi && (
+                                <DetaySatiri
+                                  etiket="Talep tarihi"
+                                  deger={new Date(p.talep_tarihi).toLocaleString(
+                                    "tr-TR"
+                                  )}
+                                />
+                              )}
+                              <DetaySatiri
+                                etiket="Size atandı"
+                                deger={new Date(p.assigned_at).toLocaleString(
+                                  "tr-TR"
+                                )}
+                              />
+                              <DetaySatiri
+                                etiket="Konum"
+                                deger={`${g.geometry.coordinates[1].toFixed(5)}, ${g.geometry.coordinates[0].toFixed(5)}`}
+                              />
+                            </dl>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="space-y-1.5 border-t border-slate-100 p-2">
                         <button
                           onClick={() =>
@@ -703,7 +875,7 @@ export default function SahaEkran() {
             onSec={() => {}}
             tiklanabilir={false}
             isaretler={isaretler}
-            alanlar={bolgeAlanlari}
+            alanlar={haritaAlanlari}
             benimKonumum={benimKonumum}
             ucus={ucus}
           />
@@ -855,6 +1027,18 @@ function BolgeKarti({
         )}
       </div>
     </li>
+  );
+}
+
+/** Gorev ayrintisindaki tek kunye satiri (etiket solda, deger sagda). */
+function DetaySatiri({ etiket, deger }: { etiket: string; deger: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-[11px]">
+      <dt className="shrink-0 text-slate-400">{etiket}</dt>
+      <dd className="min-w-0 truncate text-right font-medium text-slate-700">
+        {deger}
+      </dd>
+    </div>
   );
 }
 

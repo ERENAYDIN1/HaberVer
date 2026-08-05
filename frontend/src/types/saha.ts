@@ -1,4 +1,5 @@
 import type { AssetSource, AssetStatus, AssetType, PointGeometry } from "./asset";
+import type { TalepGeometrisi } from "./report";
 
 /** Bir ekibe ayni anda dusebilecek en fazla aktif gorev (backend'deki
  *  MAKS_AKTIF_GOREV ile ayni olmali). */
@@ -141,12 +142,37 @@ export interface GorevProperties {
   brand_model: string | null;
   photo_url: string | null;
   install_date: string | null;
+  /** Isin dogdugu talebin ham sekli (nokta/cizgi/alan); personelin envantere
+   *  elle girdigi varliklarda null. `geometry` her zaman NOKTA kalir - pin,
+   *  mesafe siralamasi ve yol tarifi onu okur. */
+  sekil: TalepGeometrisi | null;
+  /** Vatandasin talep aciklamasi; varlikta not sutunu olmadigi icin isin ne
+   *  oldugunu anlatan tek serbest metin budur. Kayitli varliklarda null. */
+  talep_notu: string | null;
+  /** Talebin acilis tarihi (isin ne zamandir bekledigi). */
+  talep_tarihi: string | null;
 }
 
 export interface GorevFeature {
   type: "Feature";
   geometry: PointGeometry;
   properties: GorevProperties;
+}
+
+/** Gorevin haritada ayrica cizilmesi gereken sekli (cizgi/alan). Nokta icin
+ *  null: pin zaten o noktada, ikinci bir gosterge gurultudur. */
+export function gorevSekli(
+  p: GorevProperties
+): { tip: "LineString" | "Polygon"; halkalar: [number, number][][] } | null {
+  const s = p.sekil;
+  if (!s || s.type === "Point") return null;
+  return {
+    tip: s.type,
+    halkalar:
+      s.type === "LineString"
+        ? [s.coordinates as [number, number][]]
+        : (s.coordinates as [number, number][][]),
+  };
 }
 
 export interface GorevFeatureCollection {
