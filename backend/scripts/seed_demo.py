@@ -9,6 +9,8 @@ Kullanim (backend container icinde):
     python scripts/seed_demo.py --temizle  # once sil, sonra ekle
     python scripts/seed_demo.py --sil      # yalnizca sil
 
+Silme, kaydedilmis TUM alanlari/guzergahlari (gorev_bolgeleri) da bosaltir.
+
 Hesap parolalari bu dosyada aciktir; bu verinin uretime gitmemesi gerekir.
 """
 import argparse
@@ -234,8 +236,13 @@ def sil(db) -> None:
         sa.text("DELETE FROM users WHERE email = ANY(:mailler)"),
         {"mailler": TUM_EMAILLER},
     )
+    # Kaydedilmis alanlar/guzergahlar tohumlanmaz, elle cizilir; bu yuzden ada
+    # gore secilemezler ve tamami silinir. Demo ortamini gercekten bosaltmanin
+    # tek yolu bu: aksi halde silinen ekiplerden arta kalan (worker_id NULL'a
+    # dusmus) bolgeler haritada oylece kalirdi.
+    bolge = db.execute(sa.text("DELETE FROM gorev_bolgeleri")).rowcount
     db.commit()
-    print("Demo veri silindi.")
+    print(f"Demo veri silindi (kaydedilmis alan/guzergah: {bolge}).")
 
 
 def ekle(db) -> None:
