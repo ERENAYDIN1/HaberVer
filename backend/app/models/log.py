@@ -16,10 +16,12 @@ class LogAction(str, enum.Enum):
     asset_deleted = "asset_deleted"
     report_approved = "report_approved"
     report_rejected = "report_rejected"
-    # Reddedilen ihbarin reddi geri alinip tekrar "beklemede"ye dondurulmesi.
+    # Reddedilen talebin reddi geri alinip tekrar "beklemede"ye dondurulmesi.
     report_reopened = "report_reopened"
     user_created = "user_created"
     user_updated = "user_updated"
+    # Bir turun hangi departmana yonlendirildiginin degistirilmesi.
+    tur_departman_changed = "tur_departman_changed"
     assignment_created = "assignment_created"
     assignment_completed = "assignment_completed"
     assignment_cancelled = "assignment_cancelled"
@@ -35,7 +37,7 @@ class LogAction(str, enum.Enum):
 
 class ActivityLog(Base):
     """Sistemdeki islemlerin (varlik ekleme/guncelleme/silme, durum degisimi,
-    ihbar onay/ret, personel ekleme) audit log kaydi. Kim, ne zaman, ne
+    talep onay/ret, personel ekleme) audit log kaydi. Kim, ne zaman, ne
     yaptigini tutar - CLAUDE.md'deki 'bakim gecmisi' gereksinimi."""
 
     __tablename__ = "activity_logs"
@@ -57,6 +59,13 @@ class ActivityLog(Base):
     entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     entity_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     detail: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Islemin ait oldugu mudurluk. KAYIT ANINDA yazilir, sonradan varlik/talep
+    # uzerinden turetilmez: log'un en degerli satirlari SILME kayitlaridir ve
+    # entity silindikten sonra turu ogrenilemezdi.
+    # NULL = departmana ozel olmayan islem (bolge, kullanici) - tum personel gorur.
+    departman: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("departmanlar.kod"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -7,7 +7,7 @@ import {
 } from "../types/asset";
 
 interface TipSecenekleriProps {
-  /** Gosterilecek turler. Vatandas ihbar formu tumunu (`ASSET_TYPES`),
+  /** Gosterilecek turler. Vatandas talep formu tumunu (`ASSET_TYPES`),
    *  personelin envanter formu `KAYITLI_ASSET_TYPES`'i gecer. */
   turler: readonly AssetType[];
 }
@@ -18,7 +18,7 @@ interface TipSecenekleriProps {
  * 13 tur duz bir listede okunamiyor; turler `<optgroup>`'larla 5 gruba
  * ayrilir (Yeşil Alan ve Park / Aydınlatma ve Elektrik / Yol ve Kaldırım /
  * Altyapı-Su / Diğer) - haritadaki renk gruplariyla BIREBIR ayni ayrim, bkz.
- * types/asset.ts `TIP_GRUBU`. Ayni gruplama uc ayri secicide (vatandas ihbar
+ * types/asset.ts `TIP_GRUBU`. Ayni gruplama uc ayri secicide (vatandas talep
  * formu, varlik ekleme formu, varlik listesi filtresi) gerektiginden tek
  * bilesende toplandi. Bos/"Seçiniz" secenegini cagiran ekler.
  */

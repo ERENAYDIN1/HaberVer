@@ -2,13 +2,13 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ihbar, koleksiyon, PERSONEL, sarmala, varlik } from "./test/yardimcilar";
+import { talep, koleksiyon, PERSONEL, sarmala, varlik } from "./test/yardimcilar";
 
 /** App.tsx'in refactor sirasinda bozulabilecek iki davranisi (ikisi de daha
  *  once bir kez gercekten bozuldu):
  *    1. Tur/durum filtresi tek state'ten beslenir - panel acilirlari ile
  *       lejant birbirini ezmemeli, sayaclar gercek toplami gostermeli.
- *    2. Onaylanan ihbar ile ondan olusan varlik ayni secimdir.
+ *    2. Onaylanan talep ile ondan olusan varlik ayni secimdir.
  *
  *  Ag katmani sahte, bilesen agaci gercek. */
 
@@ -18,18 +18,18 @@ const AGAC = varlik({ name: "Cinar Agaci", type: "agac", status: "bakim_lazim" }
 const DIREK = varlik({ name: "Aydinlatma Diregi", type: "direk", status: "bakim_lazim" });
 const SAGLAM_BANK = varlik({ name: "Saglam Bank", type: "bank", status: "iyi" });
 
-// Onaylanan ihbar -> ondan olusan varlik (ayri id'ler, `created_asset_id` ile bagli).
-const IHBAR_VARLIGI = varlik({
-  name: "Ihbardan Dogan Rogar",
+// Onaylanan talep -> ondan olusan varlik (ayri id'ler, `created_asset_id` ile bagli).
+const TALEP_VARLIGI = varlik({
+  name: "Talepten Dogan Rogar",
   type: "rogar",
   status: "bakim_lazim",
   source: "ihbar",
 });
-const ONAYLI_IHBAR = ihbar({
+const ONAYLI_TALEP = talep({
   name: "Rogar Kapagi Acik",
   type: "rogar",
   status: "onaylandi",
-  created_asset_id: IHBAR_VARLIGI.properties.id,
+  created_asset_id: TALEP_VARLIGI.properties.id,
 });
 
 vi.mock("./auth/AuthContext", () => ({
@@ -47,7 +47,7 @@ vi.mock("./api/assets", () => ({
   listAssets: vi.fn(async (filtre: { source?: string; status?: string } = {}) => {
     // Backend gibi davranir: `source`/`status` sorguyu daraltir; tur filtresi
     // sorguda degildir, client-side uygulanir.
-    let hepsi = [AGAC, DIREK, SAGLAM_BANK, IHBAR_VARLIGI];
+    let hepsi = [AGAC, DIREK, SAGLAM_BANK, TALEP_VARLIGI];
     if (filtre.source) {
       hepsi = hepsi.filter((v) => v.properties.source === filtre.source);
     }
@@ -56,7 +56,7 @@ vi.mock("./api/assets", () => ({
     }
     return koleksiyon(hepsi);
   }),
-  getAsset: vi.fn(async () => IHBAR_VARLIGI),
+  getAsset: vi.fn(async () => TALEP_VARLIGI),
   assetsWithin: vi.fn(async () => koleksiyon([])),
   createAsset: vi.fn(),
   updateAsset: vi.fn(),
@@ -66,7 +66,7 @@ vi.mock("./api/assets", () => ({
 
 vi.mock("./api/reports", () => ({
   listReports: vi.fn(async (status?: string) =>
-    koleksiyon(status === "onaylandi" ? [ONAYLI_IHBAR] : [])
+    koleksiyon(status === "onaylandi" ? [ONAYLI_TALEP] : [])
   ),
   reopenReport: vi.fn(),
   fotoUrl: (y: string | null) => y,
@@ -115,7 +115,7 @@ beforeEach(async () => {
 /** Ekranda gorunen varlik adlari. Senkron olmali: icinde bekleyen bir `findBy*`
  *  olsaydi disaridaki `waitFor`un zaman asimini yerdi. */
 function gorunenAdlar(): string[] {
-  return [AGAC, DIREK, SAGLAM_BANK, IHBAR_VARLIGI]
+  return [AGAC, DIREK, SAGLAM_BANK, TALEP_VARLIGI]
     .map((v) => v.properties.name)
     .filter((ad) => screen.queryAllByText(ad).length > 0);
 }
@@ -132,9 +132,19 @@ async function varlikPaneliniAc(kullanici: ReturnType<typeof userEvent.setup>) {
   await kullanici.click(dugme);
 }
 
-/** Sol paneldeki tur acilirini dondurur (ilk combobox: "Tüm tipler"). */
+/** Sol paneldeki tur acilirini dondurur.
+ *
+ *  Acilir INDEKSLE degil ICERIGIYLE bulunur: panele yeni bir filtre eklendiginde
+ *  (orn. departman secici) indeks kayiyor ve test, ilgisiz bir degisiklik
+ *  yuzunden anlamsiz bir yerde patliyordu. */
 function tipSecici(): HTMLSelectElement {
-  return screen.getAllByRole("combobox")[0] as HTMLSelectElement;
+  const secici = screen
+    .getAllByRole("combobox")
+    .find((s) =>
+      [...(s as HTMLSelectElement).options].some((o) => o.textContent === "Tüm tipler")
+    );
+  if (!secici) throw new Error("tur acilir listesi bulunamadi");
+  return secici as HTMLSelectElement;
 }
 
 describe("App - tur/durum filtresi tek kaynaktan beslenir", () => {
@@ -207,8 +217,8 @@ describe("App - tur/durum filtresi tek kaynaktan beslenir", () => {
   });
 });
 
-describe("App - onaylanan ihbar ile olusan varlik ayni secimdir", () => {
-  it("ihbar kaydi olusturdugu varliga created_asset_id ile baglidir", async () => {
+describe("App - onaylanan talep ile olusan varlik ayni secimdir", () => {
+  it("talep kaydi olusturdugu varliga created_asset_id ile baglidir", async () => {
     const kullanici = userEvent.setup();
     sarmala(<App />);
     await varlikPaneliniAc(kullanici);
@@ -216,9 +226,9 @@ describe("App - onaylanan ihbar ile olusan varlik ayni secimdir", () => {
       expect(gorunenAdlar()).toContain("Cinar Agaci")
     );
     // Esleme testin varsayimi; bozulursa senaryo anlamsizlasir.
-    expect(ONAYLI_IHBAR.properties.created_asset_id).toBe(
-      IHBAR_VARLIGI.properties.id
+    expect(ONAYLI_TALEP.properties.created_asset_id).toBe(
+      TALEP_VARLIGI.properties.id
     );
-    expect(ONAYLI_IHBAR.properties.id).not.toBe(IHBAR_VARLIGI.properties.id);
+    expect(ONAYLI_TALEP.properties.id).not.toBe(TALEP_VARLIGI.properties.id);
   });
 });

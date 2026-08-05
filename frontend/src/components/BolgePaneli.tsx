@@ -43,10 +43,10 @@ const TIP_GORUNUMU: Record<
     baslik: "Güzergâhlar",
     altBaslik: "Ekibin izleyeceği hat",
     aciklama:
-      "Haritada ölçtüğün çizgileri buraya kaydet; bir saha ekibine güzergâh olarak atayabilirsin.",
+      "Haritada çizdiğin hatları buraya kaydet; bir saha ekibine güzergâh olarak atayabilirsin.",
     bos: "Kayıtlı güzergâh yok.",
     bosIpucu:
-      'Üst bardaki "Ölç" ile bir hat çiz, bitirdikten sonra alt paneldeki "Kaydet" ile buraya ekle.',
+      'Üst bardaki "Çiz" ile bir hat çiz, bitirdikten sonra alt paneldeki "Kaydet" ile buraya ekle.',
     katmanAdi: "Güzergâhlar",
     renk: "blue",
     ikon: IconRoute,

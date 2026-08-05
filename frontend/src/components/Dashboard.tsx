@@ -12,6 +12,10 @@ import {
 
 import { konumCozumleToplu, type KonumCozumu } from "../api/sinirlar";
 import {
+  useDepartmanlar,
+  useTurDepartmanEslemesi,
+} from "../hooks/useDepartmanlar";
+import {
   GRUP_RENGI,
   TIP_GRUBU,
   TIP_GRUPLARI,
@@ -82,6 +86,8 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
   const features = useMemo(() => data?.features ?? [], [data]);
   const { data: konumlar, isFetching: konumYukleniyor } =
     useKonumHaritasi(features);
+  const { data: departmanlar } = useDepartmanlar();
+  const { data: esleme } = useTurDepartmanEslemesi();
 
   // Filtre kutularinin secenekleri: veride gercekten bulunan ilce/mahalleler.
   const ilceSecenekleri = useMemo(() => {
@@ -162,6 +168,27 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
     sayi: filtrelenmis.filter((f) => TIP_GRUBU[f.properties.type] === g).length,
   }));
   const enBuyuk = Math.max(...tipDagilimi.map((d) => d.sayi), 1);
+
+  // Departman dagilimi: "hangi mudurlugun ustunde kac is var". Tur grubuyla
+  // AYNI SEY DEGILDIR (orn. cop kutusu yesil grupta ama Temizlik Isleri'nde);
+  // is yuku sorusunun cevabi bu kirilimdir, gorsel gruplama degil.
+  // Bar rengi departmanin kendi rengi - haritadaki grup renkleriyle
+  // karismasin diye departman rengi yalnizca panellerde/grafikte kullanilir.
+  const departmanDagilimi = (departmanlar ?? [])
+    .map((d) => ({
+      kod: d.kod,
+      ad: d.ad.replace(/\s*Müdürlüğü$/, ""),
+      renk: d.renk,
+      sayi: filtrelenmis.filter((f) => esleme?.[f.properties.type] === d.kod).length,
+      bakim: filtrelenmis.filter(
+        (f) =>
+          esleme?.[f.properties.type] === d.kod &&
+          f.properties.status === "bakim_lazim"
+      ).length,
+    }))
+    .filter((d) => d.sayi > 0)
+    .sort((a, b) => b.sayi - a.sayi);
+  const enBuyukDepartman = Math.max(...departmanDagilimi.map((d) => d.sayi), 1);
 
   // Dışa/aktarma ve tetikleme filtrelenmis alt kumeyi kullanir.
   const filtreliKoleksiyon: AssetFeatureCollection = {
@@ -366,6 +393,60 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
           </ResponsiveContainer>
         )}
       </div>
+
+      {/* Departmana gore dagilim: hangi mudurlugun ustunde kac is var.
+          Tur grubu grafiginden AYRI bir sorudur - gorsel gruplama ile is
+          bolumu her zaman ortusmez. */}
+      {departmanDagilimi.length > 0 && (
+        <div className="mb-6">
+          <p className="mb-2 text-xs font-medium text-slate-600">
+            Departmana göre dağılım
+          </p>
+          <ResponsiveContainer width="100%" height={departmanDagilimi.length * 42}>
+            <BarChart
+              data={departmanDagilimi}
+              layout="vertical"
+              margin={{ top: 0, right: 28, bottom: 0, left: 0 }}
+              barCategoryGap="28%"
+            >
+              <XAxis type="number" hide domain={[0, enBuyukDepartman]} />
+              <YAxis
+                type="category"
+                dataKey="ad"
+                width={130}
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 12, fill: RENK.ikincilMetin }}
+              />
+              <Bar
+                dataKey="sayi"
+                barSize={18}
+                radius={[9, 9, 9, 9]}
+                isAnimationActive
+                animationDuration={550}
+                animationEasing="ease-out"
+              >
+                {departmanDagilimi.map((d) => (
+                  <Cell key={d.kod} fill={d.renk} />
+                ))}
+                <LabelList
+                  dataKey="sayi"
+                  position="right"
+                  offset={8}
+                  style={{ fontSize: 12, fill: RENK.ikincilMetin, fontWeight: 500 }}
+                />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+          <p className="mt-1 text-[11px] text-slate-400">
+            Bakım bekleyen:{" "}
+            {departmanDagilimi
+              .filter((d) => d.bakim > 0)
+              .map((d) => `${d.ad} ${d.bakim}`)
+              .join(" · ") || "yok"}
+          </p>
+        </div>
+      )}
 
       {/* Konum kirilimi - ilce (veya secili ilcede mahalle) bazinda dagilim.
           Satira tiklamak o konumu filtreler (drill-down). */}

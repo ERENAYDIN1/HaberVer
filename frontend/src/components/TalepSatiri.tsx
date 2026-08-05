@@ -6,30 +6,31 @@ import {
   TIP_ROZET_SINIFI,
   TIP_ROZET_SINIFI_VARSAYILAN,
 } from "../types/asset";
+import { talepNoktasi } from "../types/report";
 import type { ReportFeature } from "../types/report";
 import FotoBuyutucu from "./FotoBuyutucu";
 import { IconPin, TIP_IKONU } from "./icons";
-import IhbarDurumRozeti from "./IhbarDurumRozeti";
+import TalepDurumRozeti from "./TalepDurumRozeti";
 
-interface IhbarSatiriProps {
+interface TalepSatiriProps {
   report: ReportFeature;
   secili: boolean;
   onSec: (id: string) => void;
-  /** Sadece "beklemede" durumundaki ihbarlarda ve yetkili roller icin gosterilir. */
+  /** Sadece "beklemede" durumundaki taleplerde ve yetkili roller icin gosterilir. */
   onayReddetYetkisi: boolean;
   onOnayla: (id: string) => void;
   onReddet: (id: string) => void;
-  /** "reddedildi" durumundaki ihbarin reddini geri alir (tekrar "beklemede"). */
+  /** "reddedildi" durumundaki talebin reddini geri alir (tekrar "beklemede"). */
   onGeriAl: (id: string) => void;
   islemPending: boolean;
 }
 
-/** Varlik listesindeki (VarlikSatiri) ile ayni sablonu kullanan ihbar satiri:
+/** Varlik listesindeki (VarlikSatiri) ile ayni sablonu kullanan talep satiri:
  *  ikon/foto, ad, tur, durum rozeti, konum ve secilince acilan Onayla/Reddet
  *  aksiyonu. Boylece "Bekleyen"/"Reddedildi" sekmeleri "Onaylandı" (varlik
  *  listesi) ve "Varlıklar" sekmesiyle gorsel olarak birebir tutarli olur;
  *  fotograf/not/ret nedeni gibi ek detaylar ReportDetayModal'da gosterilir. */
-const IhbarSatiri = forwardRef<HTMLLIElement, IhbarSatiriProps>(function IhbarSatiri(
+const TalepSatiri = forwardRef<HTMLLIElement, TalepSatiriProps>(function TalepSatiri(
   {
     report,
     secili,
@@ -43,7 +44,8 @@ const IhbarSatiri = forwardRef<HTMLLIElement, IhbarSatiriProps>(function IhbarSa
   ref
 ) {
   const { id, name, type, status, photo_url } = report.properties;
-  const [lng, lat] = report.geometry.coordinates;
+  // Cizgi/alan taleplerde satirda seklin temsil noktasi gosterilir.
+  const [lng, lat] = talepNoktasi(report) ?? [0, 0];
   const TipIkonu = TIP_IKONU[type] ?? IconPin;
   const bekliyor = status === "beklemede";
   const reddedildi = status === "reddedildi";
@@ -92,7 +94,9 @@ const IhbarSatiri = forwardRef<HTMLLIElement, IhbarSatiriProps>(function IhbarSa
             <p className="truncate text-sm font-medium text-slate-800">{name}</p>
             <p className="text-xs text-slate-500">{ASSET_TYPE_LABELS[type]}</p>
             <div className="mt-1.5 flex items-center gap-2">
-              <IhbarDurumRozeti durum={status} />
+              {/* Gorunum (dort deger) durumdan (uc deger) once gelir: tamir
+                  edilmis bir is "Onaylandı" diye kalmasin. */}
+              <TalepDurumRozeti durum={report.properties.gorunum ?? status} />
               <span className="font-mono text-[11px] text-slate-400">
                 {lng.toFixed(4)}, {lat.toFixed(4)}
               </span>
@@ -150,4 +154,4 @@ const IhbarSatiri = forwardRef<HTMLLIElement, IhbarSatiriProps>(function IhbarSa
   );
 });
 
-export default IhbarSatiri;
+export default TalepSatiri;

@@ -60,8 +60,8 @@ export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) 
   const duzenlemeModu = asset !== undefined;
 
   // Kayitli varlik olarak yalnizca KAYITLI_ASSET_TYPES eklenebilir ("Diğer"
-  // yalnizca ihbardan gelir). Duzenleme modunda mevcut varligin tipi listede
-  // yoksa (orn. ihbardan dogmus bir "Diğer" varligi) eklenir ki secim
+  // yalnizca talepten gelir). Duzenleme modunda mevcut varligin tipi listede
+  // yoksa (orn. talepten dogmus bir "Diğer" varligi) eklenir ki secim
   // bozulmasin; gruplu listede kendi grubunun altinda gorunur.
   const tipSecenekleri: AssetType[] = [...KAYITLI_ASSET_TYPES];
   if (asset && !tipSecenekleri.includes(asset.properties.type)) {

@@ -53,6 +53,13 @@ class User(Base):
     yaka: Mapped[str | None] = mapped_column(
         String(16), ForeignKey("yakalar.kod"), nullable=True
     )
+    # Personelin bagli oldugu mudurluk (departmanlar.kod). `calisan` ve
+    # `saha_calisani` icin ZORUNLUDUR (routers/users.py dogrular): kullanicinin
+    # gorebilecegi tur kumesi buradan turer. `admin` ve `vatandas` icin NULL -
+    # admin tum departmanlari gorur, vatandasin departmani yoktur.
+    departman: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("departmanlar.kod"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

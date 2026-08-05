@@ -37,6 +37,9 @@ export function createUser(data: {
   /** Yalnizca saha_calisani icin anlamli; bos birakilirsa ekibin yakasi son
    *  bildirdigi konumdan turetilir. */
   yaka?: Yaka | null;
+  /** `calisan` ve `saha_calisani` icin ZORUNLU: kullanicinin gorebilecegi tur
+   *  kumesi bu mudurlukten turer. Admin/vatandas icin null. */
+  departman?: string | null;
 }) {
   return istek<User>("/users", {
     method: "POST",
@@ -44,6 +47,7 @@ export function createUser(data: {
       ...data,
       full_name: data.full_name || null,
       yaka: data.yaka || null,
+      departman: data.departman || null,
     }),
   });
 }
@@ -60,6 +64,13 @@ export function updateUserYaka(user_id: string, yaka: Yaka | null) {
 /** Admin: hesabi acar/kapatir. Kapatmak yalnizca bir bayrak degildir - hesap
  *  Keycloak'ta da devre disi birakilir ve ACIK OTURUMLARI ANINDA DUSER, yani
  *  ele gecirilmis bir hesabi kesmenin yoludur (bkz. crud/user.py::set_active). */
+export function updateUserDepartman(user_id: string, departman: string) {
+  return istek<User>(`/users/${user_id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ departman }),
+  });
+}
+
 export function updateUserAktif(user_id: string, is_active: boolean) {
   return istek<User>(`/users/${user_id}`, {
     method: "PATCH",

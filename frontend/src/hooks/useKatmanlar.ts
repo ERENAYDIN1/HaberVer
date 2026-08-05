@@ -7,7 +7,7 @@ import {
   type AssetStatus,
   type AssetType,
 } from "../types/asset";
-import { IHBAR_GORUNUMLERI, type IhbarGorunumu } from "../types/report";
+import { TALEP_GORUNUMLERI, type TalepGorunumu } from "../types/report";
 
 /** Haritanin katman gorunurlugu ve alt-filtreleri.
  *
@@ -24,8 +24,12 @@ export interface KatmanDurumu {
   katmanlar: Record<KatmanAnahtari, boolean>;
   katmanTurleri: Record<AssetType, boolean>;
   katmanVarlikDurumlari: Record<AssetStatus, boolean>;
-  katmanDurumlari: Record<IhbarGorunumu, boolean>;
+  katmanDurumlari: Record<TalepGorunumu, boolean>;
 }
+
+/** Departmani olmayan (henuz atanmamis) ekiplerin alt-filtre anahtari. Gercek
+ *  bir departman kodu olamayacagi icin cakismaz. */
+export const DEPARTMANSIZ = "__departmansiz__";
 
 /** Tum anahtarlari `true` yapan kayit. Sabitler elle yazilmak yerine
  *  sozlukten turetilsin diye: elle yazilan listeler bayatliyor. */
@@ -49,11 +53,11 @@ export function yalnizca<K extends string>(
 
 /** Acilis durumu. `katmanTurleri` sozlukten turetilir (bkz. `hepsi`). */
 export const KATMAN_BASLANGIC: KatmanDurumu = {
-  /** Varliklar + ihbarlar + ekipler gorunur; bolgeler/guzergahlar gizli
+  /** Varliklar + talepler + ekipler gorunur; bolgeler/guzergahlar gizli
    *  (kullanici lejanttan ya da Bölgeler sekmesinden acar). */
   katmanlar: {
     varliklar: true,
-    ihbarlar: true,
+    talepler: true,
     bolgeler: false,
     guzergahlar: false,
     ekipler: true,
@@ -61,7 +65,7 @@ export const KATMAN_BASLANGIC: KatmanDurumu = {
   katmanTurleri: hepsi(ASSET_TYPES),
   /** Acilista yalnizca "Bakım Lazım": saglam envanter haritayi doldurmasin. */
   katmanVarlikDurumlari: { iyi: false, bakim_lazim: true },
-  /** Ayni mantik: acilista ise donusmus (onaylanmis) ihbarlar isaretli. */
+  /** Ayni mantik: acilista ise donusmus (onaylanmis) talepler isaretli. */
   katmanDurumlari: {
     beklemede: false,
     onaylandi: true,
@@ -74,7 +78,7 @@ export const KATMAN_BASLANGIC: KatmanDurumu = {
  *  olarak farkli - Temizle "her seyi kaldir" demek, "varsayilana don" degil. */
 const BOS_KATMANLAR: Record<KatmanAnahtari, boolean> = {
   varliklar: false,
-  ihbarlar: false,
+  talepler: false,
   bolgeler: false,
   guzergahlar: false,
   ekipler: false,
@@ -89,6 +93,27 @@ export function useKatmanlar() {
   const [katmanDurumlari, setKatmanDurumlari] = useState(
     KATMAN_BASLANGIC.katmanDurumlari
   );
+  /** Saha ekibi katmaninin departman alt-filtresi. Diger alt-filtrelerden
+   *  farkli olarak anahtarlar DERLEME ANINDA BILINMEZ (departman sozlugu
+   *  backend'den gelir), bu yuzden tam bir kayit yerine "yalnizca kapatilanlar"
+   *  tutulur: eksik anahtar = secili. Boylece yeni bir mudurluk eklendiginde
+   *  ekipleri kendiliginden gorunur olur, sessizce gizlenmez. */
+  const [kapaliEkipDepartmanlari, setKapaliEkipDepartmanlari] = useState<
+    Record<string, true>
+  >({});
+
+  const ekipDepartmaniSecili = useCallback(
+    (kod: string | null) => !kapaliEkipDepartmanlari[kod ?? DEPARTMANSIZ],
+    [kapaliEkipDepartmanlari]
+  );
+  const ekipDepartmaniDegistir = useCallback((anahtar: string) => {
+    setKapaliEkipDepartmanlari((k) => {
+      const yeni = { ...k };
+      if (yeni[anahtar]) delete yeni[anahtar];
+      else yeni[anahtar] = true;
+      return yeni;
+    });
+  }, []);
 
   // --- Lejant kutucuklari (coklu secim) ---
   const katmanDegistir = useCallback((anahtar: KatmanAnahtari) => {
@@ -101,7 +126,7 @@ export function useKatmanlar() {
     setKatmanVarlikDurumlari((d) => ({ ...d, [anahtar]: !d[anahtar as AssetStatus] }));
   }, []);
   const katmanDurumuDegistir = useCallback((anahtar: string) => {
-    setKatmanDurumlari((d) => ({ ...d, [anahtar]: !d[anahtar as IhbarGorunumu] }));
+    setKatmanDurumlari((d) => ({ ...d, [anahtar]: !d[anahtar as TalepGorunumu] }));
   }, []);
 
   // --- Panel acilirlari (tekil secim) ---
@@ -112,23 +137,39 @@ export function useKatmanlar() {
     setKatmanVarlikDurumlari(yalnizca(ASSET_STATUSES, durum));
   }, []);
 
+  /** Departman filtresi AYRI BIR STATE DEGILDIR: bir departman = bir tur
+   *  kumesi, o yuzden secim mevcut tur kutucuklarina yazilir. Boylece lejant,
+   *  panel acilirlari, harita ve dashboard tek kaynaktan beslenmeye devam
+   *  eder; paralel bir filtre olsaydi ikisinin celistigi durumlar cikardi
+   *  ("Departman: Fen İşleri" ama "Tür: ağaç" gibi).
+   *
+   *  `turler` bos/null ise tum turler acilir ("Tüm departmanlar"). */
+  const departmanTurleriniSec = useCallback((turler: readonly AssetType[] | null) => {
+    setKatmanTurleri((onceki) => {
+      const yeni = Object.fromEntries(
+        ASSET_TYPES.map((t) => [t, turler ? turler.includes(t) : true])
+      ) as Record<AssetType, boolean>;
+      return ASSET_TYPES.every((t) => onceki[t] === yeni[t]) ? onceki : yeni;
+    });
+  }, []);
+
   // --- Sekme -> katman senkronu icin gereken hedefli yazicilar ---
   /** Bir ana katmani acar; zaten acikken ayni nesneyi birakir. */
   const katmaniAc = useCallback((anahtar: KatmanAnahtari) => {
     setKatmanlar((k) => (k[anahtar] ? k : { ...k, [anahtar]: true }));
   }, []);
-  /** Yalnizca varlik ya da yalnizca ihbar katmanini acik birakir; alakasiz
+  /** Yalnizca varlik ya da yalnizca talep katmanini acik birakir; alakasiz
    *  katman acik kalirsa panel ile harita celisir. */
-  const yalnizVarlikVeyaIhbar = useCallback((hangisi: "varliklar" | "ihbarlar") => {
+  const yalnizVarlikVeyaTalep = useCallback((hangisi: "varliklar" | "talepler") => {
     setKatmanlar((k) => {
       const varliklar = hangisi === "varliklar";
-      return k.varliklar === varliklar && k.ihbarlar === !varliklar
+      return k.varliklar === varliklar && k.talepler === !varliklar
         ? k
-        : { ...k, varliklar, ihbarlar: !varliklar };
+        : { ...k, varliklar, talepler: !varliklar };
     });
   }, []);
-  const ihbarDurumunuSec = useCallback((durum: IhbarGorunumu) => {
-    setKatmanDurumlari(yalnizca(IHBAR_GORUNUMLERI, durum));
+  const talepDurumunuSec = useCallback((durum: TalepGorunumu) => {
+    setKatmanDurumlari(yalnizca(TALEP_GORUNUMLERI, durum));
   }, []);
 
   /** "Temizle": ana katmanlar bosalir, alt filtrelerin hepsi isaretlenir -
@@ -137,7 +178,8 @@ export function useKatmanlar() {
     setKatmanlar(BOS_KATMANLAR);
     setKatmanTurleri(KATMAN_BASLANGIC.katmanTurleri);
     setKatmanVarlikDurumlari(hepsi(ASSET_STATUSES));
-    setKatmanDurumlari(hepsi(IHBAR_GORUNUMLERI));
+    setKatmanDurumlari(hepsi(TALEP_GORUNUMLERI));
+    setKapaliEkipDepartmanlari({});
   }, []);
 
   return {
@@ -145,15 +187,18 @@ export function useKatmanlar() {
     katmanTurleri,
     katmanVarlikDurumlari,
     katmanDurumlari,
+    ekipDepartmaniSecili,
     katmanDegistir,
     katmanTuruDegistir,
     katmanVarlikDurumuDegistir,
     katmanDurumuDegistir,
+    ekipDepartmaniDegistir,
     panelTuruSec,
     panelDurumuSec,
+    departmanTurleriniSec,
     katmaniAc,
-    yalnizVarlikVeyaIhbar,
-    ihbarDurumunuSec,
+    yalnizVarlikVeyaTalep,
+    talepDurumunuSec,
     sifirla,
   };
 }

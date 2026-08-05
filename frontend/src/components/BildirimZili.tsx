@@ -11,7 +11,7 @@ export interface Bildirim {
   altbaslik: string;
   /** ISO tarih - "x dakika once" hesabinda kullanilir. */
   zaman: string;
-  kategori: "bakim" | "ihbar";
+  kategori: "bakim" | "talep";
   /** Bildirime tiklaninca (haritada oraya ucar / ilgili paneli acar). */
   onTikla: () => void;
 }
@@ -21,7 +21,7 @@ interface BildirimZiliProps {
 }
 
 /** Header'daki bildirim zili + acilir "Son Bildirimler" paneli. Bakim bekleyen
- *  varliklar ve bekleyen ihbarlar tek yerde toplanir; bir ogeye tiklayinca
+ *  varliklar ve bekleyen talepler tek yerde toplanir; bir ogeye tiklayinca
  *  harita ilgili konuma ucar. */
 export default function BildirimZili({ bildirimler }: BildirimZiliProps) {
   const [acik, setAcik] = useState(false);
@@ -81,7 +81,7 @@ export default function BildirimZili({ bildirimler }: BildirimZiliProps) {
               <IconBell className="h-8 w-8 text-slate-300" />
               <p className="text-sm text-slate-500">Yeni bildirim yok</p>
               <p className="text-xs text-slate-400">
-                Bakım bekleyen varlık ve ihbarlar burada görünür.
+                Bakım bekleyen varlık ve talepler burada görünür.
               </p>
             </div>
           ) : (

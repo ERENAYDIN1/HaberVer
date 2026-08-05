@@ -2,7 +2,7 @@ import type maplibregl from "maplibre-gl";
 
 import { BOS_GEOJSON } from "./geojson";
 import {
-  IHBAR_OPAKLIK_IFADESI,
+  TALEP_OPAKLIK_IFADESI,
   TIP_RENGI_IFADESI,
   VARLIK_UYARI_RENK,
 } from "./haritaIkonlari";
@@ -17,6 +17,11 @@ import type { AssetFeatureCollection } from "../types/asset";
 
 export const SOURCE_ID = "assets";
 export const REPORTS_SOURCE_ID = "reports";
+/** Cizgi/alan olarak bildirilen taleplerin HAM SEKLI. Pin katmanlari
+ *  `REPORTS_SOURCE_ID`'de nokta geometrisiyle calismaya devam eder; sekil ayri
+ *  kaynakta cizilir. Boylece pin/glif/halka/rozet/secim zinciri cok geometriye
+ *  uyarlanmak zorunda kalmadi. */
+export const TALEP_SEKIL_SOURCE_ID = "talep-sekil";
 export const CIZIM_SOURCE_ID = "cizim";
 export const TAMAMLANAN_SOURCE_ID = "tamamlanan-alanlar";
 /** Kaydedilmis bolgeler: anlik secimlerden ayri kaynak - kalicidir, secim
@@ -33,7 +38,7 @@ export const BOS_KOLEKSIYON: AssetFeatureCollection = {
   type: "FeatureCollection",
   features: [],
 };
-/** Rozetlerin gorunmeye basladigi zoom (hem varlik hem ihbar tarafinda). */
+/** Rozetlerin gorunmeye basladigi zoom (hem varlik hem talep tarafinda). */
 export const ROZET_MINZOOM = 12.5;
 
 /** Isaretci olculeri: daireler glif okunacak kadar belirgin, ama uzaklasinca
@@ -41,8 +46,8 @@ export const ROZET_MINZOOM = 12.5;
 export const ISARETCI = {
   /** Varlik dairesi yaricapi (zoom 10 -> 16 interpolasyonu). */
   varlikYaricap: ["interpolate", ["linear"], ["zoom"], 10, 8, 16, 14.5],
-  /** Ihbar pininin ucundaki yer golgesi (pin havada durmasin). */
-  ihbarGolgeYaricap: ["interpolate", ["linear"], ["zoom"], 10, 2.5, 16, 4],
+  /** Talep pininin ucundaki yer golgesi (pin havada durmasin). */
+  talepGolgeYaricap: ["interpolate", ["linear"], ["zoom"], 10, 2.5, 16, 4],
   /** "Bakim lazim" amber uyari halkasi; ana dairenin disinda kalir. */
   uyariYaricap: ["interpolate", ["linear"], ["zoom"], 10, 10.5, 16, 17],
   /** Secim halkasi; uyari halkasinin da disinda. */
@@ -56,7 +61,7 @@ export function golgeBoyasi(yaricap: unknown, opaklik: unknown = 1): Record<stri
   return {
     "circle-radius": yaricap,
     "circle-color": "#0f172a",
-    // Sonumlenen ihbarlarda golge de sonmeli.
+    // Sonumlenen taleplerde golge de sonmeli.
     "circle-opacity": ["*", 0.22, opaklik],
     "circle-blur": 0.5,
     "circle-translate": [0, 2],
@@ -121,8 +126,8 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
   }
 }
 
-/** Vatandas ihbarlari: yer golgesi + secim pini + pin + glif + halka/rozet. */
-export function ihbarKatmanlari(map: maplibregl.Map): void {
+/** Vatandas talepleri: yer golgesi + secim pini + pin + glif + halka/rozet. */
+export function talepKatmanlari(map: maplibregl.Map): void {
   if (!map.getSource(REPORTS_SOURCE_ID)) {
     map.addSource(REPORTS_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
 
@@ -134,9 +139,42 @@ export function ihbarKatmanlari(map: maplibregl.Map): void {
       type: "circle",
       source: REPORTS_SOURCE_ID,
       paint: golgeBoyasi(
-        ISARETCI.ihbarGolgeYaricap,
-        IHBAR_OPAKLIK_IFADESI
+        ISARETCI.talepGolgeYaricap,
+        TALEP_OPAKLIK_IFADESI
       ) as never,
+    });
+  }
+}
+
+/** Cizgi/alan taleplerin ham sekli. Pinlerin ALTINDA cizilir: sekil isin
+ *  buyuklugunu anlatir, pin ise isin kendisidir ve ustte kalmali.
+ *
+ *  Renk kaydin gorunum rengidir (bekleyen mor, tamir gri...), pinle ayni
+ *  sinyali tasisin diye - `renk` ozelligini MapView yazar. */
+export function talepSekilKatmanlari(map: maplibregl.Map): void {
+  if (!map.getSource(TALEP_SEKIL_SOURCE_ID)) {
+    map.addSource(TALEP_SEKIL_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
+
+    map.addLayer({
+      id: "talep-sekil-fill",
+      type: "fill",
+      source: TALEP_SEKIL_SOURCE_ID,
+      filter: ["==", ["geometry-type"], "Polygon"],
+      paint: {
+        "fill-color": ["get", "renk"],
+        "fill-opacity": ["*", 0.16, ["coalesce", ["get", "opaklik"], 1]],
+      },
+    });
+    map.addLayer({
+      id: "talep-sekil-yol",
+      type: "line",
+      source: TALEP_SEKIL_SOURCE_ID,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": ["get", "renk"],
+        "line-width": 3,
+        "line-opacity": ["coalesce", ["get", "opaklik"], 1],
+      },
     });
   }
 }

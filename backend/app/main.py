@@ -15,6 +15,7 @@ from .routers import (
     assets,
     auth,
     bolgeler,
+    departmanlar,
     geo,
     logs,
     media,
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 async def _bakim_dongusu() -> None:
     """Zamana bagli temizlik: suresi gecmis oturumlar + saklama suresi dolmus
-    ihbar varliklari.
+    talep varliklari.
 
     Bu isler okuma uclarina iliştirilmez; oyle yapildiginda her GET bir
     DELETE + COMMIT uretiyor ve okuma gecikmesi silinecek kayit sayisina bagli
@@ -111,6 +112,7 @@ async def origin_kontrolu(request: Request, call_next):
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(departmanlar.router)
 app.include_router(assets.router)
 app.include_router(reports.router)
 app.include_router(saha.router)
@@ -118,7 +120,7 @@ app.include_router(bolgeler.router)
 app.include_router(sinirlar.router)
 app.include_router(geo.router)
 app.include_router(logs.router)
-# Ihbar fotograflari bilincli olarak `StaticFiles` mount'u degil normal bir
+# Talep fotograflari bilincli olarak `StaticFiles` mount'u degil normal bir
 # router: mount security.py'nin disinda kalip dosyalari kimlik dogrulamasiz
 # servis ediyordu.
 app.include_router(media.router)

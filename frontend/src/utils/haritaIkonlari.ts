@@ -4,9 +4,9 @@ import { TIP_GLIF_PATH } from "../data/tipGlifleri";
 import { TIP_RENGI, TIP_RENGI_VARSAYILAN, type AssetType } from "../types/asset";
 import {
   HALKALI_GORUNUMLER,
-  IHBAR_DURUM_RENGI,
-  IHBAR_GIYSISI,
-  IHBAR_GORUNUMLERI,
+  TALEP_DURUM_RENGI,
+  TALEP_GIYSISI,
+  TALEP_GORUNUMLERI,
   ROZETLI_GORUNUMLER,
   type DurumRozeti,
 } from "../types/report";
@@ -15,8 +15,8 @@ import {
  *  uretilmesi, haritaya yuklenmesi ve bunlara bagli stil ifadeleri.
  *  MapView'dan ayri: burasi haritanin yasam dongusune hic dokunmaz. */
 
-/** Secili ihbarin altina cizilen koyu pinin rengi. */
-const IHBAR_PIN_SECIM_RENK = "#0f172a";
+/** Secili talebin altina cizilen koyu pinin rengi. */
+const TALEP_PIN_SECIM_RENK = "#0f172a";
 
 /** Tipe gore isaretci rengi; liste rozetleriyle ayni paletten (TIP_RENGI)
  *  turetilir, bilinmeyen tip icin notr gri. */
@@ -116,10 +116,10 @@ function pinGlifiSvg(ic: string): string {
   );
 }
 
-/** Ihbar pini (damla), dolgusu tur rengi. Beyaz kontur her altlikta okunur
+/** Talep pini (damla), dolgusu tur rengi. Beyaz kontur her altlikta okunur
  *  kalmasi icin. SDF yerine tur basina hazir goruntu uretilir: SDF ham
  *  distance field ister, alfa maskesi kenar/halo davranisini bozuyor. */
-function ihbarPinSvg(renk: string): string {
+function talepPinSvg(renk: string): string {
   return pinSvgKabugu(
     `<g transform="translate(${PIN_KAYDIRMA.x} ${PIN_KAYDIRMA.y})">` +
       `<path d="M12 31.2C12 31.2 2.4 18.6 2.4 12A9.6 9.6 0 1 1 21.6 12C21.6 18.6 12 31.2 12 31.2Z" ` +
@@ -128,7 +128,7 @@ function ihbarPinSvg(renk: string): string {
 }
 
 /** Pinin arkasina cizilen durum halkasi; kesikli varyant "karar bekliyor". */
-function ihbarHalkaSvg(renk: string, kesikli: boolean): string {
+function talepHalkaSvg(renk: string, kesikli: boolean): string {
   const r = PIN_BAS_YARICAP + 3.9;
   return pinSvgKabugu(
     `<circle cx="${PIN_BAS.x}" cy="${PIN_BAS.y}" r="${r}" fill="${renk}" opacity="0.16"/>` +
@@ -138,7 +138,7 @@ function ihbarHalkaSvg(renk: string, kesikli: boolean): string {
 }
 
 /** Pinin sag-ust omzundaki durum rozeti (pinin USTUNE cizilir). */
-function ihbarRozetSvg(renk: string, simge: DurumRozeti): string {
+function talepRozetSvg(renk: string, simge: DurumRozeti): string {
   // Kayma bas yaricapindan bir tik iceride: tam yaricapta rozetin beyaz
   // konturu viewBox kenarina dayanip kirpiliyordu.
   const kayma = PIN_BAS_YARICAP - 0.4;
@@ -167,17 +167,17 @@ function varlikRozetSvg(renk: string, simge: DurumRozeti): string {
   );
 }
 
-/** Bakim rozetinin rengi: onaylanmis ihbarla ayni amber, ikisi de acik is. */
-export const VARLIK_UYARI_RENK = IHBAR_DURUM_RENGI.onaylandi;
+/** Bakim rozetinin rengi: onaylanmis taleple ayni amber, ikisi de acik is. */
+export const VARLIK_UYARI_RENK = TALEP_DURUM_RENGI.onaylandi;
 
 /** Bir turun glifini uc varyantla yukler: daire (tip-*), pin glifi
- *  (pin-glif-*) ve ihbar pini (ihbar-pin-*). */
+ *  (pin-glif-*) ve talep pini (talep-pin-*). */
 function tipIkonuYukle(map: maplibregl.Map, tur: string, ic: string): Promise<void> {
   const renk = TIP_RENGI[tur as AssetType] ?? TIP_RENGI_VARSAYILAN;
   return Promise.all([
     svgIkonuYukle(map, `tip-${tur}`, tipGlifiSvg(ic)),
     svgIkonuYukle(map, `pin-glif-${tur}`, pinGlifiSvg(ic)),
-    svgIkonuYukle(map, `ihbar-pin-${tur}`, ihbarPinSvg(renk)),
+    svgIkonuYukle(map, `talep-pin-${tur}`, talepPinSvg(renk)),
   ]).then(() => undefined);
 }
 
@@ -191,18 +191,18 @@ export function tipIkonlariniHazirla(map: maplibregl.Map): Promise<void> {
     ...HALKALI_GORUNUMLER.map((d) =>
       svgIkonuYukle(
         map,
-        `ihbar-halka-${d}`,
-        ihbarHalkaSvg(IHBAR_DURUM_RENGI[d], IHBAR_GIYSISI[d].halkaKesikli)
+        `talep-halka-${d}`,
+        talepHalkaSvg(TALEP_DURUM_RENGI[d], TALEP_GIYSISI[d].halkaKesikli)
       )
     ),
     ...ROZETLI_GORUNUMLER.map((d) =>
       svgIkonuYukle(
         map,
-        `ihbar-rozet-${d}`,
-        ihbarRozetSvg(IHBAR_DURUM_RENGI[d], IHBAR_GIYSISI[d].rozet as DurumRozeti)
+        `talep-rozet-${d}`,
+        talepRozetSvg(TALEP_DURUM_RENGI[d], TALEP_GIYSISI[d].rozet as DurumRozeti)
       )
     ),
-    svgIkonuYukle(map, "ihbar-pin-secim", ihbarPinSvg(IHBAR_PIN_SECIM_RENK)),
+    svgIkonuYukle(map, "talep-pin-secim", talepPinSvg(TALEP_PIN_SECIM_RENK)),
     svgIkonuYukle(
       map,
       "varlik-rozet-bakim",
@@ -212,10 +212,10 @@ export function tipIkonlariniHazirla(map: maplibregl.Map): Promise<void> {
 }
 
 /** Gorunume gore sonumleme: kapanmis kayitlar acik islerle yarismasin. */
-export const IHBAR_OPAKLIK_IFADESI = [
+export const TALEP_OPAKLIK_IFADESI = [
   "match",
   ["coalesce", ["get", "gorunum"], ["get", "status"]],
-  ...IHBAR_GORUNUMLERI.flatMap((d) => [d, IHBAR_GIYSISI[d].opaklik]),
+  ...TALEP_GORUNUMLERI.flatMap((d) => [d, TALEP_GIYSISI[d].opaklik]),
   1,
 ] as unknown as maplibregl.ExpressionSpecification;
 

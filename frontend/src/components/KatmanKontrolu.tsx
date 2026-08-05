@@ -18,14 +18,14 @@ import {
 /** Haritada bagimsiz olarak acilip kapatilabilen genel-bakis katmanlari. */
 export type KatmanAnahtari =
   | "varliklar"
-  | "ihbarlar"
+  | "talepler"
   | "bolgeler"
   | "guzergahlar"
   | "ekipler";
 
 export type KatmanGorunurluk = Record<KatmanAnahtari, boolean>;
 
-/** Bir ana katmanin altindaki tekil filtre secenegi (varlik turu / ihbar durumu). */
+/** Bir ana katmanin altindaki tekil filtre secenegi (varlik turu / talep durumu). */
 export interface AltFiltre {
   anahtar: string;
   etiket: string;
@@ -39,7 +39,7 @@ export interface AltFiltre {
   sayi: number;
 }
 
-/** Alt-filtrelerin bir kirilimi. Varliklarda iki grup (tur/durum), ihbarlarda
+/** Alt-filtrelerin bir kirilimi. Varliklarda iki grup (tur/durum), taleplerde
  *  tek grup vardir; tek grupta baslik gereksiz oldugu icin opsiyoneldir. */
 export interface AltGrup {
   baslik?: string;
@@ -66,11 +66,11 @@ interface KatmanTanimi {
 
 /** Katman sirasi ve etiketleri. Buradaki renkler ana katman kimligidir
  *  (lejant ikonu), tekil isaretcilerin rengi degil. Bolgeler/guzergahlar
- *  bilincli olarak ihbarlarla ekipler arasinda durur: ustteki ikisi "is",
+ *  bilincli olarak taleplerle ekipler arasinda durur: ustteki ikisi "is",
  *  alttaki "kim", bolge de ikisini baglayan calisma alani. */
 const KATMANLAR: KatmanTanimi[] = [
   { anahtar: "varliklar", etiket: "Varlıklar", renk: "#059669", ikon: IconPin },
-  { anahtar: "ihbarlar", etiket: "İhbarlar", renk: "#9333ea", ikon: IconInbox },
+  { anahtar: "talepler", etiket: "Talepler", renk: "#9333ea", ikon: IconInbox },
   { anahtar: "bolgeler", etiket: "Bölgeler", renk: "#7c3aed", ikon: IconLayers },
   { anahtar: "guzergahlar", etiket: "Güzergâhlar", renk: "#2563eb", ikon: IconRoute },
   { anahtar: "ekipler", etiket: "Saha Ekipleri", renk: "#4f46e5", ikon: IconUsers },
@@ -91,10 +91,10 @@ interface KatmanKontroluProps {
   onDegistir: (anahtar: KatmanAnahtari) => void;
   /** Her katmanin o an haritadaki adedi (rozet). */
   sayilar: Record<KatmanAnahtari, number>;
-  /** Varliklar katmaninin alt-filtreleri: tur + durum olmak uzere iki grup. */
-  varlikAlt: AltGrup[];
-  /** Ihbarlar katmaninin gorunum alt-filtreleri. */
-  ihbarAlt: AltGrup[];
+  /** Katman basina alt-filtre kirilimlari; anahtari olmayan katman yalnizca
+   *  acilip kapatilir. (Varliklar: tur + durum, Talepler: gorunum, Saha
+   *  Ekipleri: departman.) */
+  altlar: Partial<Record<KatmanAnahtari, AltGrup[]>>;
   /** Verilirse lejantin altinda ilce/mahalle filtresi gorunur. */
   bolge?: BolgeFiltresi;
 }
@@ -210,8 +210,8 @@ function BolgeBolumu({ bolge }: { bolge: BolgeFiltresi }) {
 
 /**
  * Haritanin sag-ust kosesindeki lejant + katman filtresi. Kullanici varlik,
- * ihbar ve saha ekibi katmanlarini "tik atarak" bagimsizca acip kapatabilir;
- * ayrica Varliklar (tur + durum) ve Ihbarlar (durum) katmanlarini kendi icinde ince
+ * talep ve saha ekibi katmanlarini "tik atarak" bagimsizca acip kapatabilir;
+ * ayrica Varliklar (tur + durum) ve Talepler (durum) katmanlarini kendi icinde ince
  * filtreleyebilir. Kart dar tutulur, alt-filtreler dikey olarak acilir - yazi
  * sikismaz/kaymaz. Baslik satirindan tumu kucuk bir dugmeye indirilebilir.
  */
@@ -219,8 +219,7 @@ export default function KatmanKontrolu({
   gorunur,
   onDegistir,
   sayilar,
-  varlikAlt,
-  ihbarAlt,
+  altlar: altFiltreler,
   bolge,
 }: KatmanKontroluProps) {
   const [acik, setAcik] = useState(true);
@@ -265,12 +264,13 @@ export default function KatmanKontrolu({
         {KATMANLAR.map((katman) => {
           const secili = gorunur[katman.anahtar];
           const Ikon = katman.ikon;
+          // Bos gelen kirilim (orn. hic saha ekibi yoksa) hic yokmus gibi
+          // davranir: acilinca bos bir kutu gosteren ok kafa karistirir.
+          const altlarHam = altFiltreler[katman.anahtar];
           const altlar =
-            katman.anahtar === "varliklar"
-              ? varlikAlt
-              : katman.anahtar === "ihbarlar"
-                ? ihbarAlt
-                : null;
+            altlarHam && altlarHam.some((g) => g.secenekler.length > 0)
+              ? altlarHam
+              : null;
           const genisletilmis = altlar ? genis[katman.anahtar] : false;
 
           return (

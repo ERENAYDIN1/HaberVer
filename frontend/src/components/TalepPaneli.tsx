@@ -15,19 +15,20 @@ import {
   type AssetFeatureCollection,
 } from "../types/asset";
 import {
-  IHBAR_GORUNUMLERI,
-  type IhbarGorunumu,
+  TALEP_GORUNUMLERI,
+  talepNoktasi,
+  type TalepGorunumu,
   type ReportFeature,
   type ReportStatus,
 } from "../types/report";
 import type { EkipOzet } from "../types/saha";
 import AssetDetayModal, { useVarlikYonetimi } from "./AssetDetayModal";
 import AssetForm from "./AssetForm";
-import IhbarSatiri from "./IhbarSatiri";
+import TalepSatiri from "./TalepSatiri";
 import Modal from "./Modal";
 import VarlikSatiri from "./VarlikSatiri";
 
-interface IhbarVarlikSorguSonucu {
+interface TalepVarlikSorguSonucu {
   data?: AssetFeatureCollection;
   isLoading: boolean;
   isError: boolean;
@@ -35,37 +36,37 @@ interface IhbarVarlikSorguSonucu {
 }
 
 /** Sabit bos liste: ust bilesene bildirilen deger her render'da yeni bir dizi
- *  olmasin, yoksa `onIhbarlarChange` efekti kendini surekli tetikler. */
-const BOS_IHBARLAR: ReportFeature[] = [];
+ *  olmasin, yoksa `onTaleplerChange` efekti kendini surekli tetikler. */
+const BOS_TALEPLER: ReportFeature[] = [];
 
 /** Sekme etiketleri kisa tutulur; REPORT_STATUS_LABELS'daki tam metinler
  *  sekme genisligini esitsiz yapiyor. */
-const SEKME_ETIKETLERI: Record<IhbarGorunumu, string> = {
+const SEKME_ETIKETLERI: Record<TalepGorunumu, string> = {
   onaylandi: "Onaylandı",
   tamir: "Tamir Edildi",
   beklemede: "Bekleyen",
   reddedildi: "Reddedildi",
 };
 
-/** Bu sekme ham ihbar mi yoksa ihbardan olusan varliklari mi listeler:
- *  "Onaylandı" ve "Tamir Edildi" varlik, digerleri ham ihbar gosterir. */
-function varlikSekmesi(g: IhbarGorunumu): boolean {
+/** Bu sekme ham talep mi yoksa talepten olusan varliklari mi listeler:
+ *  "Onaylandı" ve "Tamir Edildi" varlik, digerleri ham talep gosterir. */
+function varlikSekmesi(g: TalepGorunumu): boolean {
   return g === "onaylandi" || g === "tamir";
 }
 
-interface IhbarPaneliProps {
+interface TalepPaneliProps {
   /** Alt sekme; App.tsx'te tutulur ki bildirimden gelen bir kayit dogru
    *  sekmeyi acabilsin ve harita ne gosterecegini bilsin. */
-  durum: IhbarGorunumu;
-  onDurumChange: (d: IhbarGorunumu) => void;
+  durum: TalepGorunumu;
+  onDurumChange: (d: TalepGorunumu) => void;
   /** Onay yeni bir varlik olusturunca ana listeyi tazelemek icin. */
   onVarlikOlustu?: () => void;
-  /** Yuklenen ham ihbarlari ust bilesene bildirir (haritada gosterilirler). */
-  onIhbarlarChange?: (ihbarlar: ReportFeature[]) => void;
+  /** Yuklenen ham talepleri ust bilesene bildirir (haritada gosterilirler). */
+  onTaleplerChange?: (talepler: ReportFeature[]) => void;
   seciliRaporId?: string | null;
   onRaporSec?: (id: string) => void;
-  /** Ihbardan olusan varliklar; App.tsx zaten tuttugu icin tekrar cekilmez. */
-  ihbarVarlikSorgu: IhbarVarlikSorguSonucu;
+  /** Talepten olusan varliklar; App.tsx zaten tuttugu icin tekrar cekilmez. */
+  talepVarlikSorgu: TalepVarlikSorguSonucu;
   seciliVarlikId?: string | null;
   onVarlikSec: (id: string) => void;
   /** Saha ekipleri: varlik detayindan ekibe atama yapilabilsin diye. */
@@ -76,20 +77,20 @@ interface IhbarPaneliProps {
   alandaMi?: ((nokta: [number, number]) => boolean) | null;
 }
 
-export default function IhbarPaneli({
+export default function TalepPaneli({
   durum,
   onDurumChange,
   onVarlikOlustu,
-  onIhbarlarChange,
+  onTaleplerChange,
   seciliRaporId,
   onRaporSec,
-  ihbarVarlikSorgu,
+  talepVarlikSorgu,
   seciliVarlikId,
   onVarlikSec,
   ekipler,
   onVarligaGit,
   alandaMi,
-}: IhbarPaneliProps) {
+}: TalepPaneliProps) {
   const { user } = useAuth();
   const tamCrudYetkisi = user?.role !== "saha_calisani";
   const deleteAsset = useDeleteAsset();
@@ -109,39 +110,44 @@ export default function IhbarPaneli({
   const [islemHatasi, setIslemHatasi] = useState<string | null>(null);
   const [islemdeki, setIslemdeki] = useState<string | null>(null);
 
-  // Ihbar listesi react-query uzerinden gider: App'teki harita/lejant
+  // Talep listesi react-query uzerinden gider: App'teki harita/lejant
   // sorgulariyla ayni onbellegi paylasir, boylece onay/ret sonrasi hepsi
-  // birlikte tazelenir. Varlik listeleyen sekmelerde ihbar cekilmez.
+  // birlikte tazelenir. Varlik listeleyen sekmelerde talep cekilmez.
   const varlikListesi = varlikSekmesi(durum);
-  const ihbarSorgu = useQuery({
+  const talepSorgu = useQuery({
     queryKey: ["reports", durum],
     queryFn: () => listReports(durum as ReportStatus),
     enabled: !varlikListesi,
   });
   // Alan suzgeci uygulanmis liste memo'lanir: her render'da yeni bir dizi
-  // uretmek `onIhbarlarChange` efektini surekli tetiklerdi.
-  const ihbarlar = useMemo(() => {
-    if (varlikListesi) return BOS_IHBARLAR;
-    const tumu = ihbarSorgu.data?.features ?? BOS_IHBARLAR;
+  // uretmek `onTaleplerChange` efektini surekli tetiklerdi.
+  const talepler = useMemo(() => {
+    if (varlikListesi) return BOS_TALEPLER;
+    const tumu = talepSorgu.data?.features ?? BOS_TALEPLER;
     if (!alandaMi) return tumu;
-    return tumu.filter((f) => alandaMi(f.geometry.coordinates));
-  }, [varlikListesi, ihbarSorgu.data, alandaMi]);
-  const yukleniyor = !varlikListesi && ihbarSorgu.isLoading;
-  const hata = islemHatasi ?? (ihbarSorgu.error as Error | null)?.message ?? null;
+    // Alan suzgeci seklin temsil noktasina bakar: bir cizgi/alan talebi
+    // secili alana "girdi mi" sorusunun tek anlamli cevabi budur.
+    return tumu.filter((f) => {
+      const n = talepNoktasi(f);
+      return n ? alandaMi(n) : false;
+    });
+  }, [varlikListesi, talepSorgu.data, alandaMi]);
+  const yukleniyor = !varlikListesi && talepSorgu.isLoading;
+  const hata = islemHatasi ?? (talepSorgu.error as Error | null)?.message ?? null;
 
-  const onIhbarlarChangeRef = useRef(onIhbarlarChange);
+  const onTaleplerChangeRef = useRef(onTaleplerChange);
   useEffect(() => {
-    onIhbarlarChangeRef.current = onIhbarlarChange;
+    onTaleplerChangeRef.current = onTaleplerChange;
   });
 
-  // Yuklenen ihbarlari ust bilesene bildir (haritada gostermek/secmek icin).
+  // Yuklenen talepleri ust bilesene bildir (haritada gostermek/secmek icin).
   useEffect(() => {
-    onIhbarlarChangeRef.current?.(ihbarlar);
-  }, [ihbarlar]);
+    onTaleplerChangeRef.current?.(talepler);
+  }, [talepler]);
 
   /** Onay/ret sonrasi uc durum sorgusu birden gecersiz kilinir: panel, harita,
    *  lejant sayaclari ve bildirim zili tek hamlede tazelenir. */
-  const ihbarlariTazele = () =>
+  const talepleriTazele = () =>
     queryClient.invalidateQueries({ queryKey: ["reports"] });
 
   const onayla = async (id: string) => {
@@ -149,7 +155,7 @@ export default function IhbarPaneli({
     setIslemHatasi(null);
     try {
       await approveReport(id);
-      await ihbarlariTazele();
+      await talepleriTazele();
       onVarlikOlustu?.();
     } catch (e) {
       setIslemHatasi((e as Error).message);
@@ -164,7 +170,7 @@ export default function IhbarPaneli({
     setIslemHatasi(null);
     try {
       await rejectReport(id, neden || undefined);
-      await ihbarlariTazele();
+      await talepleriTazele();
     } catch (e) {
       setIslemHatasi((e as Error).message);
     } finally {
@@ -172,14 +178,14 @@ export default function IhbarPaneli({
     }
   };
 
-  /** Reddi geri al: ihbar "beklemede"ye doner. Alt sekme burada degistirilmez;
+  /** Reddi geri al: talep "beklemede"ye doner. Alt sekme burada degistirilmez;
    *  App'teki secim senkronu kaydi Bekleyen listesinde secili gosterir. */
   const geriAl = async (id: string) => {
     setIslemdeki(id);
     setIslemHatasi(null);
     try {
       await reopenReport(id);
-      await ihbarlariTazele();
+      await talepleriTazele();
     } catch (e) {
       setIslemHatasi((e as Error).message);
     } finally {
@@ -201,9 +207,9 @@ export default function IhbarPaneli({
     seciliVarlikRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [seciliVarlikId, seciliRaporId]);
 
-  // Ihbardan olusan varliklar iki sekmeye bolunur: hala bakim bekleyenler
+  // Talepten olusan varliklar iki sekmeye bolunur: hala bakim bekleyenler
   // ("Onaylandı") ve tamir edilmis olanlar ("Tamir Edildi").
-  const onayliVarliklar = ihbarVarlikSorgu.data?.features ?? [];
+  const onayliVarliklar = talepVarlikSorgu.data?.features ?? [];
   const gosterilenVarliklar = onayliVarliklar.filter(
     (a) =>
       (durum === "tamir"
@@ -239,7 +245,7 @@ export default function IhbarPaneli({
       {/* Alt sekmeler: esit genislikte ve kisa etiketli; tam etiketler
           satirlarda/rozetlerde kullanilmaya devam eder. */}
       <div className="grid grid-cols-4 gap-1 border-b border-slate-200 px-4 py-2">
-        {IHBAR_GORUNUMLERI.map((d) => (
+        {TALEP_GORUNUMLERI.map((d) => (
           <button
             key={d}
             onClick={() => onDurumChange(d)}
@@ -279,19 +285,19 @@ export default function IhbarPaneli({
               olarak silinir.
             </p>
           )}
-          {ihbarVarlikSorgu.isLoading && (
+          {talepVarlikSorgu.isLoading && (
             <p className="p-4 text-sm text-slate-500">Yükleniyor…</p>
           )}
-          {ihbarVarlikSorgu.isError && (
+          {talepVarlikSorgu.isError && (
             <p className="p-3 text-sm text-red-600">
-              {ihbarVarlikSorgu.error?.message}
+              {talepVarlikSorgu.error?.message}
             </p>
           )}
-          {!ihbarVarlikSorgu.isLoading && gosterilenVarliklar.length === 0 && (
+          {!talepVarlikSorgu.isLoading && gosterilenVarliklar.length === 0 && (
             <p className="p-6 text-center text-sm text-slate-500">
               {durum === "tamir"
                 ? "Tamir edilmiş varlık yok."
-                : "Bakım bekleyen, ihbardan oluşmuş varlık yok."}
+                : "Bakım bekleyen, talepten oluşmuş varlık yok."}
             </p>
           )}
 
@@ -302,17 +308,17 @@ export default function IhbarPaneli({
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
           {yukleniyor && <p className="p-4 text-sm text-slate-500">Yükleniyor…</p>}
-          {!yukleniyor && ihbarlar.length === 0 && (
+          {!yukleniyor && talepler.length === 0 && (
             <p className="p-6 text-center text-sm text-slate-500">
-              Bu durumda ihbar yok.
+              Bu durumda talep yok.
             </p>
           )}
 
           <ul className="divide-y divide-slate-100">
-            {ihbarlar.map((ih) => {
+            {talepler.map((ih) => {
               const secili = ih.properties.id === seciliRaporId;
               return (
-                <IhbarSatiri
+                <TalepSatiri
                   key={ih.properties.id}
                   ref={secili ? seciliVarlikRef : undefined}
                   report={ih}

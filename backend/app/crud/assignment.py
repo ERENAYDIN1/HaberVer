@@ -14,6 +14,7 @@ from ..models.asset import Asset, AssetStatus
 from ..models.assignment import Assignment, AssignmentStatus
 from ..models.log import LogAction
 from ..models.user import User, UserRole
+from . import departman as departman_crud
 from . import yaka as yaka_crud
 from .log import add_log
 
@@ -66,20 +67,31 @@ def _aktif_sayi_subq():
     )
 
 
-def en_yakin_uygun_ekip(db: Session, asset_geom) -> User | None:
+def en_yakin_uygun_ekip(db: Session, asset_geom, asset_type=None) -> User | None:
     """Varliga en yakin uygun ekibi dondurur: konumu bilinen, aktif, kapasitesi
-    olan, varlikla ayni yakada ve ATAMA_MESAFE_KADEMELERI_M kademelerinden
-    birine giren saha calisanlari arasindan. Once dar kademe (5 km) denenir,
-    orada uygun ekip yoksa genis kademeye (10 km) inilir. Hicbir kademede uygun
-    ekip yoksa None doner ve varlik havuzda bekler.
+    olan, varlikla ayni yakada, ISIN DEPARTMANINDA ve
+    ATAMA_MESAFE_KADEMELERI_M kademelerinden birine giren saha calisanlari
+    arasindan. Once dar kademe (5 km) denenir, orada uygun ekip yoksa genis
+    kademeye (10 km) inilir. Hicbir kademede uygun ekip yoksa None doner ve
+    varlik havuzda bekler.
 
     KONUMU BILINMEYEN ekip hicbir kademede degerlendirilmez: "Gaziosmanpasa
     ekibi" bilgisi tek basina o ekibin Eyup'e mi Sultangazi'ye mi yakin
     oldugunu soylemez, dolayisiyla mesafe kurali uygulanamaz.
 
-    Yaka kisiti mesafe esiginin yerine degil ustune gelir: Bogaz'in iki yakasi
-    kus ucusu yakin gorunse de arac ancak kopruden gecer."""
+    UC KISIT UST USTE BINER, biri digerinin yerine gecmez:
+      * mesafe - is ne kadar uzakta,
+      * yaka   - Bogaz'in iki yakasi kus ucusu yakin gorunse de arac ancak
+                 kopruden gecer,
+      * departman - agac isini elektrik ekibine gondermenin anlami yok; en
+                 yakin ekip dogru ekip degildir.
+
+    `asset_type` verilmezse departman kisiti uygulanmaz (cagiran taraf turu
+    bilmiyorsa mesafe+yaka kuralina duselim)."""
     asset_yaka = yaka_crud.yaka_bul(db, asset_geom)
+    asset_departman = (
+        departman_crud.tur_departmani(db, asset_type) if asset_type is not None else None
+    )
     cnt = _aktif_sayi_subq().label("cnt")
     mesafe = func.ST_DistanceSphere(User.last_location, asset_geom)
     kosullar = [
@@ -94,6 +106,11 @@ def en_yakin_uygun_ekip(db: Session, asset_geom) -> User | None:
     # hicbir sey atanmamasindansa mesafe kuralina duselim.
     if asset_yaka is not None:
         kosullar.append(yaka_crud.ekip_yakasi_ifadesi() == asset_yaka)
+    # Ayni gerekce: tur_departman tablosu bossa kisit uygulanmaz. Departmani
+    # olmayan bir ekip hicbir ise atanmaz - "departmansiz" sessizce "her ise
+    # uygun" anlamina gelmemeli.
+    if asset_departman is not None:
+        kosullar.append(User.departman == asset_departman)
     rows = db.execute(
         select(User, cnt, mesafe.label("mesafe"))
         .where(*kosullar)
@@ -148,7 +165,7 @@ def bekleyen_gorevleri_dagit(db: Session) -> int:
 
     dagitilan = 0
     for asset in bekleyenler:
-        ekip = en_yakin_uygun_ekip(db, asset.geometry)
+        ekip = en_yakin_uygun_ekip(db, asset.geometry, asset.type)
         if ekip is not None:
             ata(db, asset, ekip, assigned_by=None)
             dagitilan += 1
@@ -402,9 +419,11 @@ def tamamlanani_geri_al(
     return asset
 
 
-def aktif_atamalar(db: Session):
+def aktif_atamalar(db: Session, kapsam_turleri=None):
     """Tum aktif ('atandi') gorevleri worker_id + varlik + koordinatla dondurur
-    (personel yonetim panosunda ekip bazinda gruplanir). En eski once."""
+    (personel yonetim panosunda ekip bazinda gruplanir). En eski once.
+
+    `kapsam_turleri` verilirse yalnizca o departmanin turlerindeki isler doner."""
     stmt = (
         select(
             Assignment,
@@ -417,12 +436,16 @@ def aktif_atamalar(db: Session):
         .where(Assignment.status == AssignmentStatus.atandi)
         .order_by(Assignment.created_at.asc())
     )
+    if kapsam_turleri is not None:
+        stmt = stmt.where(Asset.type.in_(kapsam_turleri))
     return db.execute(stmt).all()
 
 
-def havuz_varliklari(db: Session):
+def havuz_varliklari(db: Session, kapsam_turleri=None):
     """Havuzda bekleyen (bakim_lazim + aktif gorevi olmayan) varliklari koordinatla
-    dondurur (personel elle atayabilsin diye). En eski once."""
+    dondurur (personel elle atayabilsin diye). En eski once.
+
+    `kapsam_turleri` verilirse yalnizca o departmanin isleri doner."""
     atanmis = select(Assignment.asset_id).where(
         Assignment.status == AssignmentStatus.atandi
     )
@@ -437,11 +460,17 @@ def havuz_varliklari(db: Session):
         # En uzun bekleyen once (updated_at = bakima dusme zamani).
         .order_by(Asset.updated_at.asc())
     )
+    if kapsam_turleri is not None:
+        stmt = stmt.where(Asset.type.in_(kapsam_turleri))
     return db.execute(stmt).all()
 
 
-def ekipler_ozeti(db: Session):
-    """Tum saha calisanlarini konum + son gorulme + aktif yuk ile dondurur."""
+def ekipler_ozeti(db: Session, departman: str | None = None):
+    """Saha ekiplerini konum + son gorulme + aktif yuk ile dondurur.
+
+    `departman` verilirse yalnizca o mudurlugun ekipleri doner: bir Park ve
+    Bahceler calisaninin Fen Isleri ekiplerini gormesinin bir islevi yok, ona
+    is de atayamaz."""
     cnt = _aktif_sayi_subq().label("aktif_gorev")
     stmt = (
         select(
@@ -453,8 +482,11 @@ def ekipler_ozeti(db: Session):
             User.last_seen_at,
             cnt,
             yaka_crud.ekip_yakasi_ifadesi().label("yaka"),
+            User.departman,
         )
         .where(User.role == UserRole.saha_calisani, User.is_active.is_(True))
         .order_by(User.full_name)
     )
+    if departman is not None:
+        stmt = stmt.where(User.departman == departman)
     return db.execute(stmt).all()

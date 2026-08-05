@@ -20,5 +20,9 @@ export interface User {
   /** Yalnizca saha_calisani icin: ekibin kadro yakasi. null ise ekibin yakasi
    *  son bildirdigi konumdan turetilir (bkz. types/saha.ts). */
   yaka: Yaka | null;
+  /** Personelin bagli oldugu mudurluk (`departmanlar.kod`). `calisan` ve
+   *  `saha_calisani` icin doludur; admin tum departmanlari gordugu ve
+   *  vatandasin departmani olmadigi icin onlarda null. */
+  departman: string | null;
 }
 

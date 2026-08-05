@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { ekibeAta, ekipGorevleri, gorevGeriAl, havuz as havuzGetir } from "../api/saha";
+import {
+  useDepartmanlar,
+  useTurDepartmanEslemesi,
+} from "../hooks/useDepartmanlar";
+import type { TurDepartmanEslemesi } from "../types/departman";
 import {
   ASSET_SOURCE_LABELS,
   ASSET_TYPES,
@@ -70,17 +75,17 @@ function TipRozet({ type }: { type: AssetType }) {
   );
 }
 
-/** Gorevin kaynagi: kayitli varlik mi yoksa vatandas ihbari mi (kucuk rozet). */
+/** Gorevin kaynagi: kayitli varlik mi yoksa vatandas talebi mi (kucuk rozet). */
 function KaynakRozet({ source }: { source: AssetSource }) {
-  const ihbar = source === "ihbar";
+  const talep = source === "ihbar";
   return (
     <span
       className={`rounded px-1 py-px text-[10px] font-medium ${
-        ihbar ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"
+        talep ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"
       }`}
-      title={ihbar ? "Vatandaş ihbarından oluştu" : "Belediyeye kayıtlı varlık"}
+      title={talep ? "Vatandaş talebinden oluştu" : "Belediyeye kayıtlı varlık"}
     >
-      {ihbar ? "İhbar" : "Varlık"}
+      {talep ? "Talep" : "Varlık"}
     </span>
   );
 }
@@ -101,32 +106,98 @@ function YakaRozet({ yaka, koyu }: { yaka: string | null; koyu?: boolean }) {
   );
 }
 
-/** Ekip secim etiketi: yuk + konum + karsi yaka uyarisi. */
-function ekipSecenegi(e: EkipGorevleri, hedefYaka: string | null): string {
+/** Mudurluk rozeti. Ekip kartlarinda kullanilmaz (orada bolum basligi bu isi
+ *  gorur); havuz satirlarinda isin TURUNDEN turetilen hedef mudurlugu gosterir:
+ *  otomatik atama departmana gore de suzuldugu icin bir isin neden havuzda
+ *  bekledigi ancak bu bilgiyle okunur. */
+function DepartmanRozet({
+  departman,
+  adlar,
+  koyu,
+}: {
+  departman: string | null;
+  adlar: Record<string, string>;
+  koyu?: boolean;
+}) {
+  if (!departman) return null;
+  const ad = adlar[departman] ?? departman;
+  // Mudurluk adlari uzun ("Park ve Bahçeler Müdürlüğü"); rozette ilk kelime
+  // grubu yeter, tamami title'da durur.
+  const kisa = ad.replace(/\s*Müdürlüğü$/, "").replace(/\s*\(.*\)$/, "");
+  return (
+    <span
+      className={`rounded px-1 py-px text-[10px] font-medium ${
+        koyu ? "bg-white/15 text-slate-100" : "bg-slate-100 text-slate-600"
+      }`}
+      title={ad}
+    >
+      {kisa}
+    </span>
+  );
+}
+
+/** Ekip secim etiketi: yuk + karsi yaka + BASKA DEPARTMAN uyarisi.
+ *
+ *  Elle atama her iki kisittan da muaftir (yetki personeldedir), ama personel
+ *  ne yaptigini gormeli: otomatik dagitimin asla yapmayacagi bir atamayi elle
+ *  yaptigini bilerek yapsin. */
+function ekipSecenegi(
+  e: EkipGorevleri,
+  hedefYaka: string | null,
+  hedefDepartman: string | undefined,
+  departmanAdlari: Record<string, string>
+): string {
   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
-  const karsi = Boolean(e.yaka && hedefYaka && e.yaka !== hedefYaka);
+  const karsiYaka = Boolean(e.yaka && hedefYaka && e.yaka !== hedefYaka);
+  const karsiDep = Boolean(
+    e.departman && hedefDepartman && e.departman !== hedefDepartman
+  );
   return (
     (e.full_name || e.email) +
     ` (${e.aktif_gorev}/${MAKS_AKTIF_GOREV}` +
     (dolu ? " · dolu)" : ")") +
-    (karsi ? ` · ⚠ karşı yaka (${YAKA_KISA[e.yaka as Yaka] ?? e.yaka})` : "")
+    (karsiYaka ? ` · ⚠ karşı yaka (${YAKA_KISA[e.yaka as Yaka] ?? e.yaka})` : "") +
+    (karsiDep
+      ? ` · ⚠ başka departman (${departmanAdlari[e.departman!] ?? e.departman})`
+      : "")
   );
 }
 
-/** Bir ekibin altindaki tek gorev satiri: baska ekibe tasi ya da havuza al. */
+/** Departman baglami: isin departmani TURUNDEN turetilir (ayri bir alan degil,
+ *  iki yerde tutulan bilgi tutarsizlasirdi), ekibinki `users.departman`'dan
+ *  gelir. Tek nesne olarak gecirilir - dort bilesene iki ayri prop eklemenin
+ *  okunurluk faydasi yok. */
+export interface DepBaglami {
+  esleme: TurDepartmanEslemesi;
+  adlar: Record<string, string>;
+  /** Mudurluk rozet renkleri; haritadaki ekip pinleriyle AYNI renk sozlugu
+   *  (`departmanlar.renk`) - panodaki bir ekibi haritada bulmak renkten
+   *  gecmeli. */
+  renkler: Record<string, string>;
+}
+
+/** Bir ekibin altindaki tek gorev satiri: baska ekibe tasi ya da havuza al.
+ *
+ *  Islem acilirI SATIR ACILINCA gorunur. Eskiden her gorevin altinda kalici
+ *  bir <select> duruyordu; uc ekip x uc gorev = dokuz acilir, pano "ne var"
+ *  yerine "ne yapabilirim" gibi okunuyordu. Islem nadir, okuma sik. */
 function GorevSatiri({
   gorev,
   digerEkipler,
   onIslem,
   calisiyor,
+  dep,
 }: {
   gorev: GorevOzet;
   digerEkipler: EkipGorevleri[];
   onIslem: (v: Islem) => void;
   calisiyor: boolean;
+  dep: DepBaglami;
 }) {
+  const [acik, setAcik] = useState(false);
+
   return (
-    <li className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
+    <li className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
       <div className="flex items-start gap-2.5">
         <TipRozet type={gorev.type} />
         <div className="min-w-0 flex-1">
@@ -148,32 +219,48 @@ function GorevSatiri({
             </span>
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setAcik((a) => !a)}
+          aria-expanded={acik}
+          title="Görevi başka ekibe taşı ya da havuza al"
+          className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[11px] font-medium transition ${
+            acik
+              ? "border-slate-400 bg-slate-100 text-slate-700"
+              : "border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
+          }`}
+        >
+          {calisiyor ? "…" : "Taşı"}
+        </button>
       </div>
-      <select
-        value=""
-        disabled={calisiyor}
-        onChange={(e) => {
-          const v = e.target.value;
-          if (!v) return;
-          if (v === "__havuz__") onIslem({ tip: "havuz", asset_id: gorev.asset_id });
-          else onIslem({ tip: "ata", asset_id: gorev.asset_id, worker_id: v });
-        }}
-        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
-      >
-        <option value="">{calisiyor ? "İşleniyor…" : "Taşı / işlem…"}</option>
-        <optgroup label="Başka ekibe taşı">
-          {digerEkipler.map((e) => (
-            <option
-              key={e.id}
-              value={e.id}
-              disabled={e.aktif_gorev >= MAKS_AKTIF_GOREV}
-            >
-              {ekipSecenegi(e, gorev.yaka)}
-            </option>
-          ))}
-        </optgroup>
-        <option value="__havuz__">↩ Havuza al (iptal)</option>
-      </select>
+      {acik && (
+        <select
+          value=""
+          disabled={calisiyor}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (!v) return;
+            setAcik(false);
+            if (v === "__havuz__") onIslem({ tip: "havuz", asset_id: gorev.asset_id });
+            else onIslem({ tip: "ata", asset_id: gorev.asset_id, worker_id: v });
+          }}
+          className="mt-2 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+        >
+          <option value="">{calisiyor ? "İşleniyor…" : "Taşı / işlem…"}</option>
+          <optgroup label="Başka ekibe taşı">
+            {digerEkipler.map((e) => (
+              <option
+                key={e.id}
+                value={e.id}
+                disabled={e.aktif_gorev >= MAKS_AKTIF_GOREV}
+              >
+                {ekipSecenegi(e, gorev.yaka, dep.esleme[gorev.type], dep.adlar)}
+              </option>
+            ))}
+          </optgroup>
+          <option value="__havuz__">↩ Havuza al (iptal)</option>
+        </select>
+      )}
     </li>
   );
 }
@@ -184,58 +271,83 @@ function EkipKarti({
   tumEkipler,
   onIslem,
   islenenAsset,
+  dep,
 }: {
   ekip: EkipGorevleri;
   tumEkipler: EkipGorevleri[];
   onIslem: (v: Islem) => void;
   islenenAsset: string | undefined;
+  dep: DepBaglami;
 }) {
   const t = tazelik(ekip.last_seen_at);
   const dolu = ekip.aktif_gorev >= MAKS_AKTIF_GOREV;
   const diger = tumEkipler.filter((e) => e.id !== ekip.id);
 
+  // Ekip pini haritada mudurlugun rengiyle cizilir; kart da ayni rengi tasir
+  // ki panodaki bir ekip haritada renkten bulunabilsin.
+  const renk = (ekip.departman && dep.renkler[ekip.departman]) || "#4338ca";
+
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
-      {/* Koyu bant: ekip basligini altindaki gorev kartlarindan ayirir. */}
-      <div className="flex items-center gap-3 bg-slate-800 px-3 py-2.5 text-white">
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      {/* Acik baslik + solda mudurluk rengi seridi: kart artik iki farkli
+          zemin (koyu bant + gri liste) tasimiyor, ic ice gorunmuyor. */}
+      <div
+        className="flex items-center gap-2.5 border-b border-slate-200 px-3 py-2.5"
+        style={{ borderLeft: `3px solid ${renk}` }}
+      >
         <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white"
+          style={{ background: renk }}
           title={ekip.email}
         >
           <IconUsers className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
-            Saha Ekibi
-          </p>
-          <p className="truncate text-sm font-semibold leading-tight text-white">
+          <p className="truncate text-sm font-semibold leading-tight text-slate-800">
             {ekip.full_name || ekip.email}
           </p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-300">
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
             <span
-              className="inline-block h-2 w-2 rounded-full ring-1 ring-white/40"
+              className="inline-block h-2 w-2 rounded-full ring-1 ring-slate-200"
               style={{ background: t.renk }}
             />
             {t.metin}
-            <YakaRozet yaka={ekip.yaka} koyu />
+            <YakaRozet yaka={ekip.yaka} />
           </p>
         </div>
-        <span
-          className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-            dolu ? "bg-red-500 text-white" : "bg-emerald-500 text-white"
-          }`}
-        >
-          {dolu && <IconWarning className="h-3 w-3" />}
-          {ekip.aktif_gorev}/{MAKS_AKTIF_GOREV} görev
+        {/* Yuk: segmentli cubuk + sayi. Cubuk "kac is daha alir"i sayidan once
+            okutur; dolu ekip kirmiziya doner. */}
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span className="flex gap-0.5">
+            {Array.from({ length: MAKS_AKTIF_GOREV }, (_, i) => (
+              <span
+                key={i}
+                className="h-1.5 w-3 rounded-full"
+                style={{
+                  background:
+                    i < ekip.aktif_gorev ? (dolu ? "#dc2626" : renk) : "#e2e8f0",
+                }}
+              />
+            ))}
+          </span>
+          <span
+            className={`inline-flex items-center gap-0.5 text-[11px] font-bold tabular-nums ${
+              dolu ? "text-red-600" : "text-slate-600"
+            }`}
+            title={dolu ? "Kapasitesi dolu - otomatik iş atanmaz" : "Yeni iş alabilir"}
+          >
+            {dolu && <IconWarning className="h-3 w-3" />}
+            {ekip.aktif_gorev}/{MAKS_AKTIF_GOREV}
+          </span>
         </span>
       </div>
 
       {ekip.gorevler.length === 0 ? (
-        <p className="px-3 py-4 text-center text-xs text-slate-400">
+        <p className="px-3 py-3 text-center text-xs text-slate-400">
           Aktif görev yok.
         </p>
       ) : (
-        <ul className="space-y-1.5 bg-slate-50 p-2">
+        <ul className="space-y-1.5 p-2">
           {ekip.gorevler.map((g) => (
             <GorevSatiri
               key={g.assignment_id}
@@ -243,11 +355,69 @@ function EkipKarti({
               digerEkipler={diger}
               onIslem={onIslem}
               calisiyor={islenenAsset === g.asset_id}
+              dep={dep}
             />
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+/** Ekipler mudurluk mudurluk gruplanir: pano "kim var" sorusuna once
+ *  ORGUTLENMEYLE cevap verir, cunku otomatik atama da departman kisitiyla
+ *  calisir - bir mudurlugun tek ekibi doluysa isin neden havuzda beklediği
+ *  ancak boyle gorunur. Baslik dili BolgePaneli'ndeki bolum baslıklarıyla
+ *  ayni: renkli seritli ad + sayac hapi. */
+function DepartmanBolumu({
+  ad,
+  renk,
+  ekipler,
+  tumEkipler,
+  onIslem,
+  islenenAsset,
+  dep,
+}: {
+  ad: string;
+  renk: string;
+  ekipler: EkipGorevleri[];
+  tumEkipler: EkipGorevleri[];
+  onIslem: (v: Islem) => void;
+  islenenAsset: string | undefined;
+  dep: DepBaglami;
+}) {
+  const aktif = ekipler.reduce((t, e) => t + e.aktif_gorev, 0);
+  const kapasite = ekipler.length * MAKS_AKTIF_GOREV;
+
+  return (
+    <section>
+      <div className="mb-1.5 flex items-center gap-2">
+        <span className="h-4 w-1 rounded-full" style={{ background: renk }} />
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+          {ad}
+        </p>
+        <span
+          className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+          style={{ background: `${renk}1a`, color: renk }}
+          title={`${ekipler.length} ekip · ${aktif}/${kapasite} görev dolu`}
+        >
+          {ekipler.length} ekip · {aktif}/{kapasite}
+        </span>
+        <span className="h-px flex-1 bg-slate-200" />
+      </div>
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        {ekipler.map((e) => (
+          <EkipKarti
+            key={e.id}
+            ekip={e}
+            tumEkipler={tumEkipler}
+            onIslem={onIslem}
+            islenenAsset={islenenAsset}
+            dep={dep}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -257,11 +427,13 @@ function HavuzSatiri({
   ekipler,
   onIslem,
   calisiyor,
+  dep,
 }: {
   varlik: HavuzVarlik;
   ekipler: EkipGorevleri[];
   onIslem: (v: Islem) => void;
   calisiyor: boolean;
+  dep: DepBaglami;
 }) {
   return (
     <li className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
@@ -275,6 +447,12 @@ function HavuzSatiri({
             <span className="text-slate-500">{ASSET_TYPE_LABELS[varlik.type]}</span>
             <KaynakRozet source={varlik.source} />
             <YakaRozet yaka={varlik.yaka} />
+            {/* Isin hangi mudurlugu bekledigi: otomatik atama yalnizca o
+                mudurlugun ekiplerine bakar. */}
+            <DepartmanRozet
+              departman={dep.esleme[varlik.type] ?? null}
+              adlar={dep.adlar}
+            />
             <span className="rounded-full bg-amber-100 px-1.5 py-px font-medium text-amber-700">
               {beklemeMetni(varlik.updated_at)}
             </span>
@@ -293,7 +471,7 @@ function HavuzSatiri({
         <option value="">{calisiyor ? "İşleniyor…" : "Ekibe ata…"}</option>
         {ekipler.map((e) => (
           <option key={e.id} value={e.id} disabled={e.aktif_gorev >= MAKS_AKTIF_GOREV}>
-            {ekipSecenegi(e, varlik.yaka)}
+            {ekipSecenegi(e, varlik.yaka, dep.esleme[varlik.type], dep.adlar)}
           </option>
         ))}
       </select>
@@ -301,7 +479,7 @@ function HavuzSatiri({
   );
 }
 
-/** Havuzun tek bir kaynak grubu (Kayitli / Ihbar) - baslik + varlik listesi.
+/** Havuzun tek bir kaynak grubu (Kayitli / Talep) - baslik + varlik listesi.
  *  Grup bossa hic render edilmez. */
 function HavuzGrup({
   kaynak,
@@ -309,15 +487,17 @@ function HavuzGrup({
   ekipler,
   onIslem,
   islenenAsset,
+  dep,
 }: {
   kaynak: AssetSource;
   varliklar: HavuzVarlik[];
   ekipler: EkipGorevleri[];
   onIslem: (v: Islem) => void;
   islenenAsset: string | undefined;
+  dep: DepBaglami;
 }) {
   if (varliklar.length === 0) return null;
-  // Kaynaga gore ayirt edici vurgu: kayitli=slate, ihbar=amber.
+  // Kaynaga gore ayirt edici vurgu: kayitli=slate, talep=amber.
   const vurgu =
     kaynak === "ihbar"
       ? { cizgi: "bg-amber-400", rozet: "bg-amber-100 text-amber-700" }
@@ -344,6 +524,7 @@ function HavuzGrup({
             ekipler={ekipler}
             onIslem={onIslem}
             calisiyor={islenenAsset === h.asset_id}
+            dep={dep}
           />
         ))}
       </ul>
@@ -359,6 +540,19 @@ export default function SahaEkipleri() {
   // Havuz filtresi: tipe gore daraltma + bekleme sirasina gore siralama.
   const [havuzTip, setHavuzTip] = useState<AssetType | "hepsi">("hepsi");
   const [havuzSira, setHavuzSira] = useState<HavuzSira>("eski");
+  // Otomatik atama kurallarinin uzun aciklamasi katlanmis baslar.
+  const [kuralAcik, setKuralAcik] = useState(false);
+
+  const { data: departmanlar } = useDepartmanlar();
+  const { data: esleme } = useTurDepartmanEslemesi();
+  const dep = useMemo<DepBaglami>(
+    () => ({
+      esleme: esleme ?? {},
+      adlar: Object.fromEntries((departmanlar ?? []).map((d) => [d.kod, d.ad])),
+      renkler: Object.fromEntries((departmanlar ?? []).map((d) => [d.kod, d.renk])),
+    }),
+    [esleme, departmanlar]
+  );
 
   const ekipSorgu = useQuery({
     queryKey: ["saha", "ekip-gorevleri"],
@@ -387,6 +581,41 @@ export default function SahaEkipleri() {
 
   const ekipler = ekipSorgu.data ?? [];
   const havuz = havuzSorgu.data ?? [];
+  /** Ekipler mudurluge gore gruplanir; sozluk sirasi korunur, departmani
+   *  olmayanlar en sona ayri bir bolume duser (atama kisiti onlara isi
+   *  otomatik goturmez, gorunur olmalilar). */
+  const bolumler = useMemo(() => {
+    const gruplar = new Map<string, EkipGorevleri[]>();
+    for (const e of ekipSorgu.data ?? []) {
+      const anahtar = e.departman ?? "";
+      const liste = gruplar.get(anahtar);
+      if (liste) liste.push(e);
+      else gruplar.set(anahtar, [e]);
+    }
+    const sirali = (departmanlar ?? [])
+      .filter((d) => gruplar.has(d.kod))
+      .map((d) => ({
+        anahtar: d.kod,
+        ad: d.ad,
+        renk: d.renk,
+        ekipler: gruplar.get(d.kod)!,
+      }));
+    // Sozlukte olmayan kodlar (silinmis/bilinmeyen departman) da kaybolmasin.
+    for (const [kod, liste] of gruplar) {
+      if (kod && !sirali.some((s) => s.anahtar === kod)) {
+        sirali.push({ anahtar: kod, ad: kod, renk: "#64748b", ekipler: liste });
+      }
+    }
+    if (gruplar.has("")) {
+      sirali.push({
+        anahtar: "",
+        ad: "Departmanı atanmamış",
+        renk: "#94a3b8",
+        ekipler: gruplar.get("")!,
+      });
+    }
+    return sirali;
+  }, [ekipSorgu.data, departmanlar]);
   // Once tip filtresi, sonra bekleme sirasina gore siralama uygulanir.
   const havuzFiltreli = havuz
     .filter((h) => havuzTip === "hepsi" || h.type === havuzTip)
@@ -397,7 +626,7 @@ export default function SahaEkipleri() {
       return havuzSira === "eski" ? fark : -fark;
     });
   const havuzKayitli = havuzFiltreli.filter((h) => h.source === "kayitli");
-  const havuzIhbar = havuzFiltreli.filter((h) => h.source === "ihbar");
+  const havuzTalep = havuzFiltreli.filter((h) => h.source === "ihbar");
   const islenenAsset = islem.isPending ? islem.variables?.asset_id : undefined;
   const yenile = () => {
     ekipSorgu.refetch();
@@ -407,20 +636,36 @@ export default function SahaEkipleri() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold text-slate-900">
             Saha Ekipleri{" "}
             <span className="text-xs font-normal text-slate-400">({ekipler.length})</span>
           </h2>
           <p className="text-xs text-slate-500">
-            Hangi ekipte hangi görevin olduğunu görün; görevleri başka ekibe taşıyın,
-            havuza alın veya havuzdaki işleri elle atayın. Otomatik atama{" "}
-            <strong>aynı yakadaki</strong> en yakın uygun ekibe yapılır: önce ~
-            {ATAMA_MESAFE_KADEMELERI_KM[0]} km içine bakılır, o mesafede boş ekip
-            yoksa ~{MAKS_ATAMA_MESAFE_KM} km'ye genişletilir. Bir ekip Boğaz'ın
-            karşısına otomatik gönderilmez ve konumu bilinmeyen ekibe otomatik iş
-            düşmez. Elle atarken karşı yakadaki ekipler ⚠ ile işaretlenir.
+            Hangi ekipte hangi görevin olduğunu görün; görevleri başka ekibe
+            taşıyın, havuza alın veya havuzdaki işleri elle atayın.
           </p>
+          {/* Otomatik atamanin kurallari uzun ve HER ACILISTA okunmasi gerekmiyor:
+              katlanmis durur, panonun asil isi olan listeyi asagi itmez. */}
+          <button
+            type="button"
+            onClick={() => setKuralAcik((a) => !a)}
+            aria-expanded={kuralAcik}
+            className="mt-0.5 text-[11px] font-medium text-slate-400 underline-offset-2 transition hover:text-slate-600 hover:underline"
+          >
+            {kuralAcik ? "Otomatik atama nasıl çalışır? ▴" : "Otomatik atama nasıl çalışır? ▾"}
+          </button>
+          {kuralAcik && (
+            <p className="mt-1 rounded-lg bg-slate-50 px-2.5 py-2 text-xs leading-relaxed text-slate-500">
+              Otomatik atama <strong>aynı yakadaki</strong>, <strong>aynı
+              müdürlüğe bağlı</strong> en yakın uygun ekibe yapılır: önce ~
+              {ATAMA_MESAFE_KADEMELERI_KM[0]} km içine bakılır, o mesafede boş
+              ekip yoksa ~{MAKS_ATAMA_MESAFE_KM} km'ye genişletilir. Bir ekip
+              Boğaz'ın karşısına otomatik gönderilmez ve konumu bilinmeyen ekibe
+              otomatik iş düşmez. Elle atama bu kısıtlardan muaftır; karşı
+              yakadaki ve başka müdürlükteki ekipler açılırda ⚠ ile işaretlenir.
+            </p>
+          )}
         </div>
         <button
           onClick={yenile}
@@ -454,14 +699,17 @@ export default function SahaEkipleri() {
           Henüz saha çalışanı hesabı yok. Personel yönetiminden ekleyebilirsiniz.
         </p>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {ekipler.map((e) => (
-            <EkipKarti
-              key={e.id}
-              ekip={e}
+        <div className="space-y-4">
+          {bolumler.map((b) => (
+            <DepartmanBolumu
+              key={b.anahtar || "__yok__"}
+              ad={b.ad}
+              renk={b.renk}
+              ekipler={b.ekipler}
               tumEkipler={ekipler}
               onIslem={(v) => islem.mutate(v)}
               islenenAsset={islenenAsset}
+              dep={dep}
             />
           ))}
         </div>
@@ -535,13 +783,15 @@ export default function SahaEkipleri() {
               ekipler={ekipler}
               onIslem={(v) => islem.mutate(v)}
               islenenAsset={islenenAsset}
+              dep={dep}
             />
             <HavuzGrup
               kaynak="ihbar"
-              varliklar={havuzIhbar}
+              varliklar={havuzTalep}
               ekipler={ekipler}
               onIslem={(v) => islem.mutate(v)}
               islenenAsset={islenenAsset}
+              dep={dep}
             />
           </div>
         )}

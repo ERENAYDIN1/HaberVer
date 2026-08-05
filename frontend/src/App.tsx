@@ -17,6 +17,8 @@ import BolgePaneli from "./components/BolgePaneli";
 import BolgeSekilPaneli from "./components/BolgeSekilPaneli";
 import CizimPaneli from "./components/CizimPaneli";
 import Dashboard from "./components/Dashboard";
+import DepartmanEtiketi from "./components/DepartmanEtiketi";
+import DepartmanYonetimi from "./components/DepartmanYonetimi";
 import {
   IconChartBar,
   IconHistory,
@@ -33,7 +35,7 @@ import {
   IconUsers,
   IconX,
 } from "./components/icons";
-import IhbarPaneli from "./components/IhbarPaneli";
+import TalepPaneli from "./components/TalepPaneli";
 import KatmanKontrolu, {
   type AltGrup,
   type KatmanAnahtari,
@@ -51,9 +53,10 @@ import SahaEkipleri from "./components/SahaEkipleri";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
 import { useAlanSecimi } from "./hooks/useAlanSecimi";
-import { useIhbarGorunumleri } from "./hooks/useIhbarGorunumleri";
+import { useTalepGorunumleri } from "./hooks/useTalepGorunumleri";
 import { useSekilDuzenleme } from "./hooks/useSekilDuzenleme";
-import { useKatmanlar } from "./hooks/useKatmanlar";
+import { DEPARTMANSIZ, useKatmanlar } from "./hooks/useKatmanlar";
+import { useDepartmanlar } from "./hooks/useDepartmanlar";
 import {
   ASSET_STATUS_LABELS,
   ASSET_STATUSES,
@@ -76,16 +79,19 @@ import type {
 import type { TamamlananAlan } from "./types/alan";
 import type { Bolge } from "./types/bolge";
 import {
-  IHBAR_DURUM_RENGI,
-  IHBAR_GORUNUMLERI,
+  TALEP_DURUM_RENGI,
+  TALEP_GORUNUMLERI,
   REPORT_STATUS_LABELS,
+  talepNoktasi,
 } from "./types/report";
 import type {
-  IhbarGorunumu,
+  TalepGorunumu,
   ReportFeature,
   ReportFeatureCollection,
 } from "./types/report";
 import { mesafeEtiketi, noktaAlandaMi, poligonSinirKutusu } from "./utils/geo";
+import { EKIP_VARSAYILAN_RENK } from "./utils/haritaPopup";
+import type { EkipDepartmanBilgisi } from "./utils/haritaPopup";
 import { ISTANBUL_MERKEZI } from "./utils/istanbulMaskesi";
 
 /** Lejanttaki durum swatch'inin KENARLIK rengi. Haritada her iki durumdaki
@@ -104,13 +110,13 @@ const IYI_SWATCH_RENKLERI = TIP_GRUPLARI.map((g) => GRUP_RENGI[g]);
 const BASLANGIC = {
   filtreler: { source: "kayitli" } as AssetFilters,
   sekme: "liste" as Sekme,
-  ihbarDurum: "onaylandi" as IhbarGorunumu,
+  talepDurum: "onaylandi" as TalepGorunumu,
   cizimRengi: "#059669",
   zoom: 11,
 } as const;
 
 /** Sol paneldeki sekmeler (Ozet/Gecmis/Personel modal olarak acilir). */
-type Sekme = "liste" | "ekle" | "ihbarlar" | "bolgeler" | "guzergahlar";
+type Sekme = "liste" | "ekle" | "talepler" | "bolgeler" | "guzergahlar";
 
 /** Bolge sekmesi -> kayit turu + harita katmani eslesmesi. */
 const BOLGE_SEKMELERI = {
@@ -130,18 +136,18 @@ const SEKME_TANIMLARI: Record<
 > = {
   liste: { etiket: "Varlıklar", ikon: IconPin, renk: "emerald" },
   ekle: { etiket: "Ekle", ikon: IconPlus, renk: "blue" },
-  ihbarlar: { etiket: "İhbarlar", ikon: IconInbox, renk: "amber" },
+  talepler: { etiket: "Talepler", ikon: IconInbox, renk: "amber" },
   bolgeler: { etiket: "Bölgeler", ikon: IconLayers, renk: "violet" },
   guzergahlar: { etiket: "Güzergâhlar", ikon: IconRoute, renk: "blue" },
 };
 
 /** Ust bardan modal olarak acilan yonetim/raporlama ekranlari. */
-type UstModal = "ozet" | "log" | "personel" | "saha";
+type UstModal = "ozet" | "log" | "personel" | "saha" | "departman";
 
 export default function App() {
   const { user, cikisYap } = useAuth();
   const queryClient = useQueryClient();
-  // Varsayilan "kayitli" varliklar; ihbardan gelenler ayri sekmede.
+  // Varsayilan "kayitli" varliklar; talepten gelenler ayri sekmede.
   const [filters, setFilters] = useState<AssetFilters>(BASLANGIC.filtreler);
   const [sekme, setSekme] = useState<Sekme>(BASLANGIC.sekme);
   const [ustModal, setUstModal] = useState<UstModal | null>(null);
@@ -149,12 +155,12 @@ export default function App() {
    *  karti) key olarak bunu alip yeniden kurulur. */
   const [sifirlamaNo, setSifirlamaNo] = useState(0);
   const [seciliId, setSeciliId] = useState<string | null>(null);
-  // IhbarPaneli'nin yukledigi ihbarlar; haritada da gosterilirler.
-  const [ihbarlar, setIhbarlar] = useState<ReportFeature[]>([]);
-  const [seciliIhbarId, setSeciliIhbarId] = useState<string | null>(null);
-  // Ihbarlar sekmesinin alt-sekmesi. Burada tutulur ki bildirimden gelen bir
+  // TalepPaneli'nin yukledigi talepler; haritada da gosterilirler.
+  const [talepler, setTalepler] = useState<ReportFeature[]>([]);
+  const [seciliTalepId, setSeciliTalepId] = useState<string | null>(null);
+  // Talepler sekmesinin alt-sekmesi. Burada tutulur ki bildirimden gelen bir
   // varlik dogru alt-sekmeyi acabilsin.
-  const [ihbarDurum, setIhbarDurum] = useState<IhbarGorunumu>(BASLANGIC.ihbarDurum);
+  const [talepDurum, setTalepDurum] = useState<TalepGorunumu>(BASLANGIC.talepDurum);
   const [duzenlenen, setDuzenlenen] = useState<AssetFeature | null>(null);
   const [koordinat, setKoordinat] = useState<
     { longitude: number; latitude: number } | undefined
@@ -171,15 +177,18 @@ export default function App() {
     katmanTurleri,
     katmanVarlikDurumlari,
     katmanDurumlari,
+    ekipDepartmaniSecili,
     katmanDegistir,
     katmanTuruDegistir,
     katmanVarlikDurumuDegistir,
     katmanDurumuDegistir,
+    ekipDepartmaniDegistir,
     panelTuruSec,
+    departmanTurleriniSec,
     panelDurumuSec,
     katmaniAc,
-    yalnizVarlikVeyaIhbar,
-    ihbarDurumunuSec,
+    yalnizVarlikVeyaTalep,
+    talepDurumunuSec,
     sifirla: katmanlariSifirla,
   } = useKatmanlar();
 
@@ -212,6 +221,7 @@ export default function App() {
     alanHatasi,
     alanYukleniyor,
     cizimNoktaEkle,
+    cizimGeriAl,
     alanSecimiBaslat,
     alanSecimiIptal,
     alanSecimiTamamla,
@@ -219,6 +229,7 @@ export default function App() {
     olcumNoktalari,
     olcumMesafeM,
     olcumNoktaEkle,
+    olcumGeriAl,
     olcumBaslat,
     olcumIptal,
     olcumBitir,
@@ -260,10 +271,10 @@ export default function App() {
     setUstModal(null);
     setSeciliId(null);
     setDetayAsset(null);
-    setSeciliIhbarId(null);
+    setSeciliTalepId(null);
     setDetayRapor(null);
-    setIhbarlar([]);
-    setIhbarDurum(BASLANGIC.ihbarDurum);
+    setTalepler([]);
+    setTalepDurum(BASLANGIC.talepDurum);
     setDuzenlenen(null);
     setKoordinat(undefined);
     // Ana katmanlar kapanir, alt filtreler isaretli kalir: katman tekrar
@@ -298,21 +309,21 @@ export default function App() {
   // Alan secimi varsa liste/ozet birlestirilmis sonucu gosterir.
   const gosterilen = birlesikAlanSonucu ?? sorgu.data;
 
-  // Yalniz admin/calisan ihbarlari yonetir.
+  // Yalniz admin/calisan talepleri yonetir.
   const personel = user?.role === "admin" || user?.role === "calisan";
 
-  /** Ihbarlar + gorunum turetmesi (onaylanmis ihbar, varligi tamir edilince
+  /** Talepler + gorunum turetmesi (onaylanmis talep, varligi tamir edilince
    *  "Tamir Edildi"ye duser). Secim callback'leri `onayliEsleme`yi okudugu
    *  icin onlardan once cagrilir. */
   const {
-    ihbarVarlikSorgu,
-    bekleyenIhbarSorgu,
-    bekleyenIhbarSayisi,
+    talepVarlikSorgu,
+    bekleyenTalepSorgu,
+    bekleyenTalepSayisi,
     onayliEsleme,
-    gorunumler: ihbarGorunumleri,
-  } = useIhbarGorunumleri({ personel });
+    gorunumler: talepGorunumleri,
+  } = useTalepGorunumleri({ personel });
 
-  // Not: ihbar secimi sekme degisiminde bilincli olarak temizlenmez; haritada
+  // Not: talep secimi sekme degisiminde bilincli olarak temizlenmez; haritada
   // secilen isaretci panel kapaliyken de secili kalir.
 
   const haritaTiklandi = useCallback(
@@ -320,7 +331,7 @@ export default function App() {
       // Bos alana tiklamak her zaman secimi temizler.
       setSeciliId(null);
       setDetayAsset(null);
-      setSeciliIhbarId(null);
+      setSeciliTalepId(null);
       setDetayRapor(null);
       setSeciliBolgeId(null);
       // Koordinat yalnizca "Ekle" formu zaten acikken doldurulur: haritayi
@@ -339,45 +350,45 @@ export default function App() {
       setSeciliId(kapaniyor ? null : id);
       setDetayAsset(null);
       if (kapaniyor) {
-        setSeciliIhbarId(null);
+        setSeciliTalepId(null);
         return;
       }
-      // Ihbardan olusan varlikta kaynak ihbar da secilir: haritadaki isaretci
-      // ham ihbar noktasi, panel ise ondan olusan varliktir.
-      setSeciliIhbarId(onayliEsleme.varliktanRapora.get(id) ?? null);
+      // Talepten olusan varlikta kaynak talep da secilir: haritadaki isaretci
+      // ham talep noktasi, panel ise ondan olusan varliktir.
+      setSeciliTalepId(onayliEsleme.varliktanRapora.get(id) ?? null);
       setDetayRapor(null);
       setSeciliBolgeId(null);
-      // "Onaylandı"/"Tamir Edildi" zaten ihbar varliklarini listeler.
-      const ihbarVarlikSekmesi =
-        sekme === "ihbarlar" && (ihbarDurum === "onaylandi" || ihbarDurum === "tamir");
-      if (panelAcik && !ihbarVarlikSekmesi) setSekme("liste");
+      // "Onaylandı"/"Tamir Edildi" zaten talep varliklarini listeler.
+      const talepVarlikSekmesi =
+        sekme === "talepler" && (talepDurum === "onaylandi" || talepDurum === "tamir");
+      if (panelAcik && !talepVarlikSekmesi) setSekme("liste");
     },
-    [seciliId, panelAcik, sekme, ihbarDurum, onayliEsleme]
+    [seciliId, panelAcik, sekme, talepDurum, onayliEsleme]
   );
 
-  // Ham ihbar secimi - hem listeden hem haritadan cagrilir.
-  const ihbarSecildi = useCallback(
+  // Ham talep secimi - hem listeden hem haritadan cagrilir.
+  const talepSecildi = useCallback(
     (id: string) => {
-      const kapaniyor = seciliIhbarId === id;
-      setSeciliIhbarId(kapaniyor ? null : id);
+      const kapaniyor = seciliTalepId === id;
+      setSeciliTalepId(kapaniyor ? null : id);
       setDetayRapor(null);
       if (kapaniyor) {
         setSeciliId(null);
         return;
       }
-      // varlikSecildi'nin simetrigi: ihbardan olusan varlik da secili sayilir.
+      // varlikSecildi'nin simetrigi: talepten olusan varlik da secili sayilir.
       setSeciliId(onayliEsleme.rapordanVarliga.get(id) ?? null);
       setDetayAsset(null);
       setSeciliBolgeId(null);
-      if (panelAcik) setSekme("ihbarlar");
+      if (panelAcik) setSekme("talepler");
     },
-    [seciliIhbarId, panelAcik, onayliEsleme]
+    [seciliTalepId, panelAcik, onayliEsleme]
   );
 
   // --- Secili alan(lar) diger katmanlari da suzer -------------------------
-  // Varliklar zaten backend'de suzuluyor (`assetsWithin`); ihbar, bolge ve
+  // Varliklar zaten backend'de suzuluyor (`assetsWithin`); talep, bolge ve
   // ekip katmanlari ayni sinirla burada, client-side elenir - yoksa lejant
-  // "ilce secili" derken ilcenin disindaki ihbarlari/ekipleri saymaya devam
+  // "ilce secili" derken ilcenin disindaki talepleri/ekipleri saymaya devam
   // ederdi. Olcut varliklarinkiyle ayni: nokta secili alanlardan HERHANGI
   // birinin icinde mi (alanlar birlestirilerek degil tek tek denenir; varlik
   // sonuclari da id'ye gore birlestiriliyor).
@@ -420,6 +431,10 @@ export default function App() {
     enabled: personel,
     refetchInterval: 20000,
   });
+
+  // Departman sozlugu: ekip isaretcilerinin rengi ve lejanttaki ekip
+  // alt-filtresi buradan beslenir (uzun staleTime, bkz. useDepartmanlar).
+  const departmanSorgu = useDepartmanlar();
 
   // Kaydedilmis bolgeler: panel ve haritadaki kalici katman ayni sorguyu paylasir.
   const bolgeSorgu = useQuery({
@@ -476,17 +491,17 @@ export default function App() {
     });
   }, []);
 
-  // Bolge secimi haritadan ya da panelden gelir; varlik/ihbar secimiyle ayni
+  // Bolge secimi haritadan ya da panelden gelir; varlik/talep secimiyle ayni
   // kurallara uyar: paneli acmaz, acikken dogru sekmeye gecer.
   const bolgeSecildi = useCallback(
     (id: string) => {
       const kapaniyor = seciliBolgeId === id;
       setSeciliBolgeId(kapaniyor ? null : id);
       if (kapaniyor) return;
-      // Tek secim kurali: bolge secilince varlik/ihbar secimi birakilir.
+      // Tek secim kurali: bolge secilince varlik/talep secimi birakilir.
       setSeciliId(null);
       setDetayAsset(null);
-      setSeciliIhbarId(null);
+      setSeciliTalepId(null);
       setDetayRapor(null);
       const tip = bolgeSorgu.data?.find((b) => b.id === id)?.tip;
       if (panelAcik && tip) setSekme(tip === "cizgi" ? "guzergahlar" : "bolgeler");
@@ -596,56 +611,77 @@ export default function App() {
     };
   }, [varlikKatmanTaban, katmanTurleri, katmanVarlikDurumlari]);
 
-  /** Ihbar gruplarinin secili alanla sinirlanmis hali; hem harita katmani hem
+  /** Talep gruplarinin secili alanla sinirlanmis hali; hem harita katmani hem
    *  lejant sayaclari bunu okur. Bildirim zilinin sayaci bilincli olarak ham
    *  sorgudan gelir: zil sistemin tamamini anlatir, haritanin secimini degil. */
-  const ihbarGorunumleriAlanda = useMemo(() => {
-    if (!alandaMi) return ihbarGorunumleri;
+  const talepGorunumleriAlanda = useMemo(() => {
+    if (!alandaMi) return talepGorunumleri;
     return Object.fromEntries(
-      IHBAR_GORUNUMLERI.map((g) => [
+      TALEP_GORUNUMLERI.map((g) => [
         g,
-        ihbarGorunumleri[g].filter((f) => alandaMi(f.geometry.coordinates)),
+        talepGorunumleri[g].filter((f) => {
+          const n = talepNoktasi(f);
+          return n ? alandaMi(n) : false;
+        }),
       ])
-    ) as Record<IhbarGorunumu, ReportFeature[]>;
-  }, [ihbarGorunumleri, alandaMi]);
+    ) as Record<TalepGorunumu, ReportFeature[]>;
+  }, [talepGorunumleri, alandaMi]);
 
-  // Ihbar katmani: secili gorunumlerin ihbarlari id'ye gore tekillestirilir.
-  const ihbarKatmanVeri = useMemo<ReportFeatureCollection>(() => {
+  // Talep katmani: secili gorunumlerin talepleri id'ye gore tekillestirilir.
+  const talepKatmanVeri = useMemo<ReportFeatureCollection>(() => {
     const gorulen = new Map<string, ReportFeature>();
-    for (const gorunum of IHBAR_GORUNUMLERI) {
+    for (const gorunum of TALEP_GORUNUMLERI) {
       if (!katmanDurumlari[gorunum]) continue;
-      for (const f of ihbarGorunumleriAlanda[gorunum]) gorulen.set(f.properties.id, f);
+      for (const f of talepGorunumleriAlanda[gorunum]) gorulen.set(f.properties.id, f);
     }
     return { type: "FeatureCollection", features: [...gorulen.values()] };
-  }, [katmanDurumlari, ihbarGorunumleriAlanda]);
+  }, [katmanDurumlari, talepGorunumleriAlanda]);
 
-  // Secilen ihbarin gorunumu panelin alt sekmesini de belirler, yoksa secili
+  // Secilen talebin gorunumu panelin alt sekmesini de belirler, yoksa secili
   // kayit acilan listede gorunmezdi. Ham durum degil gorunum kullanilir:
-  // tamir edilmis bir ihbar "Onaylandı" sekmesinde bulunmaz.
+  // tamir edilmis bir talep "Onaylandı" sekmesinde bulunmaz.
   useEffect(() => {
-    if (!seciliIhbarId) return;
-    const secili = ihbarKatmanVeri.features.find(
-      (f) => f.properties.id === seciliIhbarId
+    if (!seciliTalepId) return;
+    const secili = talepKatmanVeri.features.find(
+      (f) => f.properties.id === seciliTalepId
     )?.properties;
-    if (secili) setIhbarDurum(secili.gorunum ?? secili.status);
-  }, [seciliIhbarId, ihbarKatmanVeri]);
+    if (secili) setTalepDurum(secili.gorunum ?? secili.status);
+  }, [seciliTalepId, talepKatmanVeri]);
 
   /** Haritada gosterilen ekipler. Yalnizca KATMAN suzulur: atama acilirlari
    *  (AssetDetayModal, SahaEkipleri, BolgePaneli) tam listeyi gormeye devam
    *  eder - secili ilcenin disindaki bir ekibe elle is verilebilmeli. Konumu
-   *  bilinmeyen ekip zaten haritada cizilmiyor, alan testinden de gecmez. */
+   *  bilinmeyen ekip zaten haritada cizilmiyor, alan testinden de gecmez.
+   *
+   *  Departman alt-filtresi de burada uygulanir: butun mudurluklerin ekipleri
+   *  ayni anda cizilince harita okunmaz hale geliyordu. */
   const haritaEkipleri = useMemo(() => {
     const ekipler = ekipSorgu.data;
-    if (!ekipler || !alandaMi) return ekipler;
+    if (!ekipler) return ekipler;
     return ekipler.filter(
       (e) =>
-        e.longitude != null && e.latitude != null && alandaMi([e.longitude, e.latitude])
+        ekipDepartmaniSecili(e.departman) &&
+        (!alandaMi ||
+          (e.longitude != null &&
+            e.latitude != null &&
+            alandaMi([e.longitude, e.latitude])))
     );
-  }, [ekipSorgu.data, alandaMi]);
+  }, [ekipSorgu.data, alandaMi, ekipDepartmaniSecili]);
+
+  /** Departman kodu -> ad + rozet rengi. Ekip pinleri, ekip popup'i ve
+   *  lejanttaki ekip alt-filtresi ayni sozlukten beslenir; renk backend'deki
+   *  `departmanlar.renk`tir. */
+  const ekipDepartmanlari = useMemo<EkipDepartmanBilgisi>(
+    () =>
+      Object.fromEntries(
+        (departmanSorgu.data ?? []).map((d) => [d.kod, { ad: d.ad, renk: d.renk }])
+      ),
+    [departmanSorgu.data]
+  );
 
   const katmanSayilari: Record<KatmanAnahtari, number> = {
     varliklar: varlikKatmanVeri?.features.length ?? 0,
-    ihbarlar: ihbarKatmanVeri.features.length,
+    talepler: talepKatmanVeri.features.length,
     bolgeler: gorunurAlanlar.length,
     guzergahlar: gorunurGuzergahlar.length,
     ekipler: haritaEkipleri?.length ?? 0,
@@ -690,20 +726,59 @@ export default function App() {
       katmanVarlikDurumuDegistir,
     ]
   );
-  const ihbarAltFiltre = useMemo<AltGrup[]>(
+  /** Saha Ekipleri katmaninin departman alt-filtresi.
+   *
+   *  Yalnizca EKIBI OLAN mudurlukler listelenir: bos bir satir kullaniciya
+   *  kapatacak bir sey vermez. Sayaclar alan secimi uygulanmis listeden degil
+   *  TUM ekiplerden alinir - lejant "bu mudurlukte kac ekip var"i anlatir,
+   *  secili departmanin kendi sayisi kapatilinca sifira dusmemeli. */
+  const ekipAltFiltre = useMemo<AltGrup[]>(() => {
+    const tumEkipler = ekipSorgu.data ?? [];
+    const sayilar = new Map<string, number>();
+    for (const e of tumEkipler) {
+      const anahtar = e.departman ?? DEPARTMANSIZ;
+      sayilar.set(anahtar, (sayilar.get(anahtar) ?? 0) + 1);
+    }
+    const secenekler = (departmanSorgu.data ?? [])
+      .filter((d) => sayilar.has(d.kod))
+      .map((d) => ({
+        anahtar: d.kod,
+        etiket: d.ad.replace(/\s*Müdürlüğü$/, ""),
+        renk: d.renk,
+        secili: ekipDepartmaniSecili(d.kod),
+        sayi: sayilar.get(d.kod) ?? 0,
+      }));
+    if (sayilar.has(DEPARTMANSIZ)) {
+      secenekler.push({
+        anahtar: DEPARTMANSIZ,
+        etiket: "Departmansız",
+        renk: EKIP_VARSAYILAN_RENK,
+        secili: ekipDepartmaniSecili(null),
+        sayi: sayilar.get(DEPARTMANSIZ) ?? 0,
+      });
+    }
+    return [{ baslik: "Müdürlük", onSec: ekipDepartmaniDegistir, secenekler }];
+  }, [
+    ekipSorgu.data,
+    departmanSorgu.data,
+    ekipDepartmaniSecili,
+    ekipDepartmaniDegistir,
+  ]);
+
+  const talepAltFiltre = useMemo<AltGrup[]>(
     () => [
       {
         onSec: katmanDurumuDegistir,
-        secenekler: IHBAR_GORUNUMLERI.map((d) => ({
+        secenekler: TALEP_GORUNUMLERI.map((d) => ({
           anahtar: d,
           etiket: REPORT_STATUS_LABELS[d],
-          renk: IHBAR_DURUM_RENGI[d],
+          renk: TALEP_DURUM_RENGI[d],
           secili: katmanDurumlari[d],
-          sayi: ihbarGorunumleriAlanda[d].length,
+          sayi: talepGorunumleriAlanda[d].length,
         })),
       },
     ],
-    [katmanDurumlari, ihbarGorunumleriAlanda, katmanDurumuDegistir]
+    [katmanDurumlari, talepGorunumleriAlanda, katmanDurumuDegistir]
   );
 
   // --- Sekme -> lejant (ana katmanlar) senkronu ---------------------------
@@ -713,33 +788,33 @@ export default function App() {
   // Kullanici arada lejanttan baska bir katman acarsa efekt bir sonraki sekme
   // degisimine kadar ona dokunmaz. "Saha Ekipleri" hic degistirilmez.
   useEffect(() => {
-    if (aktifSekme === "ihbarlar") {
-      yalnizVarlikVeyaIhbar("ihbarlar");
-      ihbarDurumunuSec(ihbarDurum);
+    if (aktifSekme === "talepler") {
+      yalnizVarlikVeyaTalep("talepler");
+      talepDurumunuSec(talepDurum);
     } else if (aktifSekme === "liste") {
-      yalnizVarlikVeyaIhbar("varliklar");
+      yalnizVarlikVeyaTalep("varliklar");
     } else if (bolgeSekmesi(aktifSekme)) {
       // Yalnizca o sekmenin katmani acilir; bolgeler varliklarin ustune binen
       // baglam katmanlaridir, digerlerine dokunulmaz.
       katmaniAc(BOLGE_SEKMELERI[aktifSekme].katman);
     }
     // "ekle" sekmesinde ve panel kapaliyken katmanlara dokunulmaz.
-  }, [aktifSekme, ihbarDurum, yalnizVarlikVeyaIhbar, ihbarDurumunuSec, katmaniAc]);
+  }, [aktifSekme, talepDurum, yalnizVarlikVeyaTalep, talepDurumunuSec, katmaniAc]);
 
   // Bildirimden varliga git: kaynagina gore dogru sekmeyi acar, secer, ucar.
   const bildirimVarligaGit = useCallback((asset: AssetFeature) => {
     alanlariTemizle();
     if (asset.properties.source === "ihbar") {
-      setSekme("ihbarlar");
+      setSekme("talepler");
       // Tamir edilmis varlik "Onaylandı"da degil "Tamir Edildi"de listelenir.
-      setIhbarDurum(asset.properties.status === "iyi" ? "tamir" : "onaylandi");
+      setTalepDurum(asset.properties.status === "iyi" ? "tamir" : "onaylandi");
     } else {
       setSekme("liste");
     }
     setPanelAcik(true);
     setSeciliId(asset.properties.id);
     setDetayAsset(null);
-    setSeciliIhbarId(null);
+    setSeciliTalepId(null);
     setSeciliBolgeId(null);
     setUcusHedefi({
       anahtar: crypto.randomUUID(),
@@ -749,20 +824,23 @@ export default function App() {
     });
   }, [alanlariTemizle]);
 
-  // Bildirimden ihbara git.
-  const bildirimIhbaraGit = useCallback((report: ReportFeature) => {
-    setSekme("ihbarlar");
+  // Bildirimden talebe git.
+  const bildirimTalepaGit = useCallback((report: ReportFeature) => {
+    setSekme("talepler");
     setPanelAcik(true);
-    setSeciliIhbarId(report.properties.id);
+    setSeciliTalepId(report.properties.id);
     setDetayRapor(null);
     setSeciliId(null);
     setSeciliBolgeId(null);
-    setUcusHedefi({
-      anahtar: crypto.randomUUID(),
-      tip: "nokta",
-      merkez: report.geometry.coordinates,
-      zoom: 16,
-    });
+    const nokta = talepNoktasi(report);
+    if (nokta) {
+      setUcusHedefi({
+        anahtar: crypto.randomUUID(),
+        tip: "nokta",
+        merkez: nokta,
+        zoom: 16,
+      });
+    }
   }, []);
 
   const bildirimler = useMemo<Bildirim[]>(() => {
@@ -774,23 +852,23 @@ export default function App() {
         tip: p.type,
         baslik: `${p.name} bakım bekliyor`,
         altbaslik:
-          ASSET_TYPE_LABELS[p.type] + (p.source === "ihbar" ? " · İhbardan" : ""),
+          ASSET_TYPE_LABELS[p.type] + (p.source === "ihbar" ? " · Talepten" : ""),
         zaman: p.updated_at,
         kategori: "bakim",
         onTikla: () => bildirimVarligaGit(f),
       });
     }
     if (personel) {
-      for (const r of bekleyenIhbarSorgu.data?.features ?? []) {
+      for (const r of bekleyenTalepSorgu.data?.features ?? []) {
         const p = r.properties;
         liste.push({
           id: p.id,
           tip: p.type,
-          baslik: `Yeni ihbar: ${p.name}`,
+          baslik: `Yeni talep: ${p.name}`,
           altbaslik: p.note?.trim() || ASSET_TYPE_LABELS[p.type],
           zaman: p.created_at,
-          kategori: "ihbar",
-          onTikla: () => bildirimIhbaraGit(r),
+          kategori: "talep",
+          onTikla: () => bildirimTalepaGit(r),
         });
       }
     }
@@ -798,10 +876,10 @@ export default function App() {
     return liste.slice(0, 30);
   }, [
     bakimSorgu.data,
-    bekleyenIhbarSorgu.data,
+    bekleyenTalepSorgu.data,
     personel,
     bildirimVarligaGit,
-    bildirimIhbaraGit,
+    bildirimTalepaGit,
   ]);
 
   // --- Sol kenar cubugu ogeleri (rol'e gore) ------------------------------
@@ -824,12 +902,12 @@ export default function App() {
         aktif: aktifSekme === "ekle",
       },
       {
-        id: "ihbarlar",
-        etiket: "İhbarlar",
+        id: "talepler",
+        etiket: "Talepler",
         ikon: IconInbox,
-        onClick: () => sekmeSec("ihbarlar"),
-        aktif: aktifSekme === "ihbarlar",
-        rozet: bekleyenIhbarSayisi,
+        onClick: () => sekmeSec("talepler"),
+        aktif: aktifSekme === "talepler",
+        rozet: bekleyenTalepSayisi,
       },
       {
         id: "bolgeler",
@@ -881,6 +959,13 @@ export default function App() {
       onClick: () => setUstModal("personel"),
       aktif: ustModal === "personel",
     });
+    kenarYonetimOgeleri.push({
+      id: "departman",
+      etiket: "Departmanlar",
+      ikon: IconLayers,
+      onClick: () => setUstModal("departman"),
+      aktif: ustModal === "departman",
+    });
   }
 
   const kenarAltOgeler: KenarOgesi[] = [
@@ -894,24 +979,24 @@ export default function App() {
   );
   const [detayAsset, setDetayAsset] = useState<AssetFeature | null>(null);
 
-  // Secili ihbar: once panelin yukledigi listede, yoksa harita katmaninda
+  // Secili talep: once panelin yukledigi listede, yoksa harita katmaninda
   // aranir; boylece hangi sekmede gorunurse gorunsun detayi acilabilir.
   const seciliRapor = useMemo<ReportFeature | null>(() => {
-    if (!seciliIhbarId) return null;
+    if (!seciliTalepId) return null;
     return (
-      ihbarlar.find((r) => r.properties.id === seciliIhbarId) ??
-      ihbarKatmanVeri.features.find((r) => r.properties.id === seciliIhbarId) ??
+      talepler.find((r) => r.properties.id === seciliTalepId) ??
+      talepKatmanVeri.features.find((r) => r.properties.id === seciliTalepId) ??
       null
     );
-  }, [ihbarlar, ihbarKatmanVeri, seciliIhbarId]);
+  }, [talepler, talepKatmanVeri, seciliTalepId]);
   const [detayRapor, setDetayRapor] = useState<ReportFeature | null>(null);
 
-  /** "Varlığı Yönet": ihbardan olusan varligin detay modalini acar. Hem harita
-   *  popup'i hem ihbar detayi bunu cagirir; varlik yoksa ihbar detayina duser. */
-  const ihbarVarligiYonet = useCallback(
+  /** "Varlığı Yönet": talepten olusan varligin detay modalini acar. Hem harita
+   *  popup'i hem talep detayi bunu cagirir; varlik yoksa talep detayina duser. */
+  const talepVarligiYonet = useCallback(
     (raporId: string) => {
       const varlikId = onayliEsleme.rapordanVarliga.get(raporId);
-      const varlik = ihbarVarlikSorgu.data?.features.find(
+      const varlik = talepVarlikSorgu.data?.features.find(
         (f) => f.properties.id === varlikId
       );
       if (varlik) {
@@ -920,7 +1005,7 @@ export default function App() {
         setDetayAsset(varlik);
       } else setDetayRapor(seciliRapor);
     },
-    [ihbarVarlikSorgu.data, seciliRapor]
+    [talepVarlikSorgu.data, seciliRapor]
   );
 
   /** "Konuma Git": haritayi varligin konumuna ucurur. `seciliId`'ye bilincli
@@ -991,7 +1076,10 @@ export default function App() {
             }
           />
 
-          {/* Mesafe olcum kontrolu - detaylar alt ortadaki arac panelinde */}
+          {/* Cizgi cizme/olcme kontrolu - detaylar alt ortadaki arac panelinde.
+              arac yalnizca mesafe okumak icin
+              degil, kaydedilip ekibe atanabilen bir guzergah cizmek icin de
+              kullaniliyor; mesafe onun sonucu. */}
           <button
             onClick={olcumModu ? olcumIptal : olcumBaslat}
             className={`flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium shadow-sm transition-all hover:shadow-md ${
@@ -1006,10 +1094,10 @@ export default function App() {
               }`}
             />
             {olcumModu
-              ? "Ölçülüyor…"
+              ? "Çiziliyor…"
               : olcumNoktalari.length >= 2
                 ? mesafeEtiketi(olcumMesafeM)
-                : "Ölç"}
+                : "Çiz"}
           </button>
 
           {/* Alan secim kontrolu. Alan secilmisken yanindaki "cikis" dugmesi
@@ -1051,7 +1139,7 @@ export default function App() {
           <BildirimZili bildirimler={bildirimler} />
 
           <div className="flex items-center gap-2">
-            <div className="text-right leading-tight">
+            <div className="flex flex-col items-end leading-tight">
               <p className="text-xs font-medium text-slate-700">
                 {user?.full_name || user?.email}
               </p>
@@ -1060,6 +1148,10 @@ export default function App() {
                   {USER_ROLE_LABELS[user.role]}
                 </p>
               )}
+              {/* Kullanicinin mudurlugu: ekrandaki listelerin neden dar
+                  oldugunu anlatan bilgi, kimligin yaninda durur. Admin'de
+                  (departman NULL) hicbir sey cizilmez. */}
+              <DepartmanEtiketi kod={user?.departman} className="mt-0.5" />
             </div>
             <button
               onClick={cikisYap}
@@ -1096,6 +1188,7 @@ export default function App() {
         alanHatasi={alanHatasi}
         alanYukleniyor={alanYukleniyor}
         onAlanIptal={alanSecimiIptal}
+        onAlanGeriAl={cizimGeriAl}
         onAlanTamamla={alanSecimiTamamla}
         tamamlananAlanlar={tamamlananAlanlar}
         onAlanKaldir={alanKaldir}
@@ -1110,6 +1203,7 @@ export default function App() {
         olcumNoktalari={olcumNoktalari}
         olcumMesafeM={olcumMesafeM}
         onOlcumIptal={olcumIptal}
+        onOlcumGeriAl={olcumGeriAl}
         onOlcumBitir={olcumBitir}
         onOlcumTemizle={olcumTemizle}
       />
@@ -1135,9 +1229,9 @@ export default function App() {
         <div className="relative h-full w-full">
           <MapView
           assets={katmanlar.varliklar ? varlikKatmanVeri : undefined}
-          reports={katmanlar.ihbarlar ? ihbarKatmanVeri : undefined}
-          seciliIhbarId={seciliIhbarId}
-          onIhbarSec={ihbarSecildi}
+          reports={katmanlar.talepler ? talepKatmanVeri : undefined}
+          seciliTalepId={seciliTalepId}
+          onTalepSec={talepSecildi}
           seciliId={seciliId}
           onVarlikSec={varlikSecildi}
           onHaritaTikla={haritaTiklandi}
@@ -1155,8 +1249,9 @@ export default function App() {
           // Popup'lardaki tek dugme: duzenleme, atama, onay/ret, reddi geri
           // alma ve sekil duzenleme acilan detay modallerinin isidir.
           onVarlikDetay={() => setDetayAsset(seciliVarlik)}
-          onIhbarDetay={() => setDetayRapor(seciliRapor)}
+          onTalepDetay={() => setDetayRapor(seciliRapor)}
           ekipler={katmanlar.ekipler ? haritaEkipleri : undefined}
+          ekipDepartmanlari={ekipDepartmanlari}
           onEkipGorevSec={personel ? ekipGoreviAcildi : undefined}
           bolgeler={haritaBolgeleri}
           seciliBolgeId={seciliBolgeId}
@@ -1177,8 +1272,11 @@ export default function App() {
           gorunur={katmanlar}
           onDegistir={katmanDegistir}
           sayilar={katmanSayilari}
-          varlikAlt={varlikAltFiltre}
-          ihbarAlt={ihbarAltFiltre}
+          altlar={{
+            varliklar: varlikAltFiltre,
+            talepler: talepAltFiltre,
+            ekipler: ekipAltFiltre,
+          }}
           // Ilce/mahalle secimi AssetList'teki acilirlarla ayni state.
           bolge={{ ilceKodu, onIlceSec: ilceSec, mahalleKodu, onMahalleSec: mahalleSec }}
         />
@@ -1228,6 +1326,7 @@ export default function App() {
                   error={sorgu.error as Error | null}
                   turler={katmanTurleri}
                   onTurSec={panelTuruSec}
+                  onDepartmanSec={departmanTurleriniSec}
                   durumlar={katmanVarlikDurumlari}
                   onDurumSec={panelDurumuSec}
                   seciliId={seciliId}
@@ -1253,26 +1352,26 @@ export default function App() {
                 </div>
               )}
 
-              {sekme === "ihbarlar" && (
-                <IhbarPaneli
-                  durum={ihbarDurum}
-                  onDurumChange={setIhbarDurum}
+              {sekme === "talepler" && (
+                <TalepPaneli
+                  durum={talepDurum}
+                  onDurumChange={setTalepDurum}
                   onVarlikOlustu={() => {
                     // Onay yeni bir varlik olusturup ekibe atar; iki sorgu da
                     // tazelenmeli.
                     queryClient.invalidateQueries({ queryKey: ["assets"] });
                     queryClient.invalidateQueries({ queryKey: ["saha"] });
                   }}
-                  onIhbarlarChange={setIhbarlar}
-                  seciliRaporId={seciliIhbarId}
-                  onRaporSec={ihbarSecildi}
-                  ihbarVarlikSorgu={ihbarVarlikSorgu}
+                  onTaleplerChange={setTalepler}
+                  seciliRaporId={seciliTalepId}
+                  onRaporSec={talepSecildi}
+                  talepVarlikSorgu={talepVarlikSorgu}
                   seciliVarlikId={seciliId}
                   onVarlikSec={varlikSecildi}
                   ekipler={ekipSorgu.data}
                   onVarligaGit={varligaGit}
                   // Lejant/harita ile ayni sinir: secili ilce-mahalle disindaki
-                  // ihbarlar listede de gorunmez.
+                  // talepler listede de gorunmez.
                   alandaMi={alandaMi}
                 />
               )}
@@ -1331,10 +1430,10 @@ export default function App() {
         report={detayRapor}
         onKapat={() => setDetayRapor(null)}
         islemYetkisi={personel}
-        onVarligiYonet={personel ? ihbarVarligiYonet : undefined}
+        onVarligiYonet={personel ? talepVarligiYonet : undefined}
         onIslemBitti={() => {
           setDetayRapor(null);
-          setSeciliIhbarId(null);
+          setSeciliTalepId(null);
           queryClient.invalidateQueries({ queryKey: ["reports"] });
           queryClient.invalidateQueries({ queryKey: ["assets"] });
           queryClient.invalidateQueries({ queryKey: ["saha"] });
@@ -1422,6 +1521,16 @@ export default function App() {
         onKapat={() => setUstModal(null)}
       >
         {user?.role === "admin" && <PersonelYonetimi />}
+      </Modal>
+
+      <Modal
+        acik={ustModal === "departman"}
+        baslik="Departmanlar"
+        genis
+        icerikSinifi="flex h-[70vh] flex-col"
+        onKapat={() => setUstModal(null)}
+      >
+        {user?.role === "admin" && <DepartmanYonetimi />}
       </Modal>
 
       <Modal

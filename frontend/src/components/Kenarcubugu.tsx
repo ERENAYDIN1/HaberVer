@@ -10,14 +10,14 @@ export interface KenarOgesi {
   onClick: () => void;
   /** Ogeye ait panel/modal acikken vurgulanir. */
   aktif?: boolean;
-  /** Sag tarafta gosterilen kucuk sayac (orn. bekleyen ihbar adedi). */
+  /** Sag tarafta gosterilen kucuk sayac (orn. bekleyen talep adedi). */
   rozet?: number;
 }
 
 interface KenarcubuguProps {
   /** Genis (etiketli) mi yoksa dar (yalniz ikon) mi. Header'daki menu dugmesiyle degisir. */
   genis: boolean;
-  /** Ana gezinme (harita panelleri): Varliklar / Ekle / Ihbarlar. */
+  /** Ana gezinme (harita panelleri): Varliklar / Ekle / Talepler. */
   ogeler: KenarOgesi[];
   /** Yonetim & raporlama (modal olarak acilir): Ozet / Gecmis / Personel. */
   yonetimOgeleri: KenarOgesi[];

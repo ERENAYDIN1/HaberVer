@@ -24,19 +24,42 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app import keycloak  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 
-# --- Demo hesaplar: (email, ad, rol, parola, lon, lat) -----------------------
-# Ekipler iki yakaya dagitildi ki mesafe + yaka kisiti elle denenebilsin.
+# --- Demo hesaplar: (email, ad, rol, parola, lon, lat, departman) ------------
+#
+# Ekipler HEM iki yakaya HEM yedi mudurluge dagitildi: otomatik atamanin uc
+# kisiti da (mesafe + yaka + departman) elle denenebilsin. Yuku en yogun uc
+# mudurluge (park, fen, aydinlatma) yaka basina birer ekip verildi - tek ekipli
+# bir mudurlugun karsi yakadaki isi hicbir zaman otomatik atanmaz ve demo
+# "bozuk" gorunurdu.
 KULLANICILAR = [
-    ("sahaekibi1@greenasset.com", "Saha Ekibi 1 (Kadıköy)", "saha_calisani",
-     "saha1234", 29.0275, 40.9902),
-    ("sahaekibi2@greenasset.com", "Saha Ekibi 2 (Beşiktaş)", "saha_calisani",
-     "saha1234", 29.0067, 41.0430),
-    ("sahaekibi3@greenasset.com", "Saha Ekibi 3 (Bakırköy)", "saha_calisani",
-     "saha1234", 28.8720, 40.9805),
-    ("calisan1@greenasset.com", "Belediye Personeli 1", "calisan",
-     "calisan1234", None, None),
+    ("sahaekibi1@greenasset.com", "Park Ekibi 1 (Kadıköy)", "saha_calisani",
+     "saha1234", 29.0275, 40.9902, "park_bahceler"),
+    ("sahaekibi2@greenasset.com", "Park Ekibi 2 (Beşiktaş)", "saha_calisani",
+     "saha1234", 29.0067, 41.0430, "park_bahceler"),
+    ("sahaekibi3@greenasset.com", "Fen Ekibi 1 (Bakırköy)", "saha_calisani",
+     "saha1234", 28.8720, 40.9805, "fen_isleri"),
+    ("sahaekibi4@greenasset.com", "Fen Ekibi 2 (Ataşehir)", "saha_calisani",
+     "saha1234", 29.1280, 40.9920, "fen_isleri"),
+    ("sahaekibi5@greenasset.com", "Aydınlatma Ekibi 1 (Şişli)", "saha_calisani",
+     "saha1234", 28.9880, 41.0610, "aydinlatma_enerji"),
+    ("sahaekibi6@greenasset.com", "Aydınlatma Ekibi 2 (Üsküdar)", "saha_calisani",
+     "saha1234", 29.0160, 41.0250, "aydinlatma_enerji"),
+    ("sahaekibi7@greenasset.com", "Su Ekibi (Fatih)", "saha_calisani",
+     "saha1234", 28.9490, 41.0170, "su_kanalizasyon"),
+    ("sahaekibi8@greenasset.com", "Temizlik Ekibi (Eminönü)", "saha_calisani",
+     "saha1234", 28.9710, 41.0170, "temizlik_isleri"),
+    ("sahaekibi9@greenasset.com", "Ulaşım Ekibi (Levent)", "saha_calisani",
+     "saha1234", 29.0135, 41.0785, "ulasim_hizmetleri"),
+    ("sahaekibi10@greenasset.com", "Çözüm Merkezi Ekibi (Zeytinburnu)",
+     "saha_calisani", "saha1234", 28.9050, 40.9925, "cozum_merkezi"),
+    # Iki personel AYRI mudurluklerde: departman kapsaminin gercekten
+    # ayirdigi (birinin digerinin taleplerini gormedigi) elle gorulebilsin.
+    ("calisan1@greenasset.com", "Fen İşleri Personeli", "calisan",
+     "calisan1234", None, None, "fen_isleri"),
+    ("calisan2@greenasset.com", "Park ve Bahçeler Personeli", "calisan",
+     "calisan1234", None, None, "park_bahceler"),
     ("vatandas1@greenasset.com", "Örnek Vatandaş", "vatandas",
-     "vatandas1234", None, None),
+     "vatandas1234", None, None, None),
 ]
 
 # --- Bakim bekleyen varliklar: (ad, tip, lon, lat) ---------------------------
@@ -91,9 +114,9 @@ IYI_VARLIKLAR = [
      "Hunter PGV-151", "2020-02-13"),
 ]
 
-# --- Bekleyen vatandas ihbarlari: (ad, tip, lon, lat, aciklama) --------------
+# --- Bekleyen vatandas talepleri: (ad, tip, lon, lat, aciklama) --------------
 # photo_url NULL kalir: API'de fotograf zorunlu ama seed icin diskte dosya yok.
-IHBARLAR = [
+TALEPLER = [
     ("Kadıköy'de kurumuş ağaç", "agac", 29.0240, 40.9880,
      "Ağaç tamamen kurumuş, düşme tehlikesi var."),
     ("Bakırköy'de yanmayan direk", "direk", 28.8740, 40.9810,
@@ -110,7 +133,7 @@ IHBARLAR = [
      "Ağaç son fırtınadan sonra yana yattı, park halindeki araçlara doğru eğik."),
     ("Pendik Sahil'de kırık aydınlatma direği", "direk", 29.2350, 40.8760,
      "Direğin alt kapağı kopmuş, kabloları açıkta duruyor. Çocuklar için tehlikeli."),
-    # Her tur grubundan ornek ("diger" dahil): ihbarlar gercekte cesitlidir.
+    # Her tur grubundan ornek ("diger" dahil): talepler gercekte cesitlidir.
     ("Beyoğlu'nda açık kalmış rögar kapağı", "rogar", 28.9770, 41.0335,
      "Rögar kapağı yerinde değil, çukur açıkta. Gece görünmüyor, çok tehlikeli."),
     ("Mecidiyeköy'de derin asfalt çukuru", "yol", 28.9970, 41.0670,
@@ -133,14 +156,41 @@ IHBARLAR = [
      "Kaldırımın tamamını kapatan bir inşaat molozu yığını var, yürünemiyor."),
 ]
 
+# --- Sekilli talepler: (ad, tip, geojson, aciklama) --------------------------
+#
+# Vatandas yalnizca nokta isaretlemek zorunda degil: bir yol catlagi CIZGI, bir
+# cukur alani POLIGON olarak bildirilir. Ikisi de burada var ki harita
+# katmani ve temsil noktasi hesabi (pin nereye duser) elle gorulebilsin.
+SEKILLI_TALEPLER = [
+    (
+        "Barbaros Bulvarı'nda uzun asfalt çatlağı",
+        "yol",
+        '{"type":"LineString","coordinates":'
+        '[[29.0043,41.0468],[29.0051,41.0452],[29.0058,41.0436],[29.0064,41.0421]]}',
+        "Bulvar boyunca yaklaşık 400 metrelik bir çatlak var, her yağmurda "
+        "büyüyor. Tek bir noktayı işaretlemek yetmiyor, hattın tamamı bozuk.",
+    ),
+    (
+        "Fenerbahçe Parkı'nda kuruyan çim alanı",
+        "sulama",
+        '{"type":"Polygon","coordinates":[[[29.0432,40.9712],[29.0468,40.9714],'
+        '[29.0471,40.9694],[29.0436,40.9691],[29.0432,40.9712]]]}',
+        "Parkın bu bölümündeki çim tamamen sarardı, sulama fıskiyeleri "
+        "çalışmıyor gibi görünüyor.",
+    ),
+]
+
 # --- Baslangic atamalari: (varlik_adi, ekip_emaili) --------------------------
+# Ekipler islerin DEPARTMANINA gore secildi: otomatik atama da bunu yapardi.
 ATAMALAR = [
-    ("Kadıköy Moda Aydınlatma D-7", "sahaekibi1@greenasset.com"),
+    # direk -> aydinlatma_enerji, Anadolu yakasi
+    ("Kadıköy Moda Aydınlatma D-7", "sahaekibi6@greenasset.com"),
+    # agac -> park_bahceler, Avrupa yakasi
     ("Beşiktaş Meydan Çınarı", "sahaekibi2@greenasset.com"),
 ]
 
 TUM_VARLIK_ADLARI = [a[0] for a in BAKIM_VARLIKLARI] + [a[0] for a in IYI_VARLIKLAR]
-TUM_IHBAR_ADLARI = [r[0] for r in IHBARLAR]
+TUM_TALEP_ADLARI = [r[0] for r in TALEPLER] + [r[0] for r in SEKILLI_TALEPLER]
 TUM_EMAILLER = [k[0] for k in KULLANICILAR]
 
 
@@ -156,7 +206,7 @@ def sil(db) -> None:
     """Demo veriyi kaldirir. Silme sirasi FK bagimliliklarina gore onemlidir."""
     db.execute(
         sa.text("DELETE FROM reports WHERE name = ANY(:adlar)"),
-        {"adlar": TUM_IHBAR_ADLARI},
+        {"adlar": TUM_TALEP_ADLARI},
     )
     # assignments, assets/users silinince ON DELETE CASCADE ile gider.
     db.execute(
@@ -174,7 +224,7 @@ def sil(db) -> None:
 def ekle(db) -> None:
     """Demo veriyi ekler. Her kayit NOT EXISTS ile korunur; script tekrar tekrar
     calistirilabilir, kopya olusmaz."""
-    for email, ad, rol, parola, lon, lat in KULLANICILAR:
+    for email, ad, rol, parola, lon, lat, departman in KULLANICILAR:
         # Konumlu ve konumsuz hesaplar icin ayri INSERT: tek sorguda CASE ile
         # NULL konum uretmek ayni parametreyi hem IS NULL kontrolunde hem
         # ST_MakePoint'te kullanir ve Postgres tipini cikaramaz.
@@ -182,17 +232,17 @@ def ekle(db) -> None:
         if lon is None:
             sorgu = sa.text(
                 """
-                INSERT INTO users (email, keycloak_id, full_name, role)
-                SELECT :email, :kid, :ad, CAST(:rol AS user_role)
+                INSERT INTO users (email, keycloak_id, full_name, role, departman)
+                SELECT :email, :kid, :ad, CAST(:rol AS user_role), :departman
                 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = :email)
                 """
             )
         else:
             sorgu = sa.text(
                 """
-                INSERT INTO users (email, keycloak_id, full_name, role,
+                INSERT INTO users (email, keycloak_id, full_name, role, departman,
                                    last_location, last_seen_at)
-                SELECT :email, :kid, :ad, CAST(:rol AS user_role),
+                SELECT :email, :kid, :ad, CAST(:rol AS user_role), :departman,
                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), now()
                 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = :email)
                 """
@@ -206,15 +256,20 @@ def ekle(db) -> None:
                 sa.bindparam("kid", keycloak_id, type_=sa.Uuid),
                 sa.bindparam("ad", ad, type_=sa.String),
                 sa.bindparam("rol", rol, type_=sa.String),
+                sa.bindparam("departman", departman, type_=sa.String),
             )
         )
         # Hesap zaten varsa baglantiyi yine tazele: veritabani silinmeden
         # Keycloak sifirlandiysa id degismis olabilir.
+        # Departman da tazelenir: sozluk degistiginde mevcut demo hesaplarin
+        # eski mudurlukte kalmamasi icin.
         db.execute(
             sa.text(
-                "UPDATE users SET keycloak_id = :kid WHERE email = :email"
+                "UPDATE users SET keycloak_id = :kid, departman = :departman"
+                " WHERE email = :email"
             ).bindparams(
                 sa.bindparam("kid", keycloak_id, type_=sa.Uuid),
+                sa.bindparam("departman", departman, type_=sa.String),
                 sa.bindparam("email", email, type_=sa.String),
             )
         )
@@ -257,13 +312,14 @@ def ekle(db) -> None:
             )
         )
 
-    for ad, tip, lon, lat, note in IHBARLAR:
+    for ad, tip, lon, lat, note in TALEPLER:
         db.execute(
             sa.text(
                 """
-                INSERT INTO reports (reporter_id, name, type, note, geometry)
+                INSERT INTO reports (reporter_id, name, type, note, geometry, nokta)
                 SELECT (SELECT id FROM users WHERE email = 'vatandas1@greenasset.com'),
                        :ad, CAST(:tip AS asset_type), :note,
+                       ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)
                 WHERE NOT EXISTS (SELECT 1 FROM reports WHERE name = :ad)
                   AND EXISTS (SELECT 1 FROM users
@@ -275,6 +331,35 @@ def ekle(db) -> None:
                 sa.bindparam("note", note, type_=sa.String),
                 sa.bindparam("lon", lon, type_=sa.Float),
                 sa.bindparam("lat", lat, type_=sa.Float),
+            )
+        )
+
+    # Cizgi/alan talepleri. Temsil noktasi PostGIS tarafinda turetilir
+    # (crud/report.py::temsil_nokta ile ayni kural): cizgide hattin ortasi,
+    # alanda seklin ICINE dusen bir nokta.
+    for ad, tip, geojson, note in SEKILLI_TALEPLER:
+        db.execute(
+            sa.text(
+                """
+                INSERT INTO reports (reporter_id, name, type, note, geometry, nokta)
+                SELECT (SELECT id FROM users WHERE email = 'vatandas1@greenasset.com'),
+                       :ad, CAST(:tip AS asset_type), :note,
+                       ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326),
+                       CASE ST_GeometryType(ST_GeomFromGeoJSON(:geojson))
+                           WHEN 'ST_LineString' THEN ST_LineInterpolatePoint(
+                               ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326), 0.5)
+                           ELSE ST_PointOnSurface(
+                               ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326))
+                       END
+                WHERE NOT EXISTS (SELECT 1 FROM reports WHERE name = :ad)
+                  AND EXISTS (SELECT 1 FROM users
+                              WHERE email = 'vatandas1@greenasset.com')
+                """
+            ).bindparams(
+                sa.bindparam("ad", ad, type_=sa.String),
+                sa.bindparam("tip", tip, type_=sa.String),
+                sa.bindparam("note", note, type_=sa.String),
+                sa.bindparam("geojson", geojson, type_=sa.String),
             )
         )
 
@@ -317,11 +402,11 @@ def ekle(db) -> None:
     kullanici = say("SELECT count(*) FROM users")
     varlik = say("SELECT count(*) FROM assets")
     iyi = say("SELECT count(*) FROM assets WHERE status = 'iyi'")
-    ihbar = say("SELECT count(*) FROM reports")
+    talep = say("SELECT count(*) FROM reports")
     gorev = say("SELECT count(*) FROM assignments WHERE status = 'atandi'")
     print(
         f"Demo veri hazır: {kullanici} kullanıcı, {varlik} varlık ({iyi} iyi / "
-        f"{varlik - iyi} bakım bekliyor), {ihbar} ihbar, {gorev} aktif görev."
+        f"{varlik - iyi} bakım bekliyor), {talep} talep, {gorev} aktif görev."
     )
 
 

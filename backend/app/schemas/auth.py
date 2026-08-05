@@ -21,6 +21,9 @@ class UserCreate(BaseModel):
     # Yalnizca saha_calisani icin anlamli: ekibin kadro yakasi. Bos birakilirsa
     # ekibin yakasi son bildirdigi konumdan turetilir.
     yaka: Yaka | None = None
+    # `calisan` ve `saha_calisani` icin ZORUNLU (router dogrular): kullanicinin
+    # gorebilecegi tur kumesi bu mudurlukten turer. Admin/vatandas icin NULL.
+    departman: str | None = Field(default=None, max_length=32)
 
 
 class UserUpdate(BaseModel):
@@ -32,6 +35,10 @@ class UserUpdate(BaseModel):
     sessizce silerdi."""
 
     yaka: Yaka | None = None
+    # Departman NULL'a CEKILEMEZ (yakadan farkli): departmansiz bir personel
+    # hicbir sey goremez, yani "temizlemek" hesabi sessizce ise yaramaz hale
+    # getirirdi. Degistirmek icin baska bir mudurluk verilmeli.
+    departman: str | None = Field(default=None, max_length=32)
     # False: hesap kapatilir - Keycloak'ta devre disi birakilir VE acik
     # oturumlari dusurulur (bkz. crud/user.py::set_active).
     is_active: bool | None = None
@@ -53,5 +60,6 @@ class UserOut(BaseModel):
     is_active: bool
     created_at: datetime
     yaka: Yaka | None = None
+    departman: str | None = None
 
 

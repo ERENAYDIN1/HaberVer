@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 
-/** Detay modallerinin (varlik / ihbar / bolge) ortak islem dili: serit +
+/** Detay modallerinin (varlik / talep / bolge) ortak islem dili: serit +
  *  buton + silme onayi. Bir kayit hangi panelden acilirsa acilsin ayni
  *  yerlesimi ve ayni renk kodunu gosterir.
  *
@@ -86,6 +86,14 @@ interface SilOnayiProps {
   ad?: string;
   siliniyor?: boolean;
   onSil: () => void;
+  /** Duğme metni. Varsayilan "Sil"; islem gercekten silme DEGILSE (orn.
+   *  vatandasin talebi kendi listesinden kaldirmasi - kayit belediyede kalir)
+   *  ne yaptigini dogru soyleyen bir metin verilmelidir. */
+  etiket?: string;
+  /** Onay sorusu ve olumlama metni; `etiket` ile birlikte degistirilir. */
+  soru?: string;
+  onayEtiketi?: string;
+  calisiyorEtiketi?: string;
   /** Liste satirlarinda kullanilan kucuk, metin-baglantisi olcusu. */
   satirIci?: boolean;
   /** Degisince acik onay kapanir: modal monte kalirken baska bir kayda
@@ -99,6 +107,10 @@ export function SilOnayi({
   ad,
   siliniyor = false,
   onSil,
+  etiket = "Sil",
+  soru = "Silinsin mi?",
+  onayEtiketi = "Evet, sil",
+  calisiyorEtiketi = "Siliniyor…",
   satirIci = false,
   sifirlaAnahtari,
 }: SilOnayiProps) {
@@ -125,7 +137,7 @@ export function SilOnayi({
           satirIci ? "" : "ml-auto"
         }`}
       >
-        Sil
+        {etiket}
       </button>
     );
   }
@@ -138,7 +150,7 @@ export function SilOnayi({
         className="flex items-center gap-3"
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="text-xs text-slate-500">Silinsin mi?</span>
+        <span className="text-xs text-slate-500">{soru}</span>
         <button
           type="button"
           onClick={() => setOnayda(false)}
@@ -152,7 +164,7 @@ export function SilOnayi({
           disabled={siliniyor}
           className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50"
         >
-          {siliniyor ? "Siliniyor…" : "Evet, sil"}
+          {siliniyor ? calisiyorEtiketi : onayEtiketi}
         </button>
       </span>
     );
@@ -178,7 +190,7 @@ export function SilOnayi({
         disabled={siliniyor}
         className="border border-red-600 bg-red-600 px-2.5 py-1.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {siliniyor ? "Siliniyor…" : "Evet, sil"}
+        {siliniyor ? calisiyorEtiketi : onayEtiketi}
       </button>
     </span>
   );

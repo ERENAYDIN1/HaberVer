@@ -29,7 +29,7 @@ export type AssetStatus = (typeof ASSET_STATUSES)[number];
 export type AssetSource = (typeof ASSET_SOURCES)[number];
 
 /** Envantere elle eklenebilen turler: `diger` haric hepsi. "Diğer" yalnizca
- *  bir ihbar kategorisidir, envantere boyle bir kayit acilmaz. */
+ *  bir talep kategorisidir, envantere boyle bir kayit acilmaz. */
 export const KAYITLI_ASSET_TYPES = ASSET_TYPES.filter(
   (t) => t !== "diger"
 ) as readonly Exclude<AssetType, "diger">[];
@@ -146,11 +146,11 @@ export const TIP_ROZET_SINIFI = Object.fromEntries(
 export const TIP_ROZET_SINIFI_VARSAYILAN =
   "border-slate-200 bg-slate-50 text-slate-500";
 
-/** Ihbar kaynakli bir varligin tamir edildikten kac gun sonra otomatik
+/** Talep kaynakli bir varligin tamir edildikten kac gun sonra otomatik
  *  silinecegi (backend'deki TAMIR_SAKLAMA_GUN ile ayni olmali). */
 export const TAMIR_SAKLAMA_GUN = 5;
 
-/** Durum etiketi. Ihbar kaynakli ve "iyi" durumdaki varlik tanim geregi tamir
+/** Durum etiketi. Talep kaynakli ve "iyi" durumdaki varlik tanim geregi tamir
  *  edilmistir; kayitli varlikta normal "İyi" etiketi kalir. */
 export function durumEtiketi(status: AssetStatus, source: AssetSource): string {
   if (status === "iyi" && source === "ihbar") return "Tamir Edildi";
@@ -169,7 +169,7 @@ export function kalanSilmeGunu(repairedAt: string | null): number | null {
 
 export const ASSET_SOURCE_LABELS: Record<AssetSource, string> = {
   kayitli: "Kayıtlı Varlık",
-  ihbar: "İhbar Edilen",
+  ihbar: "Talep Edilen",
 };
 
 /** Backend'in GeoJSON Feature'inda donen properties alani. */

@@ -5,18 +5,18 @@ import { listReports } from "../api/reports";
 import type { AssetFeature } from "../types/asset";
 import {
   REPORT_STATUSES,
-  ihbarGorunumu,
-  type IhbarGorunumu,
+  talepGorunumu,
+  type TalepGorunumu,
   type ReportFeature,
   type ReportStatus,
 } from "../types/report";
 import { useAssets } from "./useAssets";
 
-/** Ihbarlarin cekilmesi ve gorunume gore gruplanmasi.
+/** Taleplerin cekilmesi ve gorunume gore gruplanmasi.
  *
- *  Backend'in uc durumu arayuzde dort gorunume ayrilir: onaylanmis bir ihbar,
+ *  Backend'in uc durumu arayuzde dort gorunume ayrilir: onaylanmis bir talep,
  *  varligi tamir edilince "Tamir Edildi"ye duser. Ayrim tamamen frontend'de
- *  turetilir (bkz. types/report.ts::ihbarGorunumu).
+ *  turetilir (bkz. types/report.ts::talepGorunumu).
  *
  *  Tek hesap noktasi olmasi onemli: panel sekmeleri, lejant sayaclari, harita
  *  katmani ve secim senkronu ayni gruplamayi okur. */
@@ -26,9 +26,9 @@ export interface OnayliEsleme {
   varliktanRapora: Map<string, string>;
 }
 
-/** Onaylanmis ihbar <-> ondan olusan varlik eslesmesi (`created_asset_id`).
+/** Onaylanmis talep <-> ondan olusan varlik eslesmesi (`created_asset_id`).
  *  Ikisi ayri id'ler oldugu icin secim callback'leri esi de birlikte secer;
- *  yoksa haritadan ihbar secmek panelde hicbir satiri vurgulamazdi. */
+ *  yoksa haritadan talep secmek panelde hicbir satiri vurgulamazdi. */
 export function onayliEslemeKur(onaylananlar: readonly ReportFeature[]): OnayliEsleme {
   const rapordanVarliga = new Map<string, string>();
   const varliktanRapora = new Map<string, string>();
@@ -41,35 +41,35 @@ export function onayliEslemeKur(onaylananlar: readonly ReportFeature[]): OnayliE
   return { rapordanVarliga, varliktanRapora };
 }
 
-/** Ihbarlari gorunume gore gruplar ve her kayda `properties.gorunum` yazar.
- *  `ihbardanDoganVarliklar` undefined ise (sorgu henuz yuklenmedi) siniflama
+/** Talepleri gorunume gore gruplar ve her kayda `properties.gorunum` yazar.
+ *  `taleptenDoganVarliklar` undefined ise (sorgu henuz yuklenmedi) siniflama
  *  yapilmaz, yoksa acilista her sey bir an "Tamir Edildi"ye duserdi.
  *
- *  Onaylanmis bir ihbarin KONUMU da olusan varliktan alinir: personel varligin
+ *  Onaylanmis bir talebin KONUMU da olusan varliktan alinir: personel varligin
  *  koordinatini duzeltince (vatandas yanlis yere isaretlemis olabilir) harita
- *  isaretcisi de tasinmali. Ham ihbar noktasi veritabaninda oldugu gibi kalir,
+ *  isaretcisi de tasinmali. Ham talep noktasi veritabaninda oldugu gibi kalir,
  *  yalnizca gosterim isin guncel yerini izler. */
 export function gorunumlereAyir(
-  durumaGoreIhbarlar: Record<ReportStatus, readonly ReportFeature[] | undefined>,
-  ihbardanDoganVarliklar: readonly AssetFeature[] | undefined
-): Record<IhbarGorunumu, ReportFeature[]> {
+  durumaGoreTalepler: Record<ReportStatus, readonly ReportFeature[] | undefined>,
+  taleptenDoganVarliklar: readonly AssetFeature[] | undefined
+): Record<TalepGorunumu, ReportFeature[]> {
   const varlikDurumu = new Map<string, "iyi" | "bakim_lazim">();
   const varlikKonumu = new Map<string, AssetFeature["geometry"]>();
-  for (const a of ihbardanDoganVarliklar ?? []) {
+  for (const a of taleptenDoganVarliklar ?? []) {
     varlikDurumu.set(a.properties.id, a.properties.status);
     varlikKonumu.set(a.properties.id, a.geometry);
   }
-  const varlikBilgisiVar = ihbardanDoganVarliklar !== undefined;
-  const gruplar: Record<IhbarGorunumu, ReportFeature[]> = {
+  const varlikBilgisiVar = taleptenDoganVarliklar !== undefined;
+  const gruplar: Record<TalepGorunumu, ReportFeature[]> = {
     onaylandi: [],
     tamir: [],
     beklemede: [],
     reddedildi: [],
   };
   for (const durum of REPORT_STATUSES) {
-    for (const f of durumaGoreIhbarlar[durum] ?? []) {
+    for (const f of durumaGoreTalepler[durum] ?? []) {
       const varlikId = f.properties.created_asset_id;
-      const g = ihbarGorunumu(
+      const g = talepGorunumu(
         f.properties.status,
         varlikId ? varlikDurumu.get(varlikId) : undefined,
         varlikBilgisiVar
@@ -85,58 +85,58 @@ export function gorunumlereAyir(
   return gruplar;
 }
 
-export function useIhbarGorunumleri({ personel }: { personel: boolean }) {
-  /** Ihbardan olusan varliklar; gorunum turetmesi buna dayanir. Yalnizca ihbar
+export function useTalepGorunumleri({ personel }: { personel: boolean }) {
+  /** Talepten olusan varliklar; gorunum turetmesi buna dayanir. Yalnizca talep
    *  paneline aittir, haritadaki varlik katmanini etkilemez. */
-  const ihbarVarlikSorgu = useAssets({ source: "ihbar" });
+  const talepVarlikSorgu = useAssets({ source: "ihbar" });
 
-  // Ihbar katmani kapaliyken de cekilir: lejant sayaclari katmanin acik olup
+  // Talep katmani kapaliyken de cekilir: lejant sayaclari katmanin acik olup
   // olmamasindan bagimsiz olarak gercek toplami gostermeli.
-  const bekleyenIhbarSorgu = useQuery({
+  const bekleyenTalepSorgu = useQuery({
     queryKey: ["reports", "beklemede"],
     queryFn: () => listReports("beklemede"),
     enabled: personel,
   });
-  const onaylananIhbarSorgu = useQuery({
+  const onaylananTalepSorgu = useQuery({
     queryKey: ["reports", "onaylandi"],
     queryFn: () => listReports("onaylandi"),
     enabled: personel,
   });
-  const reddedilenIhbarSorgu = useQuery({
+  const reddedilenTalepSorgu = useQuery({
     queryKey: ["reports", "reddedildi"],
     queryFn: () => listReports("reddedildi"),
     enabled: personel,
   });
 
   const onayliEsleme = useMemo(
-    () => onayliEslemeKur(onaylananIhbarSorgu.data?.features ?? []),
-    [onaylananIhbarSorgu.data]
+    () => onayliEslemeKur(onaylananTalepSorgu.data?.features ?? []),
+    [onaylananTalepSorgu.data]
   );
 
   const gorunumler = useMemo(
     () =>
       gorunumlereAyir(
         {
-          beklemede: bekleyenIhbarSorgu.data?.features,
-          onaylandi: onaylananIhbarSorgu.data?.features,
-          reddedildi: reddedilenIhbarSorgu.data?.features,
+          beklemede: bekleyenTalepSorgu.data?.features,
+          onaylandi: onaylananTalepSorgu.data?.features,
+          reddedildi: reddedilenTalepSorgu.data?.features,
         },
-        ihbarVarlikSorgu.data?.features
+        talepVarlikSorgu.data?.features
       ),
     [
-      bekleyenIhbarSorgu.data,
-      onaylananIhbarSorgu.data,
-      reddedilenIhbarSorgu.data,
-      ihbarVarlikSorgu.data,
+      bekleyenTalepSorgu.data,
+      onaylananTalepSorgu.data,
+      reddedilenTalepSorgu.data,
+      talepVarlikSorgu.data,
     ]
   );
 
   return {
-    ihbarVarlikSorgu,
-    bekleyenIhbarSorgu,
-    onaylananIhbarSorgu,
-    reddedilenIhbarSorgu,
-    bekleyenIhbarSayisi: bekleyenIhbarSorgu.data?.features.length ?? 0,
+    talepVarlikSorgu,
+    bekleyenTalepSorgu,
+    onaylananTalepSorgu,
+    reddedilenTalepSorgu,
+    bekleyenTalepSayisi: bekleyenTalepSorgu.data?.features.length ?? 0,
     onayliEsleme,
     gorunumler,
   };

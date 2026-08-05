@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # Zorunlu: bu parolayla Keycloak'ta ilk admin acilir.
     default_admin_password: str = Field(min_length=8)
 
-    # Yuklenen dosyalarin (ihbar fotograflari) kaydedilecegi dizin.
+    # Yuklenen dosyalarin (talep fotograflari) kaydedilecegi dizin.
     media_dir: str = "media"
 
     # Suresi gecmis oturumlarin temizlenme araligi (saat). Temizlik bir arka

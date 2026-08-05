@@ -30,6 +30,8 @@ interface CizimPaneliProps {
   alanHatasi: string | null;
   alanYukleniyor: boolean;
   onAlanIptal: () => void;
+  /** Son konan koseyi geri alir (yanlis tiklama tum cizimi yaktirmasin). */
+  onAlanGeriAl: () => void;
   onAlanTamamla: () => void;
   tamamlananAlanlar: TamamlananAlan[];
   onAlanKaldir: (id: string) => void;
@@ -51,6 +53,7 @@ interface CizimPaneliProps {
   olcumNoktalari: [number, number][];
   olcumMesafeM: number;
   onOlcumIptal: () => void;
+  onOlcumGeriAl: () => void;
   onOlcumBitir: () => void;
   onOlcumTemizle: () => void;
 }
@@ -65,6 +68,7 @@ export default function CizimPaneli({
   alanHatasi,
   alanYukleniyor,
   onAlanIptal,
+  onAlanGeriAl,
   onAlanTamamla,
   tamamlananAlanlar,
   onAlanKaldir,
@@ -79,6 +83,7 @@ export default function CizimPaneli({
   olcumNoktalari,
   olcumMesafeM,
   onOlcumIptal,
+  onOlcumGeriAl,
   onOlcumBitir,
   onOlcumTemizle,
 }: CizimPaneliProps) {
@@ -133,6 +138,13 @@ export default function CizimPaneli({
                 className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 İptal
+              </button>
+              <button
+                onClick={onAlanGeriAl}
+                disabled={cizimNoktalari.length === 0}
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Geri al
               </button>
               <button
                 onClick={onAlanTamamla}
@@ -251,10 +263,10 @@ export default function CizimPaneli({
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-blue-600">
                 <IconRuler className="h-3 w-3" />
               </span>
-              Mesafe Ölçümü
+              Çizgi Çizimi
             </div>
             <p className="mb-1 rounded-lg bg-blue-50/70 px-2.5 py-1.5 text-xs text-slate-600">
-              Haritada tıklayarak bir çizgi boyunca mesafe ölç.
+              Haritada tıklayarak bir hat çiz; uzunluğu anlık hesaplanır.
               <span className="mt-1 block text-sm font-medium text-slate-800">
                 {olcumNoktalari.length} nokta
                 {olcumNoktalari.length >= 2 && ` · ${mesafeEtiketi(olcumMesafeM)}`}
@@ -266,6 +278,13 @@ export default function CizimPaneli({
                 className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 İptal
+              </button>
+              <button
+                onClick={onOlcumGeriAl}
+                disabled={olcumNoktalari.length === 0}
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Geri al
               </button>
               <button
                 onClick={onOlcumBitir}

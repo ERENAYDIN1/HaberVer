@@ -11,7 +11,7 @@ from ..schemas.asset import AssetCreate, AssetUpdate
 from . import assignment as assignment_crud
 from .log import add_log
 
-# Ihbar kaynakli bir varlik tamir edildikten bu kadar gun sonra otomatik silinir.
+# Talep kaynakli bir varlik tamir edildikten bu kadar gun sonra otomatik silinir.
 TAMIR_SAKLAMA_GUN = 5
 
 
@@ -33,6 +33,7 @@ def _apply_filters(
     asset_type: AssetType | None,
     status: AssetStatus | None,
     source: AssetSource | None = None,
+    kapsam_turleri: set[AssetType] | None = None,
 ):
     if asset_type is not None:
         stmt = stmt.where(Asset.type == asset_type)
@@ -40,11 +41,15 @@ def _apply_filters(
         stmt = stmt.where(Asset.status == status)
     if source is not None:
         stmt = stmt.where(Asset.source == source)
+    # Departman kapsami: None = sinirsiz (admin). Bos kume gecerli bir degerdir
+    # ve hicbir satir dondurmez - departmani olmayan personel icin dogru sonuc.
+    if kapsam_turleri is not None:
+        stmt = stmt.where(Asset.type.in_(kapsam_turleri))
     return stmt
 
 
 def purge_expired_repaired(db: Session) -> int:
-    """Suresi dolmus (tamir edilip TAMIR_SAKLAMA_GUN gecmis) ihbar varliklarini
+    """Suresi dolmus (tamir edilip TAMIR_SAKLAMA_GUN gecmis) talep varliklarini
     siler. Yalnizca `main.py::_bakim_dongusu` cagirir; bir okuma ucundan
     cagrilmamali - her GET'i DELETE + COMMIT'e cevirir."""
     esik = datetime.now(timezone.utc) - timedelta(days=TAMIR_SAKLAMA_GUN)
@@ -69,6 +74,7 @@ def purge_expired_repaired(db: Session) -> int:
             entity_id=asset.id,
             entity_name=asset.name,
             detail="Tamir sonrası otomatik silindi",
+            tur=asset.type,
         )
         db.delete(asset)
     if expired:
@@ -81,8 +87,11 @@ def list_assets(
     asset_type: AssetType | None = None,
     status: AssetStatus | None = None,
     source: AssetSource | None = None,
+    kapsam_turleri: set[AssetType] | None = None,
 ):
-    stmt = _apply_filters(_select_with_coords(), asset_type, status, source)
+    stmt = _apply_filters(
+        _select_with_coords(), asset_type, status, source, kapsam_turleri
+    )
     return db.execute(stmt.order_by(Asset.created_at.desc())).all()
 
 
@@ -92,12 +101,13 @@ def assets_within(
     asset_type: AssetType | None = None,
     status: AssetStatus | None = None,
     source: AssetSource | None = None,
+    kapsam_turleri: set[AssetType] | None = None,
 ):
     """Verilen poligonun icine dusen varliklar (ST_Within; geometri sutunundaki
     GiST indeksinden faydalanir)."""
     polygon = func.ST_SetSRID(func.ST_GeomFromGeoJSON(polygon_geojson), 4326)
     stmt = _select_with_coords().where(func.ST_Within(Asset.geometry, polygon))
-    stmt = _apply_filters(stmt, asset_type, status, source)
+    stmt = _apply_filters(stmt, asset_type, status, source, kapsam_turleri)
     return db.execute(stmt.order_by(Asset.created_at.desc())).all()
 
 
@@ -127,10 +137,11 @@ def create_asset(db: Session, data: AssetCreate, actor: User | None = None):
         entity_type="asset",
         entity_id=asset.id,
         entity_name=asset.name,
+        tur=asset.type,
     )
     # Dogrudan "Bakim Lazim" eklenen varlik da otomatik yonlendirilir.
     if asset.status == AssetStatus.bakim_lazim:
-        ekip = assignment_crud.en_yakin_uygun_ekip(db, asset.geometry)
+        ekip = assignment_crud.en_yakin_uygun_ekip(db, asset.geometry, asset.type)
         if ekip is not None:
             assignment_crud.ata(db, asset, ekip, assigned_by=None)
     db.commit()
@@ -175,12 +186,13 @@ def update_asset(
                 entity_id=asset.id,
                 entity_name=asset.name,
                 detail=f"{eski_durum.value} → {asset.status.value}",
+                tur=asset.type,
             )
             # Bakima cekilen varlik en yakin uygun ekibe yonlendirilir; uygun
             # ekip yoksa havuzda bekler.
             if asset.status == AssetStatus.bakim_lazim:
                 db.flush()
-                ekip = assignment_crud.en_yakin_uygun_ekip(db, asset.geometry)
+                ekip = assignment_crud.en_yakin_uygun_ekip(db, asset.geometry, asset.type)
                 if ekip is not None:
                     assignment_crud.ata(db, asset, ekip, assigned_by=None)
         else:
@@ -191,6 +203,7 @@ def update_asset(
                 entity_type="asset",
                 entity_id=asset.id,
                 entity_name=asset.name,
+                tur=asset.type,
             )
 
     db.commit()
@@ -209,6 +222,7 @@ def delete_asset(db: Session, asset_id: uuid.UUID, actor: User | None = None) ->
         entity_type="asset",
         entity_id=asset.id,
         entity_name=asset.name,
+        tur=asset.type,
     )
     db.delete(asset)
     db.commit()

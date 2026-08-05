@@ -191,7 +191,7 @@ export default function BolgeDetayModal({
 
         {hata && <p className="text-xs text-red-600">{hata}</p>}
 
-        {/* Islem seridi varlik/ihbar detay modalleriyle ayni: soldan islemler,
+        {/* Islem seridi varlik/talep detay modalleriyle ayni: soldan islemler,
             saga itilmis iki adimli silme. */}
         <AksiyonSeridi>
           {onGit && (

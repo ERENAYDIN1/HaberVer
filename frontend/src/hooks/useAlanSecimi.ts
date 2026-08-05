@@ -126,6 +126,16 @@ export function useAlanSecimi({
     setOlcumNoktalari((n) => [...n, nokta]);
   }, []);
 
+  // Son konan koseyi geri alir. Yanlis konan tek bir kose yuzunden butun
+  // cizimi bastan yapmak gerekmemeli; "Iptal"in yumusak karsiligidir.
+  const cizimGeriAl = useCallback(() => {
+    setCizimNoktalari((n) => n.slice(0, -1));
+  }, []);
+
+  const olcumGeriAl = useCallback(() => {
+    setOlcumNoktalari((n) => n.slice(0, -1));
+  }, []);
+
   const alanSecimiIptal = useCallback(() => {
     setCizimModu(false);
     setCizimNoktalari([]);
@@ -377,6 +387,7 @@ export function useAlanSecimi({
     alanHatasi,
     alanYukleniyor,
     cizimNoktaEkle,
+    cizimGeriAl,
     alanSecimiBaslat,
     alanSecimiIptal,
     alanSecimiTamamla,
@@ -385,6 +396,7 @@ export function useAlanSecimi({
     olcumNoktalari,
     olcumMesafeM,
     olcumNoktaEkle,
+    olcumGeriAl,
     olcumBaslat,
     olcumIptal,
     olcumBitir,

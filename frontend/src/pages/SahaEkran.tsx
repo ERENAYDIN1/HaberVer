@@ -11,6 +11,7 @@ import {
   tamamlananlarim,
 } from "../api/saha";
 import { useAuth } from "../auth/AuthContext";
+import DepartmanEtiketi from "../components/DepartmanEtiketi";
 import KonumSecMap, {
   type HaritaAlani,
   type HaritaIsaret,
@@ -19,6 +20,7 @@ import {
   IconCheck,
   IconLasso,
   IconLogout,
+  IconMenu,
   IconPin,
   IconRoute,
   IconWarning,
@@ -65,6 +67,7 @@ export default function SahaEkran() {
   const [geriAlinanlar, setGeriAlinanlar] = useState<Set<string>>(new Set());
   // Islem sonrasi bilgilendirme seridi.
   const [durum, setDurum] = useState<{ ok: boolean; metin: string } | null>(null);
+  const [panelAcik, setPanelAcik] = useState(true);
 
   // Konum yayini: acilista ve her 30 sn'de bir backend'e gonderilir.
   useEffect(() => {
@@ -244,6 +247,16 @@ export default function SahaEkran() {
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100">
       <header className="z-20 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setPanelAcik((v) => !v)}
+            aria-label="Görev panelini aç/kapat"
+            aria-pressed={panelAcik}
+            title="Görev paneli"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <IconMenu className="h-5 w-5" />
+          </button>
+
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 shadow-sm shadow-emerald-600/30">
             <IconPin className="h-4 w-4 text-white" />
           </div>
@@ -256,9 +269,14 @@ export default function SahaEkran() {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-500">
-            {user?.full_name || user?.email}
-          </span>
+          {/* Ekip hangi mudurlugun isini aldigini gormeli: otomatik atama
+              departmana gore de suzuluyor (bkz. en_yakin_uygun_ekip). */}
+          <div className="flex flex-col items-end leading-tight">
+            <span className="text-xs text-slate-500">
+              {user?.full_name || user?.email}
+            </span>
+            <DepartmanEtiketi kod={user?.departman} className="mt-0.5" />
+          </div>
           <button
             onClick={cikisYap}
             className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-red-500"
@@ -269,9 +287,18 @@ export default function SahaEkran() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      {/* Panel haritanin uzerine biner: akista olsaydi acilip kapanmasi
+          haritayi yeniden boyutlandirir ve goruntu titrerdi. */}
+      <div className="relative min-h-0 flex-1">
         {/* Sol: gorev listesi */}
-        <aside className="flex w-[380px] shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-slate-50">
+        <aside
+          className={`absolute inset-y-0 left-0 z-30 flex flex-col overflow-y-auto overflow-x-hidden border-r bg-slate-50 transition-[width] duration-200 ease-out ${
+            panelAcik
+              ? "w-[380px] border-slate-200 shadow-lg"
+              : "w-0 border-transparent"
+          }`}
+        >
+         <div className="flex min-h-full w-[380px] shrink-0 flex-col">
           {/* Ust ozet: is yuku + konum yayininin canli olup olmadigi (personel
               ekibi haritada ancak konum gelirse gorur). */}
           <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 p-4 backdrop-blur-sm">
@@ -666,10 +693,11 @@ export default function SahaEkran() {
               </div>
             )}
           </div>
+         </div>
         </aside>
 
-        {/* Sag: gorev pinleri + kendi konumu + gorev bolgesi */}
-        <div className="relative min-w-0 flex-1">
+        {/* Harita: gorev pinleri + kendi konumu + gorev bolgesi */}
+        <div className="absolute inset-0">
           <KonumSecMap
             secili={null}
             onSec={() => {}}

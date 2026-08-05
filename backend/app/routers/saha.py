@@ -25,7 +25,7 @@ from ..schemas.saha import (
     TamamlananOzet,
     VarlikRef,
 )
-from ..security import personel, require_role
+from ..security import Kapsam, kapsam, personel, require_role
 
 router = APIRouter(prefix="/api/saha", tags=["saha"])
 
@@ -109,23 +109,30 @@ def tamamlanan_geri_al(
 @router.get("/ekipler", response_model=list[EkipOzet])
 def ekipler(
     _: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
-    """Personel (admin/calisan) tum saha ekiplerini konum + yuk ozetiyle gorur."""
-    return [EkipOzet.from_row(r) for r in crud.ekipler_ozeti(db)]
+    """Personel saha ekiplerini konum + yuk ozetiyle gorur. Admin tum ekipleri,
+    diger personel yalnizca KENDI MUDURLUGUNUN ekiplerini gorur - baska
+    departmanin ekibine zaten is atayamaz."""
+    return [
+        EkipOzet.from_row(r)
+        for r in crud.ekipler_ozeti(db, departman=None if alan.sinirsiz else alan.departman)
+    ]
 
 
 @router.get("/ekip-gorevleri", response_model=list[EkipGorevleri])
 def ekip_gorevleri(
     _: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
     """Personel yonetim panosu: her ekip + kendine dusen aktif gorevler. Ekip
     ozetleri (konum/yuk) ile aktif atamalar tek seferde cekilip ekip bazinda
     gruplanir."""
-    ozetler = crud.ekipler_ozeti(db)
+    ozetler = crud.ekipler_ozeti(db, departman=None if alan.sinirsiz else alan.departman)
     grup: dict[uuid.UUID, list[GorevOzet]] = {}
-    for row in crud.aktif_atamalar(db):
+    for row in crud.aktif_atamalar(db, kapsam_turleri=alan.turler):
         gorev = row[0]
         grup.setdefault(gorev.worker_id, []).append(GorevOzet.from_row(row))
     # Ekip basina son tamamlananlar; aktif gorevlerle ayni desen (tek sorgu +
@@ -143,6 +150,7 @@ def ekip_gorevleri(
             last_seen_at=o.last_seen_at,
             aktif_gorev=o.aktif_gorev,
             yaka=o.yaka,
+            departman=o.departman,
             gorevler=grup.get(o.id, []),
             son_tamamlananlar=tamamlanan.get(o.id, []),
         )
@@ -153,22 +161,28 @@ def ekip_gorevleri(
 @router.get("/havuz", response_model=list[HavuzVarlik])
 def havuz(
     _: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
     """Personel: havuzda bekleyen (henuz bir ekibe atanmamis) bakim varliklari.
     Buradan elle bir ekibe atanabilir (POST /ata)."""
-    return [HavuzVarlik.from_row(r) for r in crud.havuz_varliklari(db)]
+    return [HavuzVarlik.from_row(r) for r in crud.havuz_varliklari(db, kapsam_turleri=alan.turler)]
 
 
 @router.post("/ata", status_code=status.HTTP_204_NO_CONTENT)
 def ata(
     data: AtamaGirdi,
     user: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
-    """Personel bir bakim varligini elle bir ekibe (yeniden) yonlendirir."""
+    """Personel bir bakim varligini elle bir ekibe (yeniden) yonlendirir.
+
+    Elle atama otomatik atamanin YAKA ve DEPARTMAN kisitlarindan muaftir -
+    yetki personeldedir, arayuz yalnizca uyarir. Ama ISIN KENDISI kapsamda
+    olmali: baska mudurlugun talebini yonlendirmek o mudurlugun isidir."""
     row = asset_crud.get_asset(db, data.asset_id)
-    if row is None:
+    if row is None or not alan.izinli(row[0].type):
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")
     asset = row[0]
     if asset.status != AssetStatus.bakim_lazim:
@@ -192,13 +206,16 @@ def ata(
 def gorev_bilgi(
     asset_id: uuid.UUID,
     _: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
     """Bir varligin su an atali oldugu ekip (yoksa null: havuzda bekliyor) +
     varligin hangi yakada oldugu. Elle yonlendirme ekraninda 'once hangi ekipteydi'
     ve 'secilen ekip karsi yakada mi' gostermek icin."""
-    gorev = crud.aktif_gorev_bilgisi(db, asset_id)
     row = asset_crud.get_asset(db, asset_id)
+    if row is not None and not alan.izinli(row[0].type):
+        raise HTTPException(status_code=404, detail="Varlik bulunamadi")
+    gorev = crud.aktif_gorev_bilgisi(db, asset_id)
     kod = yaka_crud.yaka_bul(db, row[0].geometry) if row is not None else None
     return GorevDurumu(
         gorev=AktifGorevBilgi(**gorev) if gorev else None,
@@ -211,11 +228,12 @@ def gorev_bilgi(
 def geri_al(
     data: VarlikRef,
     user: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
     """Personel bir varligin aktif gorevini iptal edip varligi havuza dondurur."""
     row = asset_crud.get_asset(db, data.asset_id)
-    if row is None:
+    if row is None or not alan.izinli(row[0].type):
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")
     if not crud.geri_al(db, data.asset_id, actor=user):
         raise HTTPException(status_code=409, detail="Bu varligin aktif bir gorevi yok")

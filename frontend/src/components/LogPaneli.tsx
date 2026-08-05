@@ -38,7 +38,7 @@ const ACTION_STIL: Record<
 const VARSAYILAN_STIL = { ikon: IconHistory, rozet: "bg-slate-100 text-slate-600" };
 
 /** Sistem genelindeki islem gecmisi: varlik ekleme/guncelleme/silme, durum
- *  degisimi, ihbar onay/ret, personel ekleme - kim, ne zaman, ne yapti. */
+ *  degisimi, talep onay/ret, personel ekleme - kim, ne zaman, ne yapti. */
 export default function LogPaneli() {
   const { data, isLoading, isError, error, refetch, isFetching } = useLogs();
 

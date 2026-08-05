@@ -11,11 +11,11 @@ from ..database import Base
 
 
 class AssetType(str, enum.Enum):
-    """Varlik/ihbar turu. `reports.type` ayni PG enum'unu paylasir (bkz.
-    models/report.py) - vatandas ihbari ile envanter ayni sozlugu kullanir.
+    """Varlik/talep turu. `reports.type` ayni PG enum'unu paylasir (bkz.
+    models/report.py) - vatandas talebi ile envanter ayni sozlugu kullanir.
     Arayuzde turler 5 gruba (yesil alan/aydinlatma/yol/altyapi/diger)
     ayrilir; gruplama yalnizca frontend kavramidir (types/asset.ts).
-    `diger` yalnizca ihbardan gelir, envantere elle eklenemez."""
+    `diger` yalnizca talepten gelir, envantere elle eklenemez."""
 
     agac = "agac"
     direk = "direk"
@@ -39,7 +39,7 @@ class AssetStatus(str, enum.Enum):
 
 class AssetSource(str, enum.Enum):
     """Varligin nereden geldigi: belediyeye dogrudan kayitli mi, yoksa
-    vatandas ihbarinin onaylanmasiyla mi olustu."""
+    vatandas talebinin onaylanmasiyla mi olustu."""
 
     kayitli = "kayitli"
     ihbar = "ihbar"
@@ -85,7 +85,7 @@ class Asset(Base):
         nullable=False,
     )
     # Varlik "Tamir Edildi" olarak isaretlendiginde (durum -> iyi) dolar; durum
-    # tekrar 'bakim_lazim'a donerse temizlenir. Ihbar kaynakli tamir edilen
+    # tekrar 'bakim_lazim'a donerse temizlenir. Talep kaynakli tamir edilen
     # varliklar bu zamandan 5 gun sonra otomatik silinir (bkz. crud.asset).
     repaired_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

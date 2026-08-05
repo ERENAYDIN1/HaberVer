@@ -172,7 +172,7 @@ describe("poligonSinirKutusu", () => {
   });
 });
 
-/** Nokta-icinde-mi testi lejantin ilce/mahalle filtresini besler: ihbar,
+/** Nokta-icinde-mi testi lejantin ilce/mahalle filtresini besler: talep,
  *  bolge ve ekip katmanlari secili sinira gore burada elenir. */
 describe("noktaHalkadaMi / noktaAlandaMi", () => {
   // Basit kare: [29,41] - [30,42].

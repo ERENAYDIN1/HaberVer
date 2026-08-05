@@ -68,6 +68,10 @@ export interface EkipOzet {
   /** Ekibin etkin yakasi: kadro yakasi (users.yaka) varsa o, yoksa son
    *  konumundan turetilen. Konum da yoksa null. */
   yaka: string | null;
+  /** Ekibin mudurlugu (`departmanlar.kod`). Otomatik atama yalnizca bu
+   *  mudurlugun turlerindeki isleri bu ekibe verir; elle atamada arayuz
+   *  "başka departman" uyarisi gosterir. */
+  departman: string | null;
 }
 
 /** Personel yonetim panosunda bir ekibin altindaki tek gorev + varlik ozeti

@@ -32,9 +32,9 @@ export const POPUP_GENISLIK = "200px";
  *  Islemler (Düzenle / Varlığı Yönet / Reddi Geri Al / Şekli Düzenle) bilincli
  *  olarak burada degil, acilan detay modalinin aksiyon seridindedir. Eskiden
  *  ikinci bir dolu dugme vardi ve ayni yer her kayit turunde baska bir iliskiyi
- *  anlatiyordu: varlikta "Detay"in bir kisayolu ("Düzenle"), ihbarda ise baska
+ *  anlatiyordu: varlikta "Detay"in bir kisayolu ("Düzenle"), talepte ise baska
  *  bir kayda atlama ("Varlığı Yönet"). Kullanici varliklardan "Detay zengindir"
- *  diye ogrenip ihbarda ince bir kart buluyordu. Tek kural kaldi:
+ *  diye ogrenip talepte ince bir kart buluyordu. Tek kural kaldi:
  *  isaretciye tikla -> Detay -> ne yapacaksan orada. */
 function detayDugmesi(renk: string): string {
   return (
@@ -110,9 +110,9 @@ export async function konumSatiriDoldur(
   }
 }
 
-/** Ihbar popup'i. Karar (onay/ret), reddi geri alma ve onaylanmis ihbardan
+/** Talep popup'i. Karar (onay/ret), reddi geri alma ve onaylanmis talepten
  *  varliga gecis "Detay"daki modaldedir - bkz. `detayDugmesi`. */
-export function ihbarPopupIcerigi(report: ReportFeature): string {
+export function talepPopupIcerigi(report: ReportFeature): string {
   const { name, type, status, note, photo_url } = report.properties;
   // Rozet ham durumu degil gorunumu anlatir: tamir edilmis bir is "Onaylandı"
   // yazip acik isle ayni rengi tasimasin.
@@ -134,7 +134,7 @@ export function ihbarPopupIcerigi(report: ReportFeature): string {
           : ""
       }
       <div style="font-weight: 600; margin-bottom: 4px">${kacis(name)}</div>
-      <div style="color:#475569; font-size:12px">${ASSET_TYPE_LABELS[type]} · İhbar</div>
+      <div style="color:#475569; font-size:12px">${ASSET_TYPE_LABELS[type]} · Talep</div>
       <div style="margin-top:6px">
         <span style="
           display:inline-block; padding:2px 8px; border-radius:9999px;
@@ -218,15 +218,51 @@ const EKIP_IKONU =
   `<path d="M11.5 12.8A1 1 0 1 0 10.84 13.74"/>` +
   `</g></svg>`;
 
+/** Departmani olmayan (ya da sozluk henuz gelmemis) ekibin pin rengi. */
+export const EKIP_VARSAYILAN_RENK = "#4338ca";
+
+/** Bir rengi verilen oranda beyaza yaklastirir. Pin'in gradyani icin iki ton
+ *  gerekiyor; departman renkleri calisma zamaninda geldigi icin ikinci ton
+ *  CSS'te sabitlenemez, burada turetilir. */
+function acikTon(hex: string, oran = 0.42): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const sayi = parseInt(m[1], 16);
+  const kanal = (kaydir: number) => {
+    const v = (sayi >> kaydir) & 0xff;
+    return Math.round(v + (255 - v) * oran);
+  };
+  const [r, g, b] = [kanal(16), kanal(8), kanal(0)];
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+/** Bir ekibin haritadaki kimligi: bagli oldugu mudurlugun adi + rozet rengi.
+ *
+ *  Ekip pinini mudurluk rengiyle boyamak "isaretci rengi tur grubundan gelir"
+ *  kuralini bozmaz: o kural VARLIK ve TALEP isaretcileri icindir (onlarin bir
+ *  turu vardir). Ekip pininin turu yoktur; tasidigi tek siniflandirma
+ *  mudurluktur ve butun mudurluklerin ekipleri ayni moru giyince harita
+ *  okunmuyordu. */
+export type EkipDepartmanBilgisi = Record<string, { ad: string; renk: string }>;
+
 /** Ekip marker'inin icerigini (pin + yuk rozeti + ad etiketi) kurar/gunceller.
  *  Ayni element hem olusturmada hem guncellemede kullanilir; stiller
- *  index.css'teki `.ekip-marker*` siniflarinda. */
-export function ekipMarkerGuncelle(el: HTMLElement, e: EkipGorevleri): void {
+ *  index.css'teki `.ekip-marker*` siniflarinda, departman rengi ise
+ *  `--ekip-renk` degiskenleriyle disaridan verilir. */
+export function ekipMarkerGuncelle(
+  el: HTMLElement,
+  e: EkipGorevleri,
+  renk: string = EKIP_VARSAYILAN_RENK
+): void {
   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
   const kisaAd = (e.full_name || e.email).replace(/\s*\(.*\)\s*$/, "");
   // className atamasi MapLibre'nin kendi `maplibregl-marker` sinifini silerdi.
   el.classList.add("ekip-marker");
+  // Kapasitesi dolu ekip rengini DEGISTIRMEZ: renk artik mudurlugu anlatiyor.
+  // Doluluk kirmizi kenarlik + kirmizi yuk rozetiyle gosterilir.
   el.classList.toggle("ekip-marker--dolu", dolu);
+  el.style.setProperty("--ekip-renk", renk);
+  el.style.setProperty("--ekip-renk-acik", acikTon(renk));
   el.innerHTML = `
     <div class="ekip-marker__govde">
       <div class="ekip-marker__pin">${EKIP_IKONU}</div>
@@ -248,9 +284,15 @@ function kisaSure(iso: string | null): string {
 
 /** Ekip marker'inin popup'i: ad + yuk + son gorulme + aktif gorevler + son
  *  tamir edilenler. Gorev satirlari tiklanabilir (bkz. `data-gorev-asset`). */
-export function ekipPopupHtml(e: EkipGorevleri): string {
+export function ekipPopupHtml(
+  e: EkipGorevleri,
+  renk: string = EKIP_VARSAYILAN_RENK,
+  departmanAd?: string
+): string {
   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
-  const vurgu = dolu ? "#dc2626" : "#4f46e5";
+  // Kapasite cubugu/sayisi doluyken kirmiziya doner; baslik rozeti mudurluk
+  // rengini korur (haritadaki pinle ayni renk okunmali).
+  const vurgu = dolu ? "#dc2626" : renk;
   const tamAd = e.full_name || e.email;
   const sonGorulme = e.last_seen_at
     ? new Date(e.last_seen_at).toLocaleString("tr-TR", {
@@ -325,15 +367,22 @@ export function ekipPopupHtml(e: EkipGorevleri): string {
     `<div style="font-family:system-ui,sans-serif;width:${POPUP_GENISLIK}">` +
     // Baslik: haritadaki pin + ad + son gorulme
     `<div style="display:flex;align-items:center;gap:8px">` +
-    `<span style="width:30px;height:30px;flex:none;border-radius:9999px;background:${
-      dolu ? "linear-gradient(145deg,#fb7185,#dc2626)" : "linear-gradient(145deg,#818cf8,#4338ca)"
-    };display:flex;align-items:center;justify-content:center">${EKIP_IKONU}</span>` +
+    `<span style="width:30px;height:30px;flex:none;border-radius:9999px;background:linear-gradient(145deg,${acikTon(
+      renk
+    )},${renk});display:flex;align-items:center;justify-content:center">${EKIP_IKONU}</span>` +
     `<span style="min-width:0">` +
     // Ortak 14px satir kutusu 13px ada dar geliyor ('ğ/y' kuyruklari
     // kirpiliyor); bu satira 16px verilir - yine tam piksel.
     `<span style="display:block;line-height:16px;font-weight:600;font-size:13px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${kacis(
       tamAd
     )}</span>` +
+    // Mudurluk adi pinin rengiyle yazilir: haritadaki renk kodunun karsiligi
+    // popup'ta yaziyla da bulunmali.
+    (departmanAd
+      ? `<span style="display:block;font-size:10px;font-weight:600;color:${renk};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${kacis(
+          departmanAd
+        )}</span>`
+      : "") +
     `<span style="display:block;font-size:10px;color:#94a3b8">${
       sonGorulme ? `Son konum ${kacis(sonGorulme)}` : "Konum bilgisi yok"
     }</span>` +

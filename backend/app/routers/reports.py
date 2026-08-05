@@ -10,6 +10,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -18,8 +19,13 @@ from ..database import get_db
 from ..models.asset import AssetType
 from ..models.report import ReportStatus
 from ..models.user import User, UserRole
-from ..schemas.report import ReportFeature, ReportFeatureCollection, ReportReview
-from ..security import get_current_user, personel, require_role
+from ..schemas.report import (
+    ReportFeature,
+    ReportFeatureCollection,
+    ReportReview,
+    TalepGeometrisi,
+)
+from ..security import Kapsam, kapsam, personel, require_role
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -81,28 +87,46 @@ def _fotograf_kaydet(foto: UploadFile) -> str:
     return f"/{settings.media_dir}/reports/{ad}"
 
 
+def _talep_getir(db: Session, report_id: uuid.UUID, alan: Kapsam):
+    """Talebi getirir ve departman kapsamini uygular.
+
+    Kapsam disi bir talep 404 doner, 403 degil: talebin VARLIGI da baska
+    mudurlugun bilgisidir, "yetkiniz yok" demek kaydin var oldugunu sizdirir."""
+    row = crud.get(db, report_id)
+    if row is None or not alan.izinli(row[0].type):
+        raise HTTPException(status_code=404, detail="Talep bulunamadi")
+    return row
+
+
 @router.post("", response_model=ReportFeature, status_code=status.HTTP_201_CREATED)
 def create_report(
     name: str = Form(..., min_length=1, max_length=255),
     type: AssetType = Form(...),
-    longitude: float = Form(..., ge=-180, le=180),
-    latitude: float = Form(..., ge=-90, le=90),
+    geometry: str = Form(..., description="GeoJSON: Point, LineString veya Polygon"),
     note: str = Form(..., min_length=1),
     photo: UploadFile = File(...),
     user: User = Depends(require_role(UserRole.vatandas)),
     db: Session = Depends(get_db),
 ):
-    """Vatandas ihbari olusturur (multipart). Aciklama ve fotograf zorunludur."""
+    """Vatandas talebi olusturur (multipart). Aciklama ve fotograf zorunludur.
+
+    Konum artik tek nokta olmak zorunda degil: bir yol catlagi CIZGI, bir cukur
+    alani POLIGON olarak bildirilebilir. Sekil GeoJSON dizgisi olarak gelir;
+    temsil noktasi PostGIS tarafinda turetilir (bkz. crud.temsil_nokta)."""
     if not note.strip():
         raise HTTPException(status_code=400, detail="Aciklama bos olamaz")
+    try:
+        sekil = TalepGeometrisi.model_validate_json(geometry)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=f"Geçersiz konum: {e.errors()[0]['msg']}")
+
     photo_url = _fotograf_kaydet(photo)
     row = crud.create_report(
         db,
         reporter_id=user.id,
         name=name.strip(),
         type_=type,
-        longitude=longitude,
-        latitude=latitude,
+        geojson=sekil.model_dump_json(),
         note=note.strip(),
         photo_url=photo_url,
     )
@@ -114,19 +138,41 @@ def my_reports(
     user: User = Depends(require_role(UserRole.vatandas)),
     db: Session = Depends(get_db),
 ):
+    """Vatandasin kendi talepleri. Kendi listesinden kaldirdiklari gelmez."""
     return ReportFeatureCollection.from_rows(
-        crud.list_reports(db, reporter_id=user.id)
+        crud.list_reports(db, reporter_id=user.id, gizliler_haric=True)
     )
+
+
+@router.delete("/{report_id}", response_model=ReportFeature)
+def hide_report(
+    report_id: uuid.UUID,
+    user: User = Depends(require_role(UserRole.vatandas)),
+    db: Session = Depends(get_db),
+):
+    """Vatandas talebi KENDI LISTESINDEN kaldirir.
+
+    Satir silinmez: onaylanmis bir talep gercekten silinseydi ondan olusan
+    varlik, saha atamasi ve audit log kayitlari sahipsiz kalirdi. Personel
+    tarafi ve gecmis bu islemden etkilenmez."""
+    row = crud.get(db, report_id)
+    if row is None or row[0].reporter_id != user.id:
+        raise HTTPException(status_code=404, detail="Talep bulunamadi")
+    return ReportFeature.from_row(crud.gizle(db, row[0]))
 
 
 @router.get("", response_model=ReportFeatureCollection)
 def list_reports(
     status: ReportStatus | None = None,
     _: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
-    """Personel (admin/calisan) tum ihbarlari (opsiyonel duruma gore) listeler."""
-    return ReportFeatureCollection.from_rows(crud.list_reports(db, status=status))
+    """Personel tum talepleri (opsiyonel duruma gore) listeler - yalnizca KENDI
+    DEPARTMANININ turlerinde. Vatandasin listeden kaldirdiklari burada durur."""
+    return ReportFeatureCollection.from_rows(
+        crud.list_reports(db, status=status, kapsam_turleri=alan.turler)
+    )
 
 
 @router.post("/{report_id}/onayla", response_model=ReportFeature)
@@ -134,16 +180,20 @@ def approve(
     report_id: uuid.UUID,
     data: ReportReview | None = None,
     user: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
-    """Ihbari onaylar. Govde opsiyoneldir; `type` gonderilirse personel
-    vatandasin sectigi turu duzeltmis olur (bkz. crud.approve_report)."""
-    row = crud.get(db, report_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail="Ihbar bulunamadi")
+    """Talebi onaylar. Govde opsiyoneldir; `type` gonderilirse personel
+    vatandasin sectigi turu duzeltmis olur (bkz. crud.approve_report).
+
+    Tur duzeltmesi talebi BASKA BIR DEPARTMANA devredebilir: Cozum Merkezi
+    'diger' olarak gelen bir talebi 'yol'a cektiginde kayit Fen Isleri'nin
+    kapsamina gecer. Bu bilincli - triyaj mekanizmasi budur - ama hedef tur
+    icin ayrica yetki aranmaz, yoksa 'diger' talepleri hicbir yere devredilemezdi."""
+    row = _talep_getir(db, report_id, alan)
     report = row[0]
     if report.status != ReportStatus.beklemede:
-        raise HTTPException(status_code=409, detail="Ihbar zaten sonuclandirilmis")
+        raise HTTPException(status_code=409, detail="Talep zaten sonuclandirilmis")
     return ReportFeature.from_row(
         crud.approve_report(db, report, user, yeni_tip=data.type if data else None)
     )
@@ -154,14 +204,13 @@ def reject(
     report_id: uuid.UUID,
     data: ReportReview,
     user: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
-    row = crud.get(db, report_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail="Ihbar bulunamadi")
+    row = _talep_getir(db, report_id, alan)
     report = row[0]
     if report.status != ReportStatus.beklemede:
-        raise HTTPException(status_code=409, detail="Ihbar zaten sonuclandirilmis")
+        raise HTTPException(status_code=409, detail="Talep zaten sonuclandirilmis")
     return ReportFeature.from_row(
         crud.reject_report(db, report, user, data.review_note)
     )
@@ -171,15 +220,14 @@ def reject(
 def reopen(
     report_id: uuid.UUID,
     user: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
-    """Reddedilen ihbarin reddini geri alir (tekrar 'beklemede')."""
-    row = crud.get(db, report_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail="Ihbar bulunamadi")
+    """Reddedilen talebin reddini geri alir (tekrar 'beklemede')."""
+    row = _talep_getir(db, report_id, alan)
     report = row[0]
     if report.status != ReportStatus.reddedildi:
         raise HTTPException(
-            status_code=409, detail="Yalnizca reddedilmis ihbarlarin reddi geri alinabilir"
+            status_code=409, detail="Yalnizca reddedilmis taleplerin reddi geri alinabilir"
         )
     return ReportFeature.from_row(crud.reopen_report(db, report, user))

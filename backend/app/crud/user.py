@@ -9,6 +9,10 @@ from ..models.session import Session as SessionRow
 from ..models.user import User, UserRole
 from .log import add_log
 
+# Departmani ZORUNLU olan roller. Admin tum departmanlari gorur, vatandasin
+# departmani yoktur - ikisi de NULL kalir.
+DEPARTMANLI_ROLLER = (UserRole.calisan, UserRole.saha_calisani)
+
 
 def get_by_email(db: Session, email: str) -> User | None:
     return db.execute(select(User).where(User.email == email)).scalar_one_or_none()
@@ -82,6 +86,7 @@ def create_user(
     full_name: str | None = None,
     actor: User | None = None,
     yaka: str | None = None,
+    departman: str | None = None,
 ) -> User:
     """Hesabi once Keycloak'ta acar, sonra yerel satiri baglar. Sira bilincli:
     Keycloak'a yazamazsak yerelde giris yapamayan bir "hayalet ekip" kalmaz.
@@ -89,7 +94,9 @@ def create_user(
     Yerel satir hemen acilir (ilk girise birakilmaz) ki yeni ekip daha giris
     yapmadan ekip listesinde gorunup is alabilsin.
 
-    `yaka` yalnizca saha_calisani rolunde dikkate alinir."""
+    `yaka` yalnizca saha_calisani rolunde dikkate alinir; `departman` ise
+    `calisan` ve `saha_calisani` icin zorunludur (router dogrular), admin ve
+    vatandas icin NULL'a zorlanir - admin zaten tum departmanlari gorur."""
     keycloak_id = keycloak.kullanici_olustur(
         email=email.lower(), parola=password, full_name=full_name, rol=role.value
     )
@@ -99,6 +106,7 @@ def create_user(
         full_name=full_name,
         role=role,
         yaka=yaka if role == UserRole.saha_calisani else None,
+        departman=departman if role in DEPARTMANLI_ROLLER else None,
     )
     db.add(user)
     db.flush()  # id'yi almak icin
@@ -161,6 +169,31 @@ def set_yaka(db: Session, user: User, yaka: str | None, actor: User) -> User:
         entity_id=user.id,
         entity_name=user.email,
         detail=f"Yaka: {yaka or 'konumdan türet'}",
+    )
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def set_departman(db: Session, user: User, departman: str, actor: User) -> User:
+    """Personelin mudurlugunu degistirir.
+
+    Acik oturumlari DUSURULUR: kapsam her istekte `users.departman`'dan
+    okundugu icin oturum teknik olarak dogru veriyi gorur, ama kullanicinin
+    ekraninda hala eski departmanin listeleri acik durur ve bir sonraki
+    tiklamada 404'lerle karsilasir. Yeniden giris, degisikligin nerede
+    oldugunu net gosterir."""
+    eski = user.departman
+    user.departman = departman
+    db.execute(delete(SessionRow).where(SessionRow.user_id == user.id))
+    add_log(
+        db,
+        action=LogAction.user_updated,
+        actor=actor,
+        entity_type="user",
+        entity_id=user.id,
+        entity_name=user.email,
+        detail=f"Departman: {eski or '—'} → {departman}",
     )
     db.commit()
     db.refresh(user)

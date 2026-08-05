@@ -72,13 +72,13 @@ def onar_sahipligi() -> None:
 
 
 def medya_yetkisi() -> None:
-    """A2: ihbar fotografi kimlik dogrulamasi olmadan indirilememeli."""
+    """A2: talep fotografi kimlik dogrulamasi olmadan indirilememeli."""
     bolum("A2 - medya kimlik dogrulamasi")
     personel = admin_girisi()
-    ihbarlar = personel.get(f"{API}/api/reports").json()["features"]
-    fotolu = [i for i in ihbarlar if i["properties"].get("photo_url")]
+    talepler = personel.get(f"{API}/api/reports").json()["features"]
+    fotolu = [i for i in talepler if i["properties"].get("photo_url")]
     if not fotolu:
-        print("[atlandi] fotografli ihbar yok (seed ihbarlarinda photo_url NULL)")
+        print("[atlandi] fotografli talep yok (seed taleplerinde photo_url NULL)")
         return
     yol = fotolu[0]["properties"]["photo_url"]
 
@@ -175,8 +175,8 @@ def yukleme_siniri() -> None:
     alan = {
         "name": "test",
         "type": "diger",
-        "longitude": "28.98",
-        "latitude": "41.00",
+        # Konum artik GeoJSON: nokta/cizgi/alan.
+        "geometry": '{"type":"Point","coordinates":[28.98,41.00]}',
         "note": "test",
     }
 
@@ -209,19 +209,76 @@ def yukleme_siniri() -> None:
     return gercek.json()["properties"]["id"]
 
 
+def departman_kapsami() -> None:
+    """A7: bir mudurlugun personeli BASKA mudurlugun talebini ne gormeli ne de
+    sonuclandirabilmeli.
+
+    Kural backend'de durur, arayuzde degil: `calisan1` (Fen Isleri) arayuzunde
+    park taleplerini hic gormez, ama API'ye dogrudan gidilerek denendiginde de
+    kapali olmali - yoksa yeni bir ekran eklendiginde kural sessizce kaybolurdu.
+
+    Kapsam disi kayit 404 doner, 403 degil: talebin VARLIGI da baska
+    mudurlugun bilgisidir, "yetkiniz yok" demek kaydin var oldugunu sizdirir."""
+    bolum("A7 - departman kapsami")
+    fen = giris("calisan1@greenasset.com", "calisan1234")
+    park = giris("calisan2@greenasset.com", "calisan1234")
+
+    fen_talepler = fen.get(f"{API}/api/reports", params={"status": "beklemede"}).json()
+    park_talepler = park.get(f"{API}/api/reports", params={"status": "beklemede"}).json()
+    fen_turler = {t["properties"]["type"] for t in fen_talepler["features"]}
+    park_turler = {t["properties"]["type"] for t in park_talepler["features"]}
+    assert fen_turler <= {"yol", "kaldirim"}, f"Fen Isleri fazlasini goruyor: {fen_turler}"
+    assert park_turler <= {"agac", "sulama", "oyun_grubu", "bank"}, park_turler
+    print(f"[ok] Fen Isleri yalnizca {sorted(fen_turler)} goruyor")
+    print(f"[ok] Park ve Bahceler yalnizca {sorted(park_turler)} goruyor")
+
+    yabanci = [t for t in park_talepler["features"]]
+    assert yabanci, "park departmaninda bekleyen talep yok (seed_demo calistirin)"
+    hedef = yabanci[0]["properties"]["id"]
+
+    onay = fen.post(f"{API}/api/reports/{hedef}/onayla", headers=ORIGIN)
+    assert onay.status_code == 404, f"beklenen 404, gelen {onay.status_code}"
+    print("[ok] Fen Isleri -> park talebini onayla: 404 (kayit sizdirilmadi)")
+
+    ret = fen.post(
+        f"{API}/api/reports/{hedef}/reddet",
+        json={"review_note": "x"},
+        headers=ORIGIN,
+    )
+    assert ret.status_code == 404, f"beklenen 404, gelen {ret.status_code}"
+    print("[ok] Fen Isleri -> park talebini reddet: 404")
+
+    # Kapsam ICINDEKI varlik yaratma calismali (kural mesru akisi bozmamali),
+    # kapsam disindaki tur ise 403 (kayit yok, gizlenecek bir sey de yok).
+    disari = fen.post(
+        f"{API}/api/assets",
+        json={
+            "name": "kapsam testi",
+            "type": "agac",
+            "status": "iyi",
+            "longitude": 28.98,
+            "latitude": 41.0,
+        },
+        headers=ORIGIN,
+    )
+    assert disari.status_code == 403, f"beklenen 403, gelen {disari.status_code}"
+    print(f"[ok] Fen Isleri -> 'agac' varligi olustur: 403 ({disari.json()['detail']})")
+
+
 def main() -> None:
     print(f"Hedef: {API}")
-    ihbar_id = yukleme_siniri()
+    talep_id = yukleme_siniri()
     medya_yetkisi()
     onar_sahipligi()
     girdi_sinirlari()
     acik_yonlendirme()
     azp_dogrulamasi()
+    departman_kapsami()
 
-    # Test ihbarini temizle.
+    # Test talebini temizle.
     personel = admin_girisi()
     personel.post(
-        f"{API}/api/reports/{ihbar_id}/reddet",
+        f"{API}/api/reports/{talep_id}/reddet",
         json={"review_note": "guvenlik testi"},
         headers=ORIGIN,
     )

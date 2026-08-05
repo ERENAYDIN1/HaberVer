@@ -16,9 +16,19 @@ from ..schemas.asset import (
     AssetUpdate,
     WithinQuery,
 )
-from ..security import get_context, personel, saha_dahil
+from ..security import Kapsam, get_context, kapsam, personel, saha_dahil
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
+
+
+def _kapsamda(row, alan: Kapsam):
+    """Kapsam disindaki bir varlik icin 404 - 403 degil. Varligin VARLIGI da
+    baska departmanin bilgisidir; "yetkin yok" demek kaydin var oldugunu
+    sizdirir. Yazma uclarinda (create/update) 403 kullanilir, cunku orada
+    kullanici zaten neyi denedigini biliyor."""
+    if row is not None and not alan.izinli(row[0].type):
+        return None
+    return row
 
 
 @router.post(
@@ -27,8 +37,12 @@ router = APIRouter(prefix="/api/assets", tags=["assets"])
     status_code=status.HTTP_201_CREATED,
 )
 def create_asset(
-    data: AssetCreate, user: User = Depends(personel), db: Session = Depends(get_db)
+    data: AssetCreate,
+    user: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
+    db: Session = Depends(get_db),
 ):
+    alan.dogrula(data.type)
     row = crud.create_asset(db, data, actor=user)
     return AssetFeature.from_row(row)
 
@@ -38,18 +52,25 @@ def list_assets(
     type: AssetType | None = Query(default=None, description="Varlik tipine gore filtrele"),
     status: AssetStatus | None = Query(default=None, description="Duruma gore filtrele"),
     source: AssetSource | None = Query(
-        default=None, description="Kayitli/ihbar kaynagina gore filtrele"
+        default=None, description="Kayitli/talep kaynagina gore filtrele"
     ),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
-    rows = crud.list_assets(db, asset_type=type, status=status, source=source)
+    rows = crud.list_assets(
+        db, asset_type=type, status=status, source=source, kapsam_turleri=alan.turler
+    )
     return AssetFeatureCollection.from_rows(rows)
 
 
 @router.post(
     "/within", response_model=AssetFeatureCollection, dependencies=[Depends(saha_dahil)]
 )
-def assets_within(query: WithinQuery, db: Session = Depends(get_db)):
+def assets_within(
+    query: WithinQuery,
+    alan: Kapsam = Depends(kapsam),
+    db: Session = Depends(get_db),
+):
     """Verilen poligonun icine dusen varliklari dondurur (PostGIS ST_Within)."""
     rows = crud.assets_within(
         db,
@@ -57,6 +78,7 @@ def assets_within(query: WithinQuery, db: Session = Depends(get_db)):
         asset_type=query.type,
         status=query.status,
         source=query.source,
+        kapsam_turleri=alan.turler,
     )
     return AssetFeatureCollection.from_rows(rows)
 
@@ -64,8 +86,12 @@ def assets_within(query: WithinQuery, db: Session = Depends(get_db)):
 @router.get(
     "/{asset_id}", response_model=AssetFeature, dependencies=[Depends(saha_dahil)]
 )
-def get_asset(asset_id: uuid.UUID, db: Session = Depends(get_db)):
-    row = crud.get_asset(db, asset_id)
+def get_asset(
+    asset_id: uuid.UUID,
+    alan: Kapsam = Depends(kapsam),
+    db: Session = Depends(get_db),
+):
+    row = _kapsamda(crud.get_asset(db, asset_id), alan)
     if row is None:
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")
     return AssetFeature.from_row(row)
@@ -76,8 +102,18 @@ def update_asset(
     asset_id: uuid.UUID,
     data: AssetUpdate,
     user: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
+    mevcut = crud.get_asset(db, asset_id)
+    if mevcut is None:
+        raise HTTPException(status_code=404, detail="Varlik bulunamadi")
+    # Hem MEVCUT hem HEDEF tur kapsamda olmali: aksi halde bir departman kendi
+    # varligini baska departmanin turune cevirip erisimini kaybettirebilirdi.
+    alan.dogrula(mevcut[0].type)
+    if data.type is not None:
+        alan.dogrula(data.type)
+
     row = crud.update_asset(db, asset_id, data, actor=user)
     if row is None:
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")
@@ -91,6 +127,7 @@ def repair_asset(
     # Rol buradan okunur, `user.role` kolonundan degil (bkz. security.py).
     # FastAPI bagimliliklari onbellekledigi icin ek sorgu olusmaz.
     baglam: OturumBaglami = Depends(get_context),
+    alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
     """Varligi 'Tamir Edildi' olarak isaretler (durumu 'iyi'ye ceker); saha
@@ -106,6 +143,10 @@ def repair_asset(
 
     Personel (admin/calisan) muaftir: varligi zaten PUT ile duzenleyebiliyorlar,
     burada kisitlamak yalnizca ayni isi iki yoldan yapmayi engellerdi."""
+    mevcut = _kapsamda(crud.get_asset(db, asset_id), alan)
+    if mevcut is None:
+        raise HTTPException(status_code=404, detail="Varlik bulunamadi")
+
     if baglam.etkin_rol is UserRole.saha_calisani:
         gorev = assignment_crud.aktif_gorev_bilgisi(db, asset_id)
         if gorev is None or gorev["worker_id"] != user.id:
@@ -121,7 +162,12 @@ def repair_asset(
 
 @router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_asset(
-    asset_id: uuid.UUID, user: User = Depends(personel), db: Session = Depends(get_db)
+    asset_id: uuid.UUID,
+    user: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
+    db: Session = Depends(get_db),
 ):
+    if _kapsamda(crud.get_asset(db, asset_id), alan) is None:
+        raise HTTPException(status_code=404, detail="Varlik bulunamadi")
     if not crud.delete_asset(db, asset_id, actor=user):
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")

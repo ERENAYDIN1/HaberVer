@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../auth/AuthContext";
 import { useDeleteAsset, useRepairAsset } from "../hooks/useAssets";
+import {
+  useDepartmanlar,
+  useTurDepartmanEslemesi,
+} from "../hooks/useDepartmanlar";
 import { useIlceler, useMahalleler } from "../hooks/useSinirlar";
+import { departmanBul, departmanTurleri } from "../types/departman";
 import {
   ASSET_STATUSES,
   ASSET_STATUS_LABELS,
@@ -59,6 +64,9 @@ interface AssetListProps {
    *  ikisi de ayni durumu yazdigi icin biri digerini sifirlamaz. */
   turler: Record<AssetType, boolean>;
   onTurSec: (tur: AssetType | null) => void;
+  /** Departman filtresi: bir departman = bir tur kumesi oldugu icin AYRI BIR
+   *  STATE DEGIL, ayni tur kutucuklarina yazilir (bkz. useKatmanlar). */
+  onDepartmanSec: (turler: readonly AssetType[] | null) => void;
   durumlar: Record<AssetStatus, boolean>;
   onDurumSec: (durum: AssetStatus | null) => void;
   seciliId: string | null;
@@ -72,7 +80,7 @@ interface AssetListProps {
   onMahalleSec: (kod: string | null) => void;
   idariHatasi?: string | null;
   /** Saha ekipleri - bakim bekleyen bir varligin detayindan ekibe yonlendirme
-   *  yapilabilsin diye ("İhbarlar > Onaylandı" panelindeki ayni yetenek). */
+   *  yapilabilsin diye ("Talepler > Onaylandı" panelindeki ayni yetenek). */
   ekipler?: EkipOzet[];
   /** Detay modalindaki "Konuma Git" - haritayi varligin konumuna ucurur. */
   onVarligaGit?: (asset: AssetFeature) => void;
@@ -85,6 +93,7 @@ export default function AssetList({
   error,
   turler,
   onTurSec,
+  onDepartmanSec,
   durumlar,
   onDurumSec,
   seciliId,
@@ -119,6 +128,27 @@ export default function AssetList({
   const tipDegeri = acilirDegeri(ASSET_TYPES, turler);
   const durumDegeri = acilirDegeri(ASSET_STATUSES, durumlar);
   const acikTipSayisi = ASSET_TYPES.filter((t) => turler[t]).length;
+
+  // Departman filtresi yalnizca ADMIN'e gosterilir: diger personelin listesi
+  // zaten backend'de kendi mudurluguyle sinirli, filtre tek secenekli olurdu.
+  // Onlara bunun yerine "hangi mudurlugu goruyorsunuz" rozeti gosterilir.
+  const adminMi = user?.role === "admin";
+  const { data: departmanlar } = useDepartmanlar();
+  const { data: esleme } = useTurDepartmanEslemesi();
+  const kendiDepartmani = departmanBul(departmanlar, user?.departman);
+  // Acilirin gosterecegi deger tur kutucuklarindan TURETILIR: lejanttan tek
+  // tur kapatilinca filtre sessizce "yanlis departman" gostermesin.
+  const seciliDepartman = useMemo(() => {
+    if (!esleme || !adminMi) return "";
+    const acik = ASSET_TYPES.filter((t) => turler[t]);
+    if (acik.length === ASSET_TYPES.length) return "";
+    const kodlar = new Set(acik.map((t) => esleme[t]));
+    if (kodlar.size !== 1) return "";
+    const kod = [...kodlar][0];
+    if (!kod) return "";
+    const tamKume = departmanTurleri(esleme, kod);
+    return tamKume.length === acik.length ? kod : "";
+  }, [esleme, turler, adminMi]);
   const acikDurumSayisi = ASSET_STATUSES.filter((s) => durumlar[s]).length;
 
   // Haritadan secim yapildiginda listedeki karti gorunur alana kaydir.
@@ -138,6 +168,38 @@ export default function AssetList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* Admin: departman filtresi. Diger personel: kapsam rozeti - listenin
+          neden dar oldugu ekranda yazili olmali, "eksik veri" sanilmasin. */}
+      {adminMi ? (
+        <div className="border-b border-slate-200 px-4 py-3">
+          <select
+            className={selectClass}
+            value={seciliDepartman}
+            onChange={(e) => {
+              const kod = e.target.value;
+              onDepartmanSec(kod ? departmanTurleri(esleme, kod) : null);
+            }}
+          >
+            <option value="">Tüm departmanlar</option>
+            {(departmanlar ?? []).map((d) => (
+              <option key={d.kod} value={d.kod}>
+                {d.ad}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        kendiDepartmani && (
+          <p
+            className="border-b border-slate-200 px-4 py-2 text-[11px]"
+            style={{ color: kendiDepartmani.renk }}
+          >
+            <span className="font-medium">{kendiDepartmani.ad}</span>
+            <span className="text-slate-400"> · yalnızca bu müdürlüğün kayıtları</span>
+          </p>
+        )
+      )}
+
       <div className="flex gap-2 border-b border-slate-200 px-4 py-3">
         <select
           className={selectClass}
@@ -301,7 +363,7 @@ export default function AssetList({
         </ul>
       </div>
 
-      {/* Detay modali "İhbarlar > Onaylandı" listesindekiyle AYNI yetenekleri
+      {/* Detay modali "Talepler > Onaylandı" listesindekiyle AYNI yetenekleri
           sunar (ekibe yonlendirme dahil): bakim bekleyen bir varlik, hangi
           panelden acildigina gore farkli seyler yapabiliyordu. */}
       <AssetDetayModal

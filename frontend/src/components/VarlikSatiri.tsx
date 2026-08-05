@@ -27,7 +27,7 @@ interface VarlikSatiriProps {
   silPending: boolean;
 }
 
-/** Varlik listelerinde (Varliklar sekmesi + Ihbarlar > Onaylandi) ortak
+/** Varlik listelerinde (Varliklar sekmesi + Talepler > Onaylandi) ortak
  *  kullanilan tek bir satir: ikon/foto, ad, tur, durum rozeti, konum ve
  *  secilince acilan Detay/Tamir Edildi/Duzenle/Sil aksiyonlari. */
 const VarlikSatiri = forwardRef<HTMLLIElement, VarlikSatiriProps>(function VarlikSatiri(
@@ -52,7 +52,7 @@ const VarlikSatiri = forwardRef<HTMLLIElement, VarlikSatiriProps>(function Varli
   const TipIkonu = TIP_IKONU[type] ?? IconPin;
   const foto = fotoUrl(photo_url);
   const [fotoAcik, setFotoAcik] = useState(false);
-  // Tamir edilmis ihbar varliginda otomatik silmeye kalan gun (varsa).
+  // Tamir edilmis talep varliginda otomatik silmeye kalan gun (varsa).
   const kalanGun =
     source === "ihbar" && status === "iyi" ? kalanSilmeGunu(repaired_at) : null;
 

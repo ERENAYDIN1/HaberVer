@@ -11,28 +11,29 @@ import {
   durumEtiketi,
   type AssetType,
 } from "../types/asset";
+import { talepNoktasi } from "../types/report";
 import type { ReportFeature } from "../types/report";
 import { AksiyonButonu, AksiyonSeridi } from "./Aksiyonlar";
 import { IconCheck } from "./icons";
-import IhbarDurumRozeti from "./IhbarDurumRozeti";
+import TalepDurumRozeti from "./TalepDurumRozeti";
 import Modal from "./Modal";
 import TipSecenekleri from "./TipSecenekleri";
 
 interface ReportDetayModalProps {
   report: ReportFeature | null;
   onKapat: () => void;
-  /** Personel (admin/calisan) ise bekleyen ihbari buradan onaylayip
+  /** Personel (admin/calisan) ise bekleyen talebi buradan onaylayip
    *  reddedebilir - haritadaki isaretciden de islem yapilabilmesi icin. */
   islemYetkisi?: boolean;
   /** Onay/ret basarili olunca (ust bilesen sorgulari tazeler, modali kapatir). */
   onIslemBitti?: () => void;
-  /** Onaylanmis ihbarda "Varlığı Yönet": ondan olusan varligin detay/yonetim
+  /** Onaylanmis talepte "Varlığı Yönet": ondan olusan varligin detay/yonetim
    *  modalini acar. Haritadaki popup'in ayni adli dugmesiyle TEK islemdir -
-   *  ihbar ekrani ile varlik ekrani arasindaki tek gecis noktasi. */
+   *  talep ekrani ile varlik ekrani arasindaki tek gecis noktasi. */
   onVarligiYonet?: (raporId: string) => void;
 }
 
-/** Bir ihbarin (bekleyen/onaylanmis/reddedilen) tum detaylarini (foto dahil)
+/** Bir talebin (bekleyen/onaylanmis/reddedilen) tum detaylarini (foto dahil)
  *  kucuk bir pop up icinde gosterir - AssetDetayModal ile ayni tasarim
  *  dilini kullanir, boylece "Detay" her yerde tek, tutarli bir modal acar. */
 export default function ReportDetayModal({
@@ -42,19 +43,19 @@ export default function ReportDetayModal({
   onIslemBitti,
   onVarligiYonet,
 }: ReportDetayModalProps) {
-  const koord = report ? report.geometry.coordinates : null;
+  const koord = report ? talepNoktasi(report) : null;
   const { data: konum } = useKonumCozumu(koord ? koord[1] : null, koord ? koord[0] : null);
   const [islemde, setIslemde] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
-  // Onayda uygulanacak tur, hangi ihbar icin secildigiyle birlikte tutulur:
-  // kayit yoksa ya da baska bir ihbara gecildiyse vatandasin sectigi tur
+  // Onayda uygulanacak tur, hangi talep icin secildigiyle birlikte tutulur:
+  // kayit yoksa ya da baska bir talebe gecildiyse vatandasin sectigi tur
   // gecerlidir. Boylece ilk render'da "duzeltildi" isareti yanlislikla yanmaz
-  // ve modal baska bir ihbara gecerken sifirlayan bir effect'e gerek kalmaz.
+  // ve modal baska bir talebe gecerken sifirlayan bir effect'e gerek kalmaz.
   const [tipSecim, setTipSecim] = useState<{ raporId: string; tip: AssetType } | null>(
     null
   );
 
-  // Onaylanmis ihbarin isi artik ondan olusan VARLIK uzerinden yurur. O varligin
+  // Onaylanmis talebin isi artik ondan olusan VARLIK uzerinden yurur. O varligin
   // guncel durumu burada salt-okunur gosterilir ki "Detay" bir cikmaz sokak
   // olmasin: kullanici ne oldugunu gormeden "Varlığı Yönet"e basmak zorunda
   // kalmasin. Islemler yine yalnizca varlik kartinda.
@@ -93,14 +94,14 @@ export default function ReportDetayModal({
   if (!report) return null;
   const p = report.properties;
   const tip = tipSecim?.raporId === p.id ? tipSecim.tip : p.type;
-  const [lng, lat] = report.geometry.coordinates;
+  const [lng, lat] = talepNoktasi(report) ?? [0, 0];
   const fotoSrc = fotoUrl(p.photo_url);
   const konumMetni = konum
     ? [konum.mahalle?.ad, konum.ilce?.ad].filter(Boolean).join(", ")
     : "";
 
   return (
-    <Modal acik={report !== null} baslik="İhbar Detayı" onKapat={onKapat}>
+    <Modal acik={report !== null} baslik="Talep Detayı" onKapat={onKapat}>
       <div className="space-y-3">
         {fotoSrc && (
           <img
@@ -115,7 +116,7 @@ export default function ReportDetayModal({
           <p className="text-xs text-slate-500">{ASSET_TYPE_LABELS[p.type]}</p>
         </div>
 
-        <IhbarDurumRozeti durum={p.status} />
+        <TalepDurumRozeti durum={p.status} />
 
         <dl className="space-y-1.5 text-xs">
           {konumMetni && (
@@ -137,7 +138,7 @@ export default function ReportDetayModal({
             </dd>
           </div>
           {/* Sonuclanma tarihi (`reviewed_at`) hem onayda hem redde yazilir;
-              etiket duruma gore degisir. Bekleyen ihbarda satir hic cikmaz. */}
+              etiket duruma gore degisir. Bekleyen talepte satir hic cikmaz. */}
           {p.reviewed_at && p.status !== "beklemede" && (
             <div className="flex justify-between gap-3">
               <dt className="text-slate-500">
@@ -167,7 +168,7 @@ export default function ReportDetayModal({
           </div>
         )}
 
-        {/* Onay/ret: haritadaki ihbar isaretcisinden de karar verilebilsin diye
+        {/* Onay/ret: haritadaki talep isaretcisinden de karar verilebilsin diye
             (popup -> "Detay" -> buradaki butonlar). Onay yeni bir bakim varligi
             olusturur ve otomatik atamayi tetikler (bkz. crud/report.py).
 
@@ -196,7 +197,7 @@ export default function ReportDetayModal({
               </select>
               {tip !== p.type && (
                 <p className="mt-1 text-[11px] text-amber-700">
-                  Oluşacak varlık ve arşivlenen ihbar “{ASSET_TYPE_LABELS[tip]}”
+                  Oluşacak varlık ve arşivlenen talep “{ASSET_TYPE_LABELS[tip]}”
                   olarak kaydedilecek.
                 </p>
               )}
@@ -224,13 +225,13 @@ export default function ReportDetayModal({
           </div>
         )}
 
-        {/* Onaylanmis ihbarin isi artik ondan olusan VARLIK uzerinden yurur
+        {/* Onaylanmis talebin isi artik ondan olusan VARLIK uzerinden yurur
             (ekibe atama, tamir, duzenleme, silme). Once o varligin nerede
             oldugu ozetlenir, sonra tek gecis dugmesi gelir. */}
         {islemYetkisi && p.status === "onaylandi" && (
           <div className="space-y-2 border-t border-slate-100 pt-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Bu ihbardan doğan varlık
+              Bu talepten doğan varlık
             </p>
             <div className="border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs">
               {varlik ? (
@@ -252,7 +253,7 @@ export default function ReportDetayModal({
                 <span className="text-slate-500">
                   {varlikId
                     ? "Varlık bulunamadı — tamir sonrası otomatik silinmiş olabilir."
-                    : "Bu ihbara bağlı bir varlık kaydı yok."}
+                    : "Bu talebe bağlı bir varlık kaydı yok."}
                 </span>
               )}
             </div>
@@ -270,8 +271,8 @@ export default function ReportDetayModal({
         )}
 
         {/* Reddi geri alma: yanlislikla reddedilen (ya da sonradan gecerli
-            oldugu anlasilan) ihbar tekrar "beklemede"ye cekilir, boylece
-            onaylanip varliga donusebilir. Onaylanmis ihbarlarda yoktur -
+            oldugu anlasilan) talep tekrar "beklemede"ye cekilir, boylece
+            onaylanip varliga donusebilir. Onaylanmis taleplerde yoktur -
             onay bir varlik olusturdugundan geri alinamaz. */}
         {islemYetkisi && p.status === "reddedildi" && (
           <AksiyonSeridi>
@@ -283,7 +284,7 @@ export default function ReportDetayModal({
               {islemde ? "…" : "Reddi Geri Al"}
             </AksiyonButonu>
             <span className="text-[11px] text-slate-500">
-              İhbar tekrar “Bekleyen” listesine döner, ret nedeni silinir.
+              Talep tekrar “Bekleyen” listesine döner, ret nedeni silinir.
             </span>
           </AksiyonSeridi>
         )}

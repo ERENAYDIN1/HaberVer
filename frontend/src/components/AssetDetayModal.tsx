@@ -7,6 +7,11 @@ import { useAuth } from "../auth/AuthContext";
 import { useDeleteAsset, useRepairAsset } from "../hooks/useAssets";
 import { useKonumCozumu } from "../hooks/useSinirlar";
 import {
+  useDepartmanlar,
+  useTurDepartmanEslemesi,
+} from "../hooks/useDepartmanlar";
+import { departmanAdi } from "../types/departman";
+import {
   ASSET_SOURCE_LABELS,
   ASSET_TYPE_LABELS,
   durumEtiketi,
@@ -45,7 +50,7 @@ interface AssetDetayModalProps {
 }
 
 /** Bu modaldan varlik yonetebilmek icin gereken ortak prop kumesi. Tek yerde
- *  durur ki liste, ihbar paneli ve harita isaretcisi ayni yetenekleri sunsun. */
+ *  durur ki liste, talep paneli ve harita isaretcisi ayni yetenekleri sunsun. */
 export interface VarlikYonetimProplari {
   atayabilir: boolean;
   ekipler?: EkipOzet[];
@@ -89,7 +94,7 @@ export function useVarlikYonetimi({
 }
 
 /** Varligin tum detaylarini gosterir. Fotograf (varsa) her zaman gorunur:
- *  saha calisani ihbar edilen varligi sahada daha kolay bulsun. */
+ *  saha calisani talep edilen varligi sahada daha kolay bulsun. */
 export default function AssetDetayModal({
   asset,
   onKapat,
@@ -126,14 +131,24 @@ export default function AssetDetayModal({
     queryFn: () => gorevDurumu(assetId!),
     enabled: atamaGoster,
   });
+  const { data: departmanlar } = useDepartmanlar();
+  const { data: esleme } = useTurDepartmanEslemesi();
   const mevcutGorev = durum?.gorev ?? null;
   const varlikYaka = durum?.varlik_yaka ?? null;
 
-  // Elle atama yaka kisitindan muaftir, ama personel karsi yakadaki bir ekibi
-  // secerken bunu gormeli.
+  // Elle atama yaka VE departman kisitlarindan muaftir, ama personel
+  // secerken ikisini de gormeli: otomatik dagitimin asla yapmayacagi bir
+  // atamayi elle yaptigini bilerek yapsin.
   const seciliEkipNesnesi = ekipler?.find((e) => e.id === seciliEkip);
   const karsiYaka = Boolean(
     seciliEkipNesnesi?.yaka && varlikYaka && seciliEkipNesnesi.yaka !== varlikYaka,
+  );
+  // Isin departmani turunden turetilir (ayri bir alan degil).
+  const varlikDepartman = asset ? esleme?.[asset.properties.type] : undefined;
+  const karsiDepartman = Boolean(
+    seciliEkipNesnesi?.departman &&
+      varlikDepartman &&
+      seciliEkipNesnesi.departman !== varlikDepartman,
   );
 
   // Varlik degisince atama durumu sifirlanir (silme onayini SilOnayi birakir).
@@ -377,6 +392,9 @@ export default function AssetDetayModal({
                   const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
                   const suanki = mevcutGorev?.worker_id === e.id;
                   const uzak = Boolean(e.yaka && varlikYaka && e.yaka !== varlikYaka);
+                  const baskaDep = Boolean(
+                    e.departman && varlikDepartman && e.departman !== varlikDepartman,
+                  );
                   return (
                     <option key={e.id} value={e.id} disabled={dolu && !suanki}>
                       {(e.full_name || e.email) +
@@ -384,6 +402,9 @@ export default function AssetDetayModal({
                         (dolu ? " · dolu)" : ")") +
                         (e.last_seen_at ? "" : " · konum yok") +
                         (uzak ? ` · karşı yaka (${YAKA_KISA[e.yaka as Yaka] ?? e.yaka})` : "") +
+                        (baskaDep
+                          ? ` · başka departman (${departmanAdi(departmanlar, e.departman)})`
+                          : "") +
                         (suanki ? " · şu an atalı" : "")}
                     </option>
                   );
@@ -405,6 +426,15 @@ export default function AssetDetayModal({
                 {yakaEtiketi(seciliEkipNesnesi?.yaka)}'nda, varlık ise{" "}
                 {yakaEtiketi(varlikYaka)}'nda. Ekibin köprüden geçmesi gerekir —
                 otomatik atama bunu yapmaz, elle atarsanız yine de yönlendirilir.
+              </p>
+            )}
+
+            {karsiDepartman && (
+              <p className="mt-2 border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+                <strong>Başka departman:</strong> seçtiğiniz ekip{" "}
+                {departmanAdi(departmanlar, seciliEkipNesnesi?.departman)}, bu iş
+                ise {departmanAdi(departmanlar, varlikDepartman)} kapsamında.
+                Otomatik atama bunu yapmaz, elle atarsanız yine de yönlendirilir.
               </p>
             )}
 

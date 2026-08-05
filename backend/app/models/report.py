@@ -18,7 +18,7 @@ class ReportStatus(str, enum.Enum):
 
 
 class Report(Base):
-    """Vatandas tarafindan gonderilen ihbar. Onaylaninca bir Asset olusturulur;
+    """Vatandas tarafindan gonderilen talep. Onaylaninca bir Asset olusturulur;
     bu yeni varligin id'si created_asset_id'de tutulur."""
 
     __tablename__ = "reports"
@@ -31,13 +31,27 @@ class Report(Base):
     reporter_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    # Vatandasin ihbar ettigi seyin adi/aciklamasi.
+    # Vatandasin talep ettigi seyin adi/aciklamasi.
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     type: Mapped[AssetType] = mapped_column(
         Enum(AssetType, name="asset_type"), nullable=False
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Vatandasin cizdigi HAM SEKIL: POINT, LINESTRING veya POLYGON. Bir yol
+    # catlagi nokta degildir; sahadaki isin buyuklugu bu kolonda korunur ve
+    # personel duzeltse bile ham kayit belge olarak oldugu gibi durur.
     geometry: Mapped[object] = mapped_column(
+        Geometry(geometry_type="GEOMETRY", srid=4326, spatial_index=False),
+        nullable=False,
+    )
+    # Seklin temsil noktasi; her zaman doludur (bkz. migration 0008). Harita
+    # pini, otomatik atamanin mesafe hesabi ve yaka cozumlemesi BU kolonu okur -
+    # boylece cizgi/alan destegi atama ve yaka altyapisina hic dokunmadi.
+    # ORM adi sutun adindan (`nokta`) BILINCLI olarak farkli: sema tarafinda da
+    # `nokta` adinda bir alan var ve pydantic'in `from_attributes` esleme si
+    # ikisini birbirine karistirip ham WKB'yi koordinat cifti sanardi.
+    temsil_noktasi: Mapped[object] = mapped_column(
+        "nokta",
         Geometry(geometry_type="POINT", srid=4326, spatial_index=False),
         nullable=False,
     )
@@ -57,6 +71,12 @@ class Report(Base):
     review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_asset_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("assets.id", ondelete="SET NULL"), nullable=True
+    )
+    # Vatandas talebi kendi listesinden kaldirdiginda dolar. GERCEK SILME
+    # DEGILDIR: onaylanmis bir talep silinseydi ondan olusan varlik, atamasi ve
+    # audit log kayitlari sahipsiz kalirdi. Yalnizca /reports/mine suzer.
+    reporter_hidden_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

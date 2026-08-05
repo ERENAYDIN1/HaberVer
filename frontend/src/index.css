@@ -86,7 +86,12 @@
    buraya `position:relative` yazilinca isaretciler harita kaydirilirken
    yerinden kayiyordu. Bu yuzden mutlak konumlu parcalarin (rozet/ad)
    referansi ic sarmalayici `.ekip-marker__govde`'dir. */
+/* Pin rengi ekibin MUDURLUGUNU anlatir; iki ton da JS'ten gelir
+   (`ekipMarkerGuncelle`), cunku departman renkleri calisma zamaninda
+   backend'den okunur. Buradaki degerler yalnizca yedektir. */
 .ekip-marker {
+  --ekip-renk: #4338ca;
+  --ekip-renk-acik: #818cf8;
   cursor: pointer;
   line-height: 0;
   filter: drop-shadow(0 3px 4px rgba(15, 23, 42, 0.3));
@@ -107,7 +112,7 @@
   margin-bottom: 7px;
   border-radius: 50% 50% 50% 0;
   border: 2.5px solid #fff;
-  background: linear-gradient(145deg, #818cf8, #4338ca);
+  background: linear-gradient(145deg, var(--ekip-renk-acik), var(--ekip-renk));
   color: #fff;
   display: flex;
   align-items: center;
@@ -156,9 +161,11 @@
   opacity: 1;
   transform: translate(-50%, 0);
 }
-/* Kapasitesi dolu ekip: rozet + pin kirmiziya doner, uzaktan da secilir. */
+/* Kapasitesi dolu ekip. Dolgu ARTIK KIRMIZIYA DONMEZ: renk mudurlugu
+   anlatiyor, doluluk onun uzerine binen ikinci bir bilgi. Bu yuzden doluluk
+   kirmizi bir kenarlik + kirmizi yuk rozetiyle gosterilir. */
 .ekip-marker--dolu .ekip-marker__pin {
-  background: linear-gradient(145deg, #fb7185, #dc2626);
+  border-color: #dc2626;
 }
 .ekip-marker--dolu .ekip-marker__rozet {
   background: #dc2626;

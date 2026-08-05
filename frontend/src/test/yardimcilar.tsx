@@ -63,7 +63,7 @@ export function varlik(
   };
 }
 
-export function ihbar(
+export function talep(
   ozel: Partial<ReportFeature["properties"]> & {
     koordinat?: [number, number];
   } = {}
@@ -74,7 +74,7 @@ export function ihbar(
     geometry: { type: "Point", coordinates: koordinat },
     properties: {
       id: props.id ?? uuid(),
-      name: props.name ?? "Test Ihbar",
+      name: props.name ?? "Test Talep",
       type: (props.type ?? "agac") as AssetType,
       status: (props.status ?? "beklemede") as ReportStatus,
       note: props.note ?? "aciklama",

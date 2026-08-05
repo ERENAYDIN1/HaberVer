@@ -68,6 +68,10 @@ class EkipOzet(BaseModel):
     # Ekibin etkin yakasi: users.yaka doluysa o, yoksa son konumundan turetilen
     # (konum da yoksa None). Otomatik atamada bu yakadaki isler verilir.
     yaka: str | None = None
+    # Ekibin mudurlugu. Otomatik atamada YALNIZCA bu departmanin turlerindeki
+    # isler bu ekibe verilir; arayuz elle atamada "baska departman" uyarisini
+    # bundan uretir. Isin departmani turunden turetilir (frontend'deki esleme).
+    departman: str | None = None
 
     @classmethod
     def from_row(cls, row) -> "EkipOzet":
@@ -80,6 +84,7 @@ class EkipOzet(BaseModel):
             last_seen_at=row.last_seen_at,
             aktif_gorev=row.aktif_gorev,
             yaka=row.yaka,
+            departman=row.departman,
         )
 
 
@@ -156,6 +161,7 @@ class EkipGorevleri(BaseModel):
     last_seen_at: datetime | None
     aktif_gorev: int
     yaka: str | None = None
+    departman: str | None = None
     gorevler: list[GorevOzet]
     # Ekibin en son tamamladigi birkac is (bkz. crud.SON_TAMAMLANAN_SAYISI).
     son_tamamlananlar: list[TamamlananOzet] = []
