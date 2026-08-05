@@ -204,6 +204,23 @@ def _keycloak_hesabi(email: str, ad: str, rol: str, parola: str) -> uuid.UUID:
 
 def sil(db) -> None:
     """Demo veriyi kaldirir. Silme sirasi FK bagimliliklarina gore onemlidir."""
+    # Onaydan dogan varlik adini TALEPTEN alir, yani TUM_VARLIK_ADLARI'nda
+    # gecmez; ustelik reports.created_asset_id ON DELETE SET NULL oldugu icin
+    # talep silinince varlik pesinden gitmez. Bag kopmadan once silinmezse
+    # panelde gorunen ama haritada pini olmayan oksuz varliklar kalir.
+    # Demo hesabin kendi actigi talepler de dahil: users silinince reporter_id
+    # CASCADE ile o satirlari da goturur.
+    db.execute(
+        sa.text(
+            "DELETE FROM assets WHERE id IN ("
+            "  SELECT created_asset_id FROM reports"
+            "  WHERE created_asset_id IS NOT NULL"
+            "    AND (name = ANY(:talep_adlari) OR reporter_id IN"
+            "         (SELECT id FROM users WHERE email = ANY(:mailler)))"
+            ")"
+        ),
+        {"talep_adlari": TUM_TALEP_ADLARI, "mailler": TUM_EMAILLER},
+    )
     db.execute(
         sa.text("DELETE FROM reports WHERE name = ANY(:adlar)"),
         {"adlar": TUM_TALEP_ADLARI},
