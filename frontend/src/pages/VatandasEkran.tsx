@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createReport, fotoUrl, hideReport, myReports } from "../api/reports";
 import { useAuth } from "../auth/AuthContext";
-import { SilOnayi } from "../components/Aksiyonlar";
 import TalepDurumRozeti from "../components/TalepDurumRozeti";
 import KonumSecMap, { type CizimAyari } from "../components/KonumSecMap";
 import { inputClass, labelClass } from "../utils/formSiniflari";
@@ -319,12 +318,8 @@ export default function VatandasEkran() {
       </header>
 
       {/* Panel haritanin uzerine biner: akista olsaydi acilip kapanmasi
-          haritayi yeniden boyutlandirir ve goruntu titrerdi. Genisligi
-          `--panel` ile yayilir, haritadaki cizim araci ona gore kayar. */}
-      <div
-        className="relative min-h-0 flex-1"
-        style={{ "--panel": panelAcik ? "380px" : "0px" } as CSSProperties}
-      >
+          haritayi yeniden boyutlandirir ve goruntu titrerdi. */}
+      <div className="relative min-h-0 flex-1">
         {/* Sol: form + taleplerim */}
         <aside
           className={`absolute inset-y-0 left-0 z-30 flex flex-col overflow-y-auto overflow-x-hidden border-r bg-white transition-[width] duration-200 ease-out ${
@@ -603,14 +598,12 @@ export default function VatandasEkran() {
           />
 
           {/* Cizim araci: personel konsolundaki `CizimPaneli` ile ayni yerde
-              (alt-orta) ve ayni islerde - kose sayisi + anlik olcu, geri
-              al/temizle ve cizimi bitiren "Tamamla". */}
+              (ekranin alt-ortasi; sol panel acilip kapaninca yeri degismez)
+              ve ayni islerde - kose sayisi + anlik olcu, geri al/iptal ve
+              cizimi bitiren "Tamamla". */}
           {sekil !== "Point" && (
-            <div
-              className="pointer-events-none absolute bottom-6 right-0 z-10 flex justify-center px-4 transition-[left] duration-200 ease-out"
-              style={{ left: "var(--panel)" }}
-            >
-              <div className="pointer-events-auto w-full max-w-sm border border-slate-300 bg-white/95 p-3 shadow-lg backdrop-blur-sm">
+            <div className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4">
+              <div className="pointer-events-auto w-full max-w-sm rounded-xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur-sm">
                 <div className="flex items-center gap-2">
                   <span
                     className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -640,7 +633,7 @@ export default function VatandasEkran() {
                     <button
                       type="button"
                       onClick={() => setCizimTamam(false)}
-                      className="flex-1 border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                      className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
                     >
                       Düzenle
                     </button>
@@ -648,25 +641,25 @@ export default function VatandasEkran() {
                     <>
                       <button
                         type="button"
+                        onClick={() => setNoktalar([])}
+                        disabled={!noktalar.length}
+                        className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        İptal
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setNoktalar((n) => n.slice(0, -1))}
                         disabled={!noktalar.length}
-                        className="flex-1 border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Geri al
                       </button>
                       <button
                         type="button"
-                        onClick={() => setNoktalar([])}
-                        disabled={!noktalar.length}
-                        className="flex-1 border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Temizle
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => setCizimTamam(true)}
                         disabled={!cizimYeterli}
-                        className="flex-1 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        className="flex-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                       >
                         Tamamla
                       </button>
@@ -731,8 +724,23 @@ function TalepKarti({ talep, kaldiriliyor, onKaldir }: TalepKartiProps) {
   const gorunum = talepGorunumu(p.status, p.asset_status ?? undefined, true);
 
   return (
-    <li className="border border-slate-200 bg-slate-50 p-2">
-      <div className="flex gap-3">
+    <li className="relative border border-slate-200 bg-slate-50 p-2">
+      {/* Listeden dusurur, SILMEZ: kayit belediyede durmaya devam eder.
+          Onaylanmis bir talep gercekten silinseydi ondan olusan varlik ve
+          saha gorevi sahipsiz kalirdi. */}
+      <button
+        type="button"
+        onClick={onKaldir}
+        disabled={kaldiriliyor}
+        title="Listemden kaldır"
+        aria-label="Listemden kaldır"
+        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+      >
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M6 6 L18 18 M18 6 L6 18" />
+        </svg>
+      </button>
+      <div className="flex gap-3 pr-6">
         {fotoSrc && (
           <img
             src={fotoSrc}
@@ -760,20 +768,6 @@ function TalepKarti({ talep, kaldiriliyor, onKaldir }: TalepKartiProps) {
             </p>
           )}
         </div>
-      </div>
-      {/* "Listemden kaldır", "Sil" DEGIL: kayit belediyede durmaya devam eder,
-          yalnizca bu listeden dusulur. Onaylanmis bir talep gercekten
-          silinseydi ondan olusan varlik ve saha gorevi sahipsiz kalirdi. */}
-      <div className="mt-1.5 flex justify-end">
-        <SilOnayi
-          satirIci
-          etiket="Listemden kaldır"
-          soru="Listenizden kaldırılsın mı?"
-          onayEtiketi="Evet, kaldır"
-          calisiyorEtiketi="Kaldırılıyor…"
-          siliniyor={kaldiriliyor}
-          onSil={onKaldir}
-        />
       </div>
     </li>
   );
