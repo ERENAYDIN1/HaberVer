@@ -7,6 +7,8 @@ import {
   departmanTurGruplari,
   departmanTurleri,
   grupUyumsuzlugu,
+  lejantDepartmanlari,
+  lejantTurleri,
   turDepartmani,
   type Departman,
   type TurDepartmanEslemesi,
@@ -122,6 +124,54 @@ describe("departmanTurGruplari", () => {
     // esleme gelince yerine otururdu - lejantta gorulen tam olarak buydu.
     expect(departmanTurGruplari(undefined, ESLEME, TURLER)).toBeNull();
     expect(departmanTurGruplari(DEPARTMANLAR, undefined, TURLER)).toBeNull();
+  });
+});
+
+/** Lejant, backend'deki `Kapsam` kuralinin gorsel karsiligidir: departmani
+ *  olan personel diger mudurluklerin kayitlarini goremez, dolayisiyla lejantta
+ *  ADLARINI da gormemeli. Bir donem tum mudurluk basliklari (ve bolge/guzergah
+ *  katmanlarinda "0" sayacli tum satirlar) herkeste ciziliyordu. */
+describe("lejant kapsami", () => {
+  it("adminde (departman yok) tam sozluk gorunur", () => {
+    expect(lejantDepartmanlari(DEPARTMANLAR, null)).toEqual(DEPARTMANLAR);
+    expect(lejantDepartmanlari(DEPARTMANLAR, undefined)).toEqual(DEPARTMANLAR);
+  });
+
+  it("departmani olan personelde yalnizca kendi mudurlugu kalir", () => {
+    const gorunur = lejantDepartmanlari(DEPARTMANLAR, "fen_isleri");
+    expect(gorunur?.map((d) => d.kod)).toEqual(["fen_isleri"]);
+  });
+
+  it("sozluk yuklenmeden undefined kalir (cagiran bos liste cizer)", () => {
+    expect(lejantDepartmanlari(undefined, "fen_isleri")).toBeUndefined();
+  });
+
+  it("turleri de daraltir - kapsam disi tur 'yonlendirilmemis'e DUSMEZ", () => {
+    // Yalnizca basliklari elemek yetmiyordu: `departmanTurGruplari` eslesmeyen
+    // turleri artan kovasina koyuyor ve personel goremeyecegi turleri saymaya
+    // devam ediyordu.
+    const turler = ["yol", "kaldirim", "agac"];
+    expect(lejantTurleri(turler, ESLEME, "fen_isleri")).toEqual(["yol", "kaldirim"]);
+
+    const gruplar = departmanTurGruplari(
+      lejantDepartmanlari(DEPARTMANLAR, "fen_isleri"),
+      ESLEME,
+      lejantTurleri(turler, ESLEME, "fen_isleri")
+    );
+    expect(gruplar?.map((g) => g.departman?.kod)).toEqual(["fen_isleri"]);
+    // Artan kovasi hic olusmamali.
+    expect(gruplar?.some((g) => g.departman === null)).toBe(false);
+  });
+
+  it("yonlendirmesi olmayan turler yalnizca adminde gorunur", () => {
+    const turler = ["yol", "su_hatti"];
+    expect(lejantTurleri(turler, ESLEME, "fen_isleri")).toEqual(["yol"]);
+    expect(lejantTurleri(turler, ESLEME, null)).toEqual(turler);
+  });
+
+  it("esleme yuklenmeden daraltma yapilmaz (o kare zaten gruplanmaz)", () => {
+    const turler = ["yol", "agac"];
+    expect(lejantTurleri(turler, undefined, "fen_isleri")).toEqual(turler);
   });
 });
 

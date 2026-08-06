@@ -55,6 +55,12 @@ export interface HaritaAlani {
 const ALAN_SOURCE_ID = "salt-okunur-alanlar";
 const CIZIM_SOURCE_ID = "talep-cizimi";
 
+/** Alan/guzergah etiketleri bu zoom'un altinda hic cizilmez (personel
+ *  konsolundaki `MapView::BOLGE_ETIKET_MINZOOM` ile ayni kural). Esik orada
+ *  13, burada bir tik daha erken: saha ekrani haritayi dar bir panelde ve
+ *  daha uzaktan gosteriyor, ekip kendi bolgesinin adini once gormeli. */
+const ALAN_ETIKET_MINZOOM = 12.5;
+
 /** Vatandasin elle cizdigi cizgi/alan.
  *
  *  Bilincli olarak `CizimPaneli`'nin tam arac setinden AYRI: orada renk paleti,
@@ -298,8 +304,9 @@ export default function KonumSecMap({
     });
 
     const guncel = new Set<string>();
+    const etiketGorunur = map.getZoom() >= ALAN_ETIKET_MINZOOM;
     for (const a of liste) {
-      if (!a.etiket) continue;
+      if (!a.etiket || !etiketGorunur) continue;
       guncel.add(a.id);
       // Guzergah etiketi hattin uzunlugunun ortasina konur: nokta ortalamasi
       // kavisli bir hatta cizginin hic gecmedigi bir yere duserdi.
@@ -485,6 +492,9 @@ export default function KonumSecMap({
       showAccuracyCircle: false,
     });
     map.addControl(geolocate, "bottom-right");
+
+    // Etiketler ALAN_ETIKET_MINZOOM esiginde gorunur/gizlenir olmali.
+    map.on("zoomend", () => alanlariUygula(map));
     geolocate.on("geolocate", (e) => {
       const p = e as unknown as { coords: GeolocationCoordinates };
       const nokta: [number, number] = [

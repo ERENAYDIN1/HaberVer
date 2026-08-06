@@ -144,6 +144,45 @@ export function grupUyumsuzlugu(
   return `Bu türün harita rengi ${departman.ad} başlığından farklı olacak.`;
 }
 
+/**
+ * Lejantin ISIMLENDIREBILECEGI mudurlukler.
+ *
+ * Sozlugun kendisi giris yapmis herkese aciktir (vatandas formu bile "bu talep
+ * Fen İşleri'ne iletilecek" yazabilmek icin okur) - burada kisitlanan sozluk
+ * degil LEJANT. Lejant bir orgut semasi degil, kullanicinin KENDI haritasinin
+ * anahtaridir: departmani olan personel yalnizca kendi mudurlugunun kayitlarini
+ * gorebildigi icin geri kalan basliklar hep bos cikiyor, sadece diger
+ * mudurluklerin adlarini iliskilendiriyordu.
+ *
+ * `kendiDepartmani` NULL = sinirsiz (admin) ve bos kume ile ayni sey degildir -
+ * `Kapsam` bagimliligindaki (backend) ayrimin frontend karsiligi.
+ */
+export function lejantDepartmanlari(
+  departmanlar: readonly Departman[] | undefined,
+  kendiDepartmani: string | null | undefined
+): readonly Departman[] | undefined {
+  if (!departmanlar || !kendiDepartmani) return departmanlar;
+  return departmanlar.filter((d) => d.kod === kendiDepartmani);
+}
+
+/**
+ * Lejantta gosterilebilecek turler. Yalnizca mudurluk basliklarini elemek
+ * yetmez: kapsam disi turler o zaman "Henüz Yönlendirilmemiş" kovasina duser
+ * ve lejant kullanicinin hic goremeyecegi turleri saymaya devam ederdi.
+ *
+ * Yonlendirmesi olmayan turler bilincli olarak DUSER: onlar hicbir kapsama
+ * girmez, yalnizca admin gormeli. Esleme henuz yuklenmediyse daraltma yapilmaz
+ * (tam liste doner) - o kare zaten gruplanmadan, duz liste olarak cizilir.
+ */
+export function lejantTurleri(
+  turler: readonly AssetType[],
+  esleme: TurDepartmanEslemesi | undefined,
+  kendiDepartmani: string | null | undefined
+): readonly AssetType[] {
+  if (!kendiDepartmani || !esleme) return turler;
+  return turler.filter((t) => esleme[t] === kendiDepartmani);
+}
+
 /** Yonlendirmesi olmayan turlerin dustugu kovanin adi/rengi. Tek yerde
  *  tanimlanir ki lejant, acilir ve yonetim ekrani ayni sozu soylesin. */
 export const YONLENDIRILMEMIS_AD = "Henüz Yönlendirilmemiş";

@@ -76,6 +76,37 @@ const BOS_TASLAK: Taslak = {
 
 const KOD_DESENI = /^[a-z][a-z0-9_]{1,31}$/;
 
+/** `duzenleme` icindeki alanlari `orijinal`le karsilastirir, orijinaliyle
+ *  ayni kalan alanlari atar. A -> B -> A yapip hic kaydetmeden geri donen bir
+ *  degisiklik boylece "bekleyen degisiklik" olarak gorunmeye devam etmez. */
+function fark<T extends Record<string, unknown>>(
+  orijinal: T | undefined,
+  duzenleme: Partial<T>
+): Partial<T> {
+  const sonuc: Partial<T> = {};
+  for (const k of Object.keys(duzenleme) as (keyof T)[]) {
+    if (!orijinal || duzenleme[k] !== orijinal[k]) sonuc[k] = duzenleme[k];
+  }
+  return sonuc;
+}
+
+/** `kayit`tan bir Partial cikarir, `duzenleme`yi uygular ve orijinaliyle ayni
+ *  kalan alanlari eleyerek haritaya yazar; sonuc bossa anahtari tamamen
+ *  siler. */
+function haritayaYaz<U extends Record<string, unknown>, T extends { kod: string } & U>(
+  harita: Record<string, Partial<U>>,
+  kayitlar: T[] | undefined,
+  kod: string,
+  data: Partial<U>
+): Record<string, Partial<U>> {
+  const orijinal = kayitlar?.find((k) => k.kod === kod);
+  const birlesik = fark<U>(orijinal, { ...(harita[kod] ?? {}), ...data });
+  const yeni = { ...harita };
+  if (Object.keys(birlesik).length === 0) delete yeni[kod];
+  else yeni[kod] = birlesik;
+  return yeni;
+}
+
 const inputClass =
   "w-full border border-slate-300 bg-white px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none";
 const etiketClass = "text-[11px] font-medium text-slate-500";
@@ -306,10 +337,7 @@ export default function DepartmanYonetimi() {
             turunDepartmani={turunDepartmani}
             onDuzenle={(kod, data) =>
               yaz({
-                turDuzenleme: {
-                  ...taslak.turDuzenleme,
-                  [kod]: { ...(taslak.turDuzenleme[kod] ?? {}), ...data },
-                },
+                turDuzenleme: haritayaYaz(taslak.turDuzenleme, turler, kod, data),
               })
             }
             onYeniDuzenle={(kod, data) =>
@@ -319,9 +347,12 @@ export default function DepartmanYonetimi() {
                 ),
               })
             }
-            onYonlendir={(kod, hedef) =>
-              yaz({ esleme: { ...taslak.esleme, [kod]: hedef } })
-            }
+            onYonlendir={(kod, hedef) => {
+              const yeniEsleme = { ...taslak.esleme };
+              if ((kayitliEsleme?.[kod] ?? "") === hedef) delete yeniEsleme[kod];
+              else yeniEsleme[kod] = hedef;
+              yaz({ esleme: yeniEsleme });
+            }}
             onSil={(kod) =>
               yaz(
                 taslak.yeniTurler.some((t) => t.kod === kod)
@@ -342,10 +373,12 @@ export default function DepartmanYonetimi() {
             }, {})}
             onDuzenle={(kod, data) =>
               yaz({
-                departmanDuzenleme: {
-                  ...taslak.departmanDuzenleme,
-                  [kod]: { ...(taslak.departmanDuzenleme[kod] ?? {}), ...data },
-                },
+                departmanDuzenleme: haritayaYaz(
+                  taslak.departmanDuzenleme,
+                  departmanlar,
+                  kod,
+                  data
+                ),
               })
             }
             onYeniDuzenle={(kod, data) =>

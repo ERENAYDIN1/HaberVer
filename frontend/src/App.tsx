@@ -70,6 +70,8 @@ import {
   YONLENDIRILMEMIS_AD,
   YONLENDIRILMEMIS_RENK,
   departmanTurGruplari,
+  lejantDepartmanlari,
+  lejantTurleri,
 } from "./types/departman";
 import {
   ASSET_STATUS_LABELS,
@@ -453,6 +455,13 @@ export default function App() {
   // Departman sozlugu: ekip isaretcilerinin rengi ve lejanttaki ekip
   // alt-filtresi buradan beslenir (uzun staleTime, bkz. useDepartmanlar).
   const departmanSorgu = useDepartmanlar();
+  /** Lejantta adi gecebilecek mudurlukler: admin tum sozlugu, departmani olan
+   *  personel yalnizca kendisininkini gorur (bkz. `lejantDepartmanlari`).
+   *  `AssetList`'teki departman filtresiyle ayni sinir. */
+  const gorunurDepartmanlar = useMemo(
+    () => lejantDepartmanlari(departmanSorgu.data, user?.departman),
+    [departmanSorgu.data, user?.departman]
+  );
   // Tur -> mudurluk yonlendirmesi; lejanttaki varlik kirilimi bunu okur.
   const eslemeSorgu = useTurDepartmanEslemesi();
 
@@ -731,7 +740,15 @@ export default function App() {
     // Ortak kategorileme: acilir listeler ve yonetim ekrani da ayni gruplamayi
     // kullanir. Sozluk gelmeden gruplanmaz - yoksa ilk karede her tur
     // "yönlendirilmemiş" basligi altina duser, sonra yerine otururdu.
-    const kirilim = departmanTurGruplari(departmanSorgu.data, esleme, turKodlari());
+    //
+    // Departmani olan personelde tur listesi de kendi mudurluguyle daralir
+    // (`lejantTurleri`): yalnizca basliklari elemek kapsam disi turleri
+    // "Henüz Yönlendirilmemiş" kovasina dokerdi.
+    const kirilim = departmanTurGruplari(
+      gorunurDepartmanlar,
+      esleme,
+      lejantTurleri(turKodlari(), esleme, user?.departman)
+    );
     const gruplar: AltGrup[] = (
       kirilim ?? [{ departman: null, turler: turKodlari() }]
     ).map((g) => {
@@ -769,7 +786,8 @@ export default function App() {
 
     return gruplar;
   }, [
-    departmanSorgu.data,
+    gorunurDepartmanlar,
+    user?.departman,
     eslemeSorgu.data,
     katmanTurleri,
     varlikTurSayilari,
@@ -792,7 +810,7 @@ export default function App() {
       const anahtar = e.departman ?? DEPARTMANSIZ;
       sayilar.set(anahtar, (sayilar.get(anahtar) ?? 0) + 1);
     }
-    const secenekler = (departmanSorgu.data ?? [])
+    const secenekler = (gorunurDepartmanlar ?? [])
       .filter((d) => sayilar.has(d.kod))
       .map((d) => ({
         anahtar: d.kod,
@@ -815,7 +833,7 @@ export default function App() {
     return [{ baslik: "Müdürlük", onSec: ekipDepartmaniDegistir, secenekler }];
   }, [
     ekipSorgu.data,
-    departmanSorgu.data,
+    gorunurDepartmanlar,
     ekipDepartmaniSecili,
     ekipDepartmaniDegistir,
   ]);
@@ -823,11 +841,14 @@ export default function App() {
   /** Bolge ve guzergah katmanlarinin departman alt-filtresi (ikisi de ayni
    *  kirilimi alir, ayri state uzerinden).
    *
-   *  Ekip katmanindan bir farkla: burada AKTIF TUM mudurlukler listelenir,
-   *  kaydi olmayan "0" ile gorunur. Lejant o katmanda hangi mudurluklerin
-   *  calisma alani oldugunu da anlatir - satirin hic olmamasi ile "0" yazmasi
-   *  arasindaki fark budur. Kapanmis (pasif) mudurluk yalnizca kaydi varsa
-   *  listelenir: emekliye ayrilmis bir mudurlugu bos satirla diriltmeyelim.
+   *  Ekip katmanindan bir farkla: burada gorulebilen AKTIF mudurluklerin
+   *  hepsi listelenir, kaydi olmayan "0" ile gorunur. Lejant o katmanda hangi
+   *  mudurluklerin calisma alani oldugunu da anlatir - satirin hic olmamasi
+   *  ile "0" yazmasi arasindaki fark budur. Kapanmis (pasif) mudurluk yalnizca
+   *  kaydi varsa listelenir: emekliye ayrilmis bir mudurlugu bos satirla
+   *  diriltmeyelim. Departmani olan personelde liste kendi mudurlugu + "Genel"e
+   *  iner (`lejantDepartmanlari`); "0 kayit" satiri ancak gorebildigi bir
+   *  mudurluk icin bilgidir, digerlerinde sadece bir isim ifsasi olurdu.
    *  Sayaclar alan secimi/gizleme uygulanmamis tam listeden gelir.
    *  Departmansiz kayitlar "Genel"dir (tum personelin gordugu calisma
    *  alanlari), "sahipsiz" degil - o satir her zaman durur. */
@@ -840,7 +861,7 @@ export default function App() {
         sayilar.set(anahtar, (sayilar.get(anahtar) ?? 0) + 1);
       }
       const filtre = bolgeDepartmani[katman];
-      const secenekler = (departmanSorgu.data ?? [])
+      const secenekler = (gorunurDepartmanlar ?? [])
         .filter((d) => d.aktif || sayilar.has(d.kod))
         .map((d) => ({
           anahtar: d.kod,
@@ -864,7 +885,7 @@ export default function App() {
       bolgeler: kirilim("alan", "bolgeler"),
       guzergahlar: kirilim("cizgi", "guzergahlar"),
     };
-  }, [bolgeSorgu.data, departmanSorgu.data, bolgeDepartmani]);
+  }, [bolgeSorgu.data, gorunurDepartmanlar, bolgeDepartmani]);
 
   const talepAltFiltre = useMemo<AltGrup[]>(
     () => [

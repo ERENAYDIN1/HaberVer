@@ -133,7 +133,7 @@ class Kapsam:
         if not self.izinli(tur):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Bu tur sizin departmaninizin kapsaminda degil",
+                detail="Bu tür sizin departmanınızın kapsamında değil",
             )
 
 
