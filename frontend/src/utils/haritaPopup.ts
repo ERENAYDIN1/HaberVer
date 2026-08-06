@@ -2,13 +2,8 @@ import type maplibregl from "maplibre-gl";
 
 import { fotoUrl } from "../api/reports";
 import { konumCozumle } from "../api/sinirlar";
-import {
-  ASSET_SOURCE_LABELS,
-  ASSET_TYPE_LABELS,
-  TIP_RENGI,
-  TIP_RENGI_VARSAYILAN,
-  durumEtiketi,
-} from "../types/asset";
+import { turAdi, turRengi } from "../data/turSozlugu";
+import { ASSET_SOURCE_LABELS, durumEtiketi } from "../types/asset";
 import type { AssetFeature } from "../types/asset";
 import { BOLGE_TIP_ETIKETLERI } from "../types/bolge";
 import type { Bolge } from "../types/bolge";
@@ -56,7 +51,7 @@ export function popupIcerigi(asset: AssetFeature): string {
     install_date ? `<div>Kurulum: ${kacis(install_date)}</div>` : "",
   ].join("");
 
-  const turRenk = TIP_RENGI[type] ?? TIP_RENGI_VARSAYILAN;
+  const turRenk = turRengi(type);
 
   return `
     <div style="font-family: system-ui, sans-serif; width: ${POPUP_GENISLIK}">
@@ -68,7 +63,7 @@ export function popupIcerigi(asset: AssetFeature): string {
       <div style="font-weight: 600; margin-bottom: 4px">${kacis(name)}</div>
       <div style="color:#475569; font-size:12px; display:flex; align-items:center; gap:5px">
         <span style="display:inline-block; width:9px; height:9px; border-radius:9999px; background:${turRenk}"></span>
-        ${ASSET_TYPE_LABELS[type]}
+        ${turAdi(type)}
       </div>
       <div style="margin-top:6px; display:flex; gap:4px; flex-wrap:wrap">
         <span style="
@@ -134,7 +129,7 @@ export function talepPopupIcerigi(report: ReportFeature): string {
           : ""
       }
       <div style="font-weight: 600; margin-bottom: 4px">${kacis(name)}</div>
-      <div style="color:#475569; font-size:12px">${ASSET_TYPE_LABELS[type]} · Talep</div>
+      <div style="color:#475569; font-size:12px">${turAdi(type)} · Talep</div>
       <div style="margin-top:6px">
         <span style="
           display:inline-block; padding:2px 8px; border-radius:9999px;
@@ -314,7 +309,7 @@ export function ekipPopupHtml(
   const satirlar = e.gorevler.length
     ? e.gorevler
         .map((g) => {
-          const renk = TIP_RENGI[g.type] ?? TIP_RENGI_VARSAYILAN;
+          const renk = turRengi(g.type);
           return (
             `<button type="button" class="ekip-gorev-satiri" data-gorev-asset="${kacis(
               g.asset_id
@@ -326,7 +321,7 @@ export function ekipPopupHtml(
               g.name
             )}</span>` +
             `<span style="font-size:10px;color:#94a3b8;flex:none">${kacis(
-              ASSET_TYPE_LABELS[g.type]
+              turAdi(g.type)
             )}</span>` +
             `<span style="font-size:11px;color:#cbd5e1;flex:none">›</span>` +
             `</button>`

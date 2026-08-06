@@ -5,12 +5,8 @@ import { getAsset } from "../api/assets";
 import { approveReport, fotoUrl, rejectReport, reopenReport } from "../api/reports";
 import { gorevDurumu } from "../api/saha";
 import { useKonumCozumu } from "../hooks/useSinirlar";
-import {
-  ASSET_TYPES,
-  ASSET_TYPE_LABELS,
-  durumEtiketi,
-  type AssetType,
-} from "../types/asset";
+import { turAdi, turKodlari } from "../data/turSozlugu";
+import { durumEtiketi, type AssetType } from "../types/asset";
 import { talepNoktasi } from "../types/report";
 import type { ReportFeature } from "../types/report";
 import { AksiyonButonu, AksiyonSeridi } from "./Aksiyonlar";
@@ -113,7 +109,7 @@ export default function ReportDetayModal({
 
         <div>
           <h3 className="text-base font-semibold text-slate-900">{p.name}</h3>
-          <p className="text-xs text-slate-500">{ASSET_TYPE_LABELS[p.type]}</p>
+          <p className="text-xs text-slate-500">{turAdi(p.type)}</p>
         </div>
 
         <TalepDurumRozeti durum={p.status} />
@@ -193,11 +189,11 @@ export default function ReportDetayModal({
                 }
                 disabled={islemde}
               >
-                <TipSecenekleri turler={ASSET_TYPES} />
+                <TipSecenekleri turler={turKodlari()} />
               </select>
               {tip !== p.type && (
                 <p className="mt-1 text-[11px] text-amber-700">
-                  Oluşacak varlık ve arşivlenen talep “{ASSET_TYPE_LABELS[tip]}”
+                  Oluşacak varlık ve arşivlenen talep “{turAdi(tip)}”
                   olarak kaydedilecek.
                 </p>
               )}

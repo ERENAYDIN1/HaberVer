@@ -22,6 +22,7 @@ from .routers import (
     reports,
     saha,
     sinirlar,
+    turler,
     users,
 )
 
@@ -113,6 +114,7 @@ async def origin_kontrolu(request: Request, call_next):
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(departmanlar.router)
+app.include_router(turler.router)
 app.include_router(assets.router)
 app.include_router(reports.router)
 app.include_router(saha.router)

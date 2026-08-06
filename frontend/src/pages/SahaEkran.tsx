@@ -25,9 +25,9 @@ import {
   IconPin,
   IconRoute,
   IconWarning,
-  TIP_IKONU,
+  tipIkonu,
 } from "../components/icons";
-import { ASSET_TYPE_LABELS } from "../types/asset";
+import { turAdi } from "../data/turSozlugu";
 import type { Bolge } from "../types/bolge";
 import { TALEP_SEKIL_ETIKETLERI } from "../types/report";
 import { gorevSekli } from "../types/saha";
@@ -225,7 +225,7 @@ export default function SahaEkran() {
             : "") +
           `<div style="font-weight:600;font-size:13px;color:#0f172a">${kacis(p.name)}</div>` +
           `<div style="font-size:11px;color:#64748b;margin:2px 0 6px">${kacis(
-            ASSET_TYPE_LABELS[p.type]
+            turAdi(p.type)
           )}${p.brand_model ? " · " + kacis(p.brand_model) : ""}</div>` +
           // Isin sekli: pin tek nokta gosterir, isin gercek buyuklugu burada.
           (sekil
@@ -547,7 +547,7 @@ export default function SahaEkran() {
                 </li>
                 {siraliGorevler.map(({ gorev: g, mesafe }, sira) => {
                   const p = g.properties;
-                  const Ikon = TIP_IKONU[p.type];
+                  const Ikon = tipIkonu(p.type);
                   const fotoSrc = fotoUrl(p.photo_url);
                   const sekil = gorevSekli(p);
                   const olcu = sekilOlcusu(sekil);
@@ -589,7 +589,7 @@ export default function SahaEkran() {
                             {p.name}
                           </p>
                           <p className="text-xs text-slate-500">
-                            {ASSET_TYPE_LABELS[p.type]}
+                            {turAdi(p.type)}
                             {p.brand_model ? ` · ${p.brand_model}` : ""}
                           </p>
                           <p className="mt-1 flex flex-wrap items-center gap-1">
@@ -692,7 +692,7 @@ export default function SahaEkran() {
                             <dl className="space-y-1">
                               <DetaySatiri
                                 etiket="Tür"
-                                deger={ASSET_TYPE_LABELS[p.type]}
+                                deger={turAdi(p.type)}
                               />
                               {p.brand_model && (
                                 <DetaySatiri
@@ -831,7 +831,7 @@ export default function SahaEkran() {
                   ))}
                   {tamamlananlar.map((g) => {
                     const p = g.properties;
-                    const Ikon = TIP_IKONU[p.type];
+                    const Ikon = tipIkonu(p.type);
                     return (
                       <li
                         key={p.assignment_id}

@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 
-import { TIP_GLIF_PATH } from "../data/tipGlifleri";
+import { GLIF_KITAPLIGI } from "../data/tipGlifleri";
+import { turGlifi } from "../data/turSozlugu";
 import type { AssetType } from "../types/asset";
 
 interface IconProps {
@@ -31,7 +32,7 @@ function TipGlifi({ ic, className }: IconProps & { ic: string }) {
 }
 
 export function IconTree({ className }: IconProps) {
-  return <TipGlifi ic={TIP_GLIF_PATH.agac} className={className} />;
+  return <TipGlifi ic={GLIF_KITAPLIGI.agac} className={className} />;
 }
 
 /** Marka logosu: sehir silueti + tabanda iki yaprak; parcalar currentColor. */
@@ -193,6 +194,17 @@ export function IconInbox({ className }: IconProps) {
     <svg {...temelOzellikler} className={className}>
       <path d="M4 13l2.5-7h11L20 13v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-5z" />
       <path d="M4 13h4l1.5 2.5h5L16 13h4" />
+    </svg>
+  );
+}
+
+export function IconTrash({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} className={className}>
+      <path d="M4 7h16" />
+      <path d="M10 4h4" />
+      <path d="M6 7l1 13h10l1-13" />
+      <path d="M10 11v5M14 11v5" />
     </svg>
   );
 }
@@ -366,11 +378,36 @@ export function IconMenu({ className }: IconProps) {
   );
 }
 
-/** Tur -> ikon eslemesi (liste, lejant ve bildirimler bunu kullanir). Renk
- *  icin types/asset.ts `TIP_RENGI`, ham glif icin `TIP_GLIF_PATH`. */
-export const TIP_IKONU: Record<AssetType, TipIkonu> = Object.fromEntries(
-  Object.entries(TIP_GLIF_PATH).map(([tur, ic]): [string, TipIkonu] => [
-    tur,
-    ({ className }: IconProps) => <TipGlifi ic={ic} className={className} />,
-  ])
-) as Record<AssetType, TipIkonu>;
+/** Tur -> ikon. Sozluk calisma zamaninda geldigi icin bu bir tablo degil
+ *  FONKSIYONDUR; sonuclar kod basina onbelleklenir ki her render'da yeni bir
+ *  bilesen tipi uretilip agac gereksiz yere yeniden monte edilmesin.
+ *
+ *  Renk icin data/turSozlugu.ts `turRengi`, ham glif icin `turGlifi`. */
+const IKON_ONBELLEGI = new Map<string, TipIkonu>();
+
+export function tipIkonu(tur: AssetType): TipIkonu {
+  const hazir = IKON_ONBELLEGI.get(tur);
+  if (hazir) return hazir;
+  const ic = turGlifi(tur);
+  const ikon: TipIkonu = ({ className }: IconProps) => (
+    <TipGlifi ic={ic} className={className} />
+  );
+  IKON_ONBELLEGI.set(tur, ikon);
+  return ikon;
+}
+
+/** Sozluk degistiginde (admin bir turun glifini degistirdi) onbellek bayat
+ *  kalir; `useTurler` yeni veriyi yazdiktan sonra burayi bosaltir. */
+export function tipIkonlariniSifirla(): void {
+  IKON_ONBELLEGI.clear();
+}
+
+/** Glif kitapligindan tek bir anahtarin onizlemesi; admin'in tur ekranindaki
+ *  glif secicisi bunu kullanir (henuz bir ture bagli olmayan glifi cizmek
+ *  gerekir, `tipIkonu` ise tur kodu bekler). */
+export function GlifIkonu({
+  anahtar,
+  className,
+}: IconProps & { anahtar: string }) {
+  return <TipGlifi ic={GLIF_KITAPLIGI[anahtar] ?? ""} className={className} />;
+}

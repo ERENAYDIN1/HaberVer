@@ -35,6 +35,10 @@ class BolgeGirdi(BaseModel):
     aciklama: str | None = Field(default=None, max_length=1000)
     tip: BolgeTipi
     renk: str = Field(default="#059669", pattern=RENK_DESENI)
+    # Kaydi sahiplenecek mudurluk. YALNIZCA ADMIN icin anlamlidir: departmani
+    # olan personelin kaydi her zaman kendi mudurlugune yazilir, gonderdigi
+    # deger yok sayilir (bkz. routers/bolgeler.py). None = genel.
+    departman: str | None = Field(default=None, max_length=32)
     noktalar: list[list[tuple[float, float]]]
 
     @model_validator(mode="after")
@@ -67,6 +71,10 @@ class BolgeGuncelle(BaseModel):
     ad: str | None = Field(default=None, min_length=1, max_length=120)
     aciklama: str | None = Field(default=None, max_length=1000)
     renk: str | None = Field(default=None, pattern=RENK_DESENI)
+    # Kaydi baska bir mudurluge devretmek (yalnizca admin). `exclude_unset` ile
+    # ayirt edilir: `departman: null` "genel yap", alani hic gondermemek
+    # "dokunma" demektir - UserUpdate.yaka ile ayni desen.
+    departman: str | None = Field(default=None, max_length=32)
     noktalar: list[list[tuple[float, float]]] | None = None
 
     @model_validator(mode="after")
@@ -90,6 +98,9 @@ class BolgeCikti(BaseModel):
     aciklama: str | None
     tip: BolgeTipi
     renk: str
+    # Kaydi sahiplenen mudurluk; None = genel (tum personel gorur). Adi
+    # frontend departman sozlugunden cozer - burada tekrarlanmaz.
+    departman: str | None = None
     noktalar: list[list[tuple[float, float]]]
     # PostGIS ile hesaplanan gercek (jeodezik) olculer: alan bolgelerde m2,
     # cizgilerde metre. Frontend'deki duzlemsel yaklastirmadan bagimsiz,

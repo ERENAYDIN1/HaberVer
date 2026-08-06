@@ -8,11 +8,8 @@ import {
 } from "../hooks/useDepartmanlar";
 import { useIlceler, useMahalleler } from "../hooks/useSinirlar";
 import { departmanBul, departmanTurleri } from "../types/departman";
-import {
-  ASSET_STATUSES,
-  ASSET_STATUS_LABELS,
-  ASSET_TYPES,
-} from "../types/asset";
+import { turKodlari } from "../data/turSozlugu";
+import { ASSET_STATUSES, ASSET_STATUS_LABELS } from "../types/asset";
 import type {
   AssetFeature,
   AssetFeatureCollection,
@@ -125,9 +122,12 @@ export default function AssetList({
 
   // Acilirlarin gosterecegi deger, paylasilan filtre state'inden turetilir -
   // lejanttan yapilan degisiklik buraya da aninda yansir.
-  const tipDegeri = acilirDegeri(ASSET_TYPES, turler);
+  // Tur listesi sozlukten gelir (backend verisi): admin bir tur ekledi diye
+  // filtre cubugunun yeniden derlenmesi gerekmiyor.
+  const tumTurKodlari = turKodlari();
+  const tipDegeri = acilirDegeri(tumTurKodlari, turler);
   const durumDegeri = acilirDegeri(ASSET_STATUSES, durumlar);
-  const acikTipSayisi = ASSET_TYPES.filter((t) => turler[t]).length;
+  const acikTipSayisi = tumTurKodlari.filter((t) => turler[t]).length;
 
   // Departman filtresi yalnizca ADMIN'e gosterilir: diger personelin listesi
   // zaten backend'de kendi mudurluguyle sinirli, filtre tek secenekli olurdu.
@@ -140,15 +140,15 @@ export default function AssetList({
   // tur kapatilinca filtre sessizce "yanlis departman" gostermesin.
   const seciliDepartman = useMemo(() => {
     if (!esleme || !adminMi) return "";
-    const acik = ASSET_TYPES.filter((t) => turler[t]);
-    if (acik.length === ASSET_TYPES.length) return "";
+    const acik = tumTurKodlari.filter((t) => turler[t]);
+    if (acik.length === tumTurKodlari.length) return "";
     const kodlar = new Set(acik.map((t) => esleme[t]));
     if (kodlar.size !== 1) return "";
     const kod = [...kodlar][0];
     if (!kod) return "";
     const tamKume = departmanTurleri(esleme, kod);
     return tamKume.length === acik.length ? kod : "";
-  }, [esleme, turler, adminMi]);
+  }, [esleme, turler, adminMi, tumTurKodlari]);
   const acikDurumSayisi = ASSET_STATUSES.filter((s) => durumlar[s]).length;
 
   // Haritadan secim yapildiginda listedeki karti gorunur alana kaydir.
@@ -213,7 +213,7 @@ export default function AssetList({
           {tipDegeri === KARISIK && (
             <option value={KARISIK}>{karisikEtiketi(acikTipSayisi, "tip")}</option>
           )}
-          <TipSecenekleri turler={ASSET_TYPES} />
+          <TipSecenekleri turler={tumTurKodlari} />
         </select>
 
         <select

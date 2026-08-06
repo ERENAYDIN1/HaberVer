@@ -22,6 +22,10 @@ export interface Bolge {
   alan_m2: number | null;
   /** Cizgilerde dolu, alan bolgelerde null. */
   uzunluk_m: number | null;
+  /** Kaydi sahiplenen mudurluk; null = genel (tum personel gorur). Bir
+   *  mudurlugun cizdigi calisma alanini digeri gormemeli, yoksa kendi alakasiz
+   *  ekibine atayabilir. Adi departman sozlugunden cozulur. */
+  departman: string | null;
   /** Atanan saha ekibi (alan -> gorev bolgesi, cizgi -> guzergah). */
   worker_id: string | null;
   worker_ad: string | null;
@@ -37,6 +41,9 @@ export interface BolgeGirdi {
   aciklama?: string | null;
   tip: BolgeTipi;
   renk: string;
+  /** Yalnizca ADMIN icin anlamli: departmani olan personelin kaydi her zaman
+   *  kendi mudurlugune yazilir, gonderilen deger yok sayilir. */
+  departman?: string | null;
   noktalar: [number, number][][];
 }
 
@@ -44,6 +51,8 @@ export interface BolgeGuncelle {
   ad?: string;
   aciklama?: string | null;
   renk?: string;
+  /** Kaydi baska bir mudurluge devretmek (yalnizca admin); null = genel. */
+  departman?: string | null;
   /** Sekil (geometri) guncellemesi - haritada koseler suruklenerek, kenara
    *  nokta eklenerek ya da alan genisletilip daraltilarak degistirilir. Kaydin
    *  tipi degismez: alan alan, guzergah cizgi kalir. */

@@ -10,13 +10,16 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models.asset import AssetType
+from ..models.bolge import Bolge
 from ..models.departman import Departman, TurDepartman
-from ..models.log import LogAction
+from ..models.log import ActivityLog, LogAction
 from ..models.user import User, UserRole
 
 
 def list_departmanlar(db: Session, yalniz_aktif: bool = False) -> list[Departman]:
-    stmt = select(Departman).order_by(Departman.ad)
+    # `sira` once: alfabetik siralama triyaj kovasini ("Cozum Merkezi")
+    # listenin basina tasiyordu. Ad yalnizca esit siralarda ayirir.
+    stmt = select(Departman).order_by(Departman.sira, Departman.ad)
     if yalniz_aktif:
         stmt = stmt.where(Departman.aktif.is_(True))
     return list(db.execute(stmt).scalars().all())
@@ -110,6 +113,106 @@ def esleme_guncelle(
         )
     db.commit()
     return esleme(db)
+
+
+def kullanim(db: Session, kod: str) -> dict[str, int]:
+    """Mudurluge bagli kayit sayilari. Silme reddedilirken gerekcedir:
+    "kullaniliyor" demek yetmez, admin neyi tasimasi gerektigini bilmeli.
+
+    Audit log ve gorev bolgeleri de sayilir cunku ikisi de mudurluk koduna FK
+    ile baglidir. Bu, gecmisi olan bir mudurlugu pratikte silinemez yapar -
+    bilincli: bir mudurlugun kapanmasi gecmisini yok etmemeli, `aktif=false`
+    ile emekliye ayrilir."""
+    return {
+        "personel": db.execute(
+            select(func.count(User.id)).where(User.departman == kod)
+        ).scalar_one(),
+        "tur": db.execute(
+            select(func.count(TurDepartman.tur)).where(
+                TurDepartman.departman_kod == kod
+            )
+        ).scalar_one(),
+        "kayit": db.execute(
+            select(func.count(ActivityLog.id)).where(ActivityLog.departman == kod)
+        ).scalar_one(),
+        "bolge": db.execute(
+            select(func.count(Bolge.id)).where(Bolge.departman == kod)
+        ).scalar_one(),
+    }
+
+
+def create(db: Session, data, actor: User) -> Departman:
+    from .log import add_log
+
+    departman = Departman(
+        kod=data.kod,
+        ad=data.ad,
+        aciklama=data.aciklama,
+        renk=data.renk,
+        aktif=data.aktif,
+        sira=data.sira,
+    )
+    db.add(departman)
+    add_log(
+        db,
+        action=LogAction.departman_created,
+        actor=actor,
+        entity_type="departman",
+        entity_id=None,
+        entity_name=data.ad,
+        detail=data.kod,
+    )
+    db.commit()
+    return departman
+
+
+def update(db: Session, kod: str, data, actor: User) -> Departman | None:
+    from .log import add_log
+
+    departman = db.get(Departman, kod)
+    if departman is None:
+        return None
+    yazilan = {
+        alan: deger
+        for alan, deger in data.model_dump(exclude_unset=True).items()
+        if getattr(departman, alan) != deger
+    }
+    for alan, deger in yazilan.items():
+        setattr(departman, alan, deger)
+    if yazilan:
+        add_log(
+            db,
+            action=LogAction.departman_updated,
+            actor=actor,
+            entity_type="departman",
+            entity_id=None,
+            entity_name=departman.ad,
+            detail=", ".join(sorted(yazilan)),
+        )
+    db.commit()
+    return departman
+
+
+def delete(db: Session, kod: str, actor: User) -> bool:
+    """Mudurlugu siler. Bagli personel/tur olup olmadigini cagiran taraf
+    kontrol eder (`kullanim`); buraya gelindiginde karar verilmistir."""
+    from .log import add_log
+
+    departman = db.get(Departman, kod)
+    if departman is None:
+        return False
+    add_log(
+        db,
+        action=LogAction.departman_deleted,
+        actor=actor,
+        entity_type="departman",
+        entity_id=None,
+        entity_name=departman.ad,
+        detail=kod,
+    )
+    db.delete(departman)
+    db.commit()
+    return True
 
 
 def adlar(db: Session) -> dict[str, str]:

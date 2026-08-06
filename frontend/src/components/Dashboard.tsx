@@ -15,12 +15,8 @@ import {
   useDepartmanlar,
   useTurDepartmanEslemesi,
 } from "../hooks/useDepartmanlar";
-import {
-  GRUP_RENGI,
-  TIP_GRUBU,
-  TIP_GRUPLARI,
-  TIP_GRUP_KISA,
-} from "../types/asset";
+import { turGrubu } from "../data/turSozlugu";
+import { GRUP_RENGI, TIP_GRUPLARI, TIP_GRUP_KISA } from "../types/asset";
 import type { AssetFeature, AssetFeatureCollection } from "../types/asset";
 import { csvIndir, jsonIndir } from "../utils/export";
 
@@ -159,13 +155,13 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
   ).length;
   const bakimOrani = toplam === 0 ? 0 : Math.round((bakimGerekli / toplam) * 100);
 
-  // 13 tur duz bir grafikte okunamiyor: dagilim TUR GRUBUNA gore (5 bar)
+  // Onlarca tur duz bir grafikte okunamiyor: dagilim TUR GRUBUNA gore (5 bar)
   // gosterilir ve her bar grubun HARITADAKI rengini tasir. Bir grubun icindeki
   // tur dagilimi soldaki listenin tur filtresinden okunur.
   const tipDagilimi = TIP_GRUPLARI.map((g) => ({
     tip: TIP_GRUP_KISA[g],
     renk: GRUP_RENGI[g],
-    sayi: filtrelenmis.filter((f) => TIP_GRUBU[f.properties.type] === g).length,
+    sayi: filtrelenmis.filter((f) => turGrubu(f.properties.type) === g).length,
   }));
   const enBuyuk = Math.max(...tipDagilimi.map((d) => d.sayi), 1);
 

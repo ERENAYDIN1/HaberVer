@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { bolgeAta, bolgeSil } from "../api/bolgeler";
+import { useDepartmanlar } from "../hooks/useDepartmanlar";
+import { departmanBul } from "../types/departman";
 import { BOLGE_TIP_ETIKETLERI, type Bolge } from "../types/bolge";
 import { YAKA_KISA, type EkipOzet, type Yaka } from "../types/saha";
 import {
@@ -103,7 +105,11 @@ export default function BolgeDetayModal({
     ? cizgiOrtaNoktasi(bolge.noktalar[0] ?? [])
     : enBuyukHalkaMerkezi(bolge.noktalar);
 
+  const { data: departmanlar } = useDepartmanlar();
+  const kaydinDepartmani = departmanBul(departmanlar, bolge.departman);
+
   const satirlar: [string, string | null][] = [
+    ["Müdürlük", kaydinDepartmani?.ad ?? "Genel (tüm müdürlükler)"],
     [cizgi ? "Uzunluk" : "Alan", olcu],
     ["Köşe sayısı", `${noktaSayisi}`],
     ["Parça", bolge.noktalar.length > 1 ? `${bolge.noktalar.length} parça` : null],
@@ -143,6 +149,18 @@ export default function BolgeDetayModal({
                   Tamamlandı
                 </span>
               )}
+              {kaydinDepartmani && (
+                <span
+                  className="inline-flex items-center px-1.5 py-0.5 text-[11px] font-medium"
+                  style={{
+                    background: `${kaydinDepartmani.renk}1a`,
+                    color: kaydinDepartmani.renk,
+                  }}
+                  title="Bu kaydı yalnızca bu müdürlük görür"
+                >
+                  {kaydinDepartmani.ad}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -178,12 +196,19 @@ export default function BolgeDetayModal({
               className="min-w-0 flex-1 border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-emerald-500 disabled:opacity-50"
             >
               <option value="">Atanmamış</option>
-              {(ekipler ?? []).map((ekip) => (
-                <option key={ekip.id} value={ekip.id}>
-                  {ekip.full_name || ekip.email}
-                  {ekip.yaka ? ` · ${YAKA_KISA[ekip.yaka as Yaka] ?? ekip.yaka}` : ""}
-                </option>
-              ))}
+              {/* Kaydin mudurlugu disindaki ekipler isaretlenir ama gizlenmez -
+                  yaka uyarisiyla ayni desen (bkz. BolgePaneli). */}
+              {(ekipler ?? []).map((ekip) => {
+                const baskaMudurluk =
+                  bolge.departman !== null && ekip.departman !== bolge.departman;
+                return (
+                  <option key={ekip.id} value={ekip.id}>
+                    {ekip.full_name || ekip.email}
+                    {ekip.yaka ? ` · ${YAKA_KISA[ekip.yaka as Yaka] ?? ekip.yaka}` : ""}
+                    {baskaMudurluk ? " · ⚠ başka müdürlük" : ""}
+                  </option>
+                );
+              })}
             </select>
             {islemde && <span className="text-[11px] text-slate-400">…</span>}
           </div>

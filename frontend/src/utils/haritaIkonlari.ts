@@ -1,7 +1,7 @@
 import type maplibregl from "maplibre-gl";
 
-import { TIP_GLIF_PATH } from "../data/tipGlifleri";
-import { TIP_RENGI, TIP_RENGI_VARSAYILAN, type AssetType } from "../types/asset";
+import { turGlifi, turKodlari, turRengi, turRenkCiftleri } from "../data/turSozlugu";
+import { TIP_RENGI_VARSAYILAN } from "../types/asset";
 import {
   HALKALI_GORUNUMLER,
   TALEP_DURUM_RENGI,
@@ -18,14 +18,24 @@ import {
 /** Secili talebin altina cizilen koyu pinin rengi. */
 const TALEP_PIN_SECIM_RENK = "#0f172a";
 
-/** Tipe gore isaretci rengi; liste rozetleriyle ayni paletten (TIP_RENGI)
- *  turetilir, bilinmeyen tip icin notr gri. */
-export const TIP_RENGI_IFADESI = [
-  "match",
-  ["get", "type"],
-  ...Object.entries(TIP_RENGI).flat(),
-  TIP_RENGI_VARSAYILAN,
-] as unknown as maplibregl.ExpressionSpecification;
+/** Tipe gore isaretci rengi; liste rozetleriyle ayni paletten turetilir,
+ *  bilinmeyen tip icin notr gri.
+ *
+ *  Sabit degil FONKSIYON: tur sozlugu backend'den geldigi icin ifade ancak
+ *  katmanlar kurulurken uretilebilir. `match` en az bir cift ister, bu yuzden
+ *  sozluk beklenmedik sekilde bossa duz bir renk donulur. */
+export function tipRengiIfadesi(): maplibregl.ExpressionSpecification {
+  const ciftler = turRenkCiftleri();
+  if (!ciftler.length) {
+    return TIP_RENGI_VARSAYILAN as unknown as maplibregl.ExpressionSpecification;
+  }
+  return [
+    "match",
+    ["get", "type"],
+    ...ciftler,
+    TIP_RENGI_VARSAYILAN,
+  ] as unknown as maplibregl.ExpressionSpecification;
+}
 
 /* --- Pin cizim uzayi ------------------------------------------------
  * Pin, tur glifi, durum halkasi ve rozet AYNI viewBox'ta cizilir; hepsi ayni
@@ -94,7 +104,7 @@ function svgIkonuYukle(map: maplibregl.Map, id: string, svg: string): Promise<vo
 }
 
 /** Varlik dairesinin ortasina binen beyaz cizgi glifi. Path'ler React
- *  ikonlariyla ayni kaynaktan (`TIP_GLIF_PATH`) gelir. */
+ *  ikonlariyla ayni kaynaktan (`GLIF_KITAPLIGI`) gelir. */
 function tipGlifiSvg(ic: string): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48" height="48" ` +
@@ -172,8 +182,9 @@ export const VARLIK_UYARI_RENK = TALEP_DURUM_RENGI.onaylandi;
 
 /** Bir turun glifini uc varyantla yukler: daire (tip-*), pin glifi
  *  (pin-glif-*) ve talep pini (talep-pin-*). */
-function tipIkonuYukle(map: maplibregl.Map, tur: string, ic: string): Promise<void> {
-  const renk = TIP_RENGI[tur as AssetType] ?? TIP_RENGI_VARSAYILAN;
+function tipIkonuYukle(map: maplibregl.Map, tur: string): Promise<void> {
+  const ic = turGlifi(tur);
+  const renk = turRengi(tur);
   return Promise.all([
     svgIkonuYukle(map, `tip-${tur}`, tipGlifiSvg(ic)),
     svgIkonuYukle(map, `pin-glif-${tur}`, pinGlifiSvg(ic)),
@@ -187,7 +198,7 @@ function tipIkonuYukle(map: maplibregl.Map, tur: string, ic: string): Promise<vo
  *  listelerden turedigi icin eksik goruntu istenmez. */
 export function tipIkonlariniHazirla(map: maplibregl.Map): Promise<void> {
   return Promise.all([
-    ...Object.entries(TIP_GLIF_PATH).map(([tur, ic]) => tipIkonuYukle(map, tur, ic)),
+    ...turKodlari().map((tur) => tipIkonuYukle(map, tur)),
     ...HALKALI_GORUNUMLER.map((d) =>
       svgIkonuYukle(
         map,

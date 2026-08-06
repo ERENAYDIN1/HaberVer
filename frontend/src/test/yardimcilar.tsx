@@ -2,8 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 
+import { setTurSozlugu } from "../data/turSozlugu";
 import type { AssetFeature, AssetStatus, AssetType } from "../types/asset";
 import type { ReportFeature, ReportStatus } from "../types/report";
+import type { Tur } from "../types/tur";
 
 /** Bilesen testleri icin ortak kurulum.
  *
@@ -23,7 +25,22 @@ export function testQueryClient() {
   });
 }
 
+/** Tur sozlugu artik backend verisidir; uygulamada korumali ekranlar o gelene
+ *  kadar cizilmez (auth/RequireRole). Testler bileseni dogrudan monte ettigi
+ *  icin o kapi devrede degil - sozluk burada, sahte veriyle kurulur. Kucuk
+ *  tutuldu: testlerin ihtiyaci olan turler + her renk grubundan birer ornek. */
+export const TEST_TURLERI: Tur[] = [
+  { kod: "agac", ad: "Ağaç", grup: "yesil", glif: "agac" },
+  { kod: "bank", ad: "Bank", grup: "yesil", glif: "bank" },
+  { kod: "direk", ad: "Aydınlatma Direği", grup: "aydinlatma", glif: "direk" },
+  { kod: "yol", ad: "Yol / Asfalt", grup: "yol", glif: "yol" },
+  { kod: "rogar", ad: "Rögar Kapağı", grup: "yol", glif: "rogar" },
+  { kod: "su_hatti", ad: "Su Hattı", grup: "altyapi", glif: "su_hatti" },
+  { kod: "diger", ad: "Diğer", grup: "diger", glif: "diger" },
+];
+
 export function sarmala(ui: ReactElement) {
+  setTurSozlugu(TEST_TURLERI);
   const client = testQueryClient();
   return {
     client,

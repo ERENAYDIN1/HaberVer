@@ -5,6 +5,7 @@ from .departman import Departman, TurDepartman
 from .log import ActivityLog, LogAction
 from .report import Report, ReportStatus
 from .session import Session
+from .tur import TUR_GRUPLARI, Tur
 from .user import User, UserRole
 from .yaka import Yaka, YakaAlani
 
@@ -22,6 +23,8 @@ __all__ = [
     "Report",
     "ReportStatus",
     "Session",
+    "TUR_GRUPLARI",
+    "Tur",
     "TurDepartman",
     "User",
     "UserRole",

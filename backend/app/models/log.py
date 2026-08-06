@@ -22,6 +22,14 @@ class LogAction(str, enum.Enum):
     user_updated = "user_updated"
     # Bir turun hangi departmana yonlendirildiginin degistirilmesi.
     tur_departman_changed = "tur_departman_changed"
+    # Tur sozlugunun kendisi (admin ekrani): tur ekleme/duzenleme/silme.
+    tur_created = "tur_created"
+    tur_updated = "tur_updated"
+    tur_deleted = "tur_deleted"
+    # Mudurluk sozlugu (admin ekrani).
+    departman_created = "departman_created"
+    departman_updated = "departman_updated"
+    departman_deleted = "departman_deleted"
     assignment_created = "assignment_created"
     assignment_completed = "assignment_completed"
     assignment_cancelled = "assignment_cancelled"

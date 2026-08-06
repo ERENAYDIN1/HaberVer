@@ -1,7 +1,5 @@
-import {
-  ASSET_STATUS_LABELS,
-  ASSET_TYPE_LABELS,
-} from "../types/asset";
+import { turAdi } from "../data/turSozlugu";
+import { ASSET_STATUS_LABELS } from "../types/asset";
 import type { AssetFeatureCollection } from "../types/asset";
 
 function indir(icerik: string, dosyaAdi: string, mimeType: string) {
@@ -52,7 +50,7 @@ export function csvIndir(data: AssetFeatureCollection) {
     return [
       p.id,
       p.name,
-      ASSET_TYPE_LABELS[p.type],
+      turAdi(p.type),
       ASSET_STATUS_LABELS[p.status],
       lng,
       lat,

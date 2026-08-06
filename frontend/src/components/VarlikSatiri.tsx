@@ -1,17 +1,15 @@
 import { forwardRef, useState } from "react";
 
 import { fotoUrl } from "../api/reports";
+import { turAdi, turRozetSinifi } from "../data/turSozlugu";
 import {
-  ASSET_TYPE_LABELS,
-  TIP_ROZET_SINIFI,
-  TIP_ROZET_SINIFI_VARSAYILAN,
   durumEtiketi,
   kalanSilmeGunu,
   type AssetFeature,
 } from "../types/asset";
 import { SilOnayi } from "./Aksiyonlar";
 import FotoBuyutucu from "./FotoBuyutucu";
-import { IconPin, TIP_IKONU } from "./icons";
+import { tipIkonu } from "./icons";
 
 interface VarlikSatiriProps {
   asset: AssetFeature;
@@ -49,7 +47,7 @@ const VarlikSatiri = forwardRef<HTMLLIElement, VarlikSatiriProps>(function Varli
     asset.properties;
   const [lng, lat] = asset.geometry.coordinates;
   const bakim = status === "bakim_lazim";
-  const TipIkonu = TIP_IKONU[type] ?? IconPin;
+  const TipIkonu = tipIkonu(type);
   const foto = fotoUrl(photo_url);
   const [fotoAcik, setFotoAcik] = useState(false);
   // Tamir edilmis talep varliginda otomatik silmeye kalan gun (varsa).
@@ -88,7 +86,7 @@ const VarlikSatiri = forwardRef<HTMLLIElement, VarlikSatiriProps>(function Varli
           ) : (
             <span
               className={`flex h-6 w-6 shrink-0 items-center justify-center border ${
-                TIP_ROZET_SINIFI[type] ?? TIP_ROZET_SINIFI_VARSAYILAN
+                turRozetSinifi(type)
               }`}
             >
               <TipIkonu className="h-3.5 w-3.5" />
@@ -97,7 +95,7 @@ const VarlikSatiri = forwardRef<HTMLLIElement, VarlikSatiriProps>(function Varli
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-slate-800">{name}</p>
             <p className="text-xs text-slate-500">
-              {ASSET_TYPE_LABELS[type]}
+              {turAdi(type)}
               {brand_model ? ` · ${brand_model}` : ""}
             </p>
             <div className="mt-1.5 flex items-center gap-2">

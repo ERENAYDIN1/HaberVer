@@ -7,11 +7,9 @@ import {
   useTurDepartmanEslemesi,
 } from "../hooks/useDepartmanlar";
 import type { TurDepartmanEslemesi } from "../types/departman";
+import { turAdi, turKodlari, turRozetSinifi } from "../data/turSozlugu";
 import {
   ASSET_SOURCE_LABELS,
-  ASSET_TYPES,
-  ASSET_TYPE_LABELS,
-  TIP_ROZET_SINIFI,
   type AssetSource,
   type AssetType,
 } from "../types/asset";
@@ -26,7 +24,7 @@ import {
   type HavuzVarlik,
   type Yaka,
 } from "../types/saha";
-import { IconInbox, IconRefresh, IconUsers, IconWarning, TIP_IKONU } from "./icons";
+import { IconInbox, IconRefresh, IconUsers, IconWarning, tipIkonu } from "./icons";
 
 /** Bir varlik/gorev icin uygulanabilecek islem. */
 type Islem =
@@ -64,11 +62,11 @@ function beklemeMetni(iso: string): string {
 
 /** Satir basindaki renkli/ikonlu tur rozeti; renk ve ikon ortak paletten gelir. */
 function TipRozet({ type }: { type: AssetType }) {
-  const Ikon = TIP_IKONU[type];
+  const Ikon = tipIkonu(type);
   return (
     <span
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${TIP_ROZET_SINIFI[type]}`}
-      title={ASSET_TYPE_LABELS[type]}
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${turRozetSinifi(type)}`}
+      title={turAdi(type)}
     >
       <Ikon className="h-4 w-4" />
     </span>
@@ -205,7 +203,7 @@ function GorevSatiri({
             {gorev.name}
           </p>
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-            <span className="text-slate-500">{ASSET_TYPE_LABELS[gorev.type]}</span>
+            <span className="text-slate-500">{turAdi(gorev.type)}</span>
             <KaynakRozet source={gorev.source} />
             <YakaRozet yaka={gorev.yaka} />
             <span
@@ -393,7 +391,9 @@ function DepartmanBolumu({
     <section>
       <div className="mb-1.5 flex items-center gap-2">
         <span className="h-4 w-1 rounded-full" style={{ background: renk }} />
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+        {/* Adin tamami, normal yazim: "PARK VE BAHÇELER MÜDÜRLÜĞÜ" gibi uzun
+            bir Turkce ad buyuk harfle okunmuyordu. */}
+        <p className="min-w-0 truncate text-[13px] font-bold" style={{ color: renk }}>
           {ad}
         </p>
         <span
@@ -444,7 +444,7 @@ function HavuzSatiri({
             {varlik.name}
           </p>
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-            <span className="text-slate-500">{ASSET_TYPE_LABELS[varlik.type]}</span>
+            <span className="text-slate-500">{turAdi(varlik.type)}</span>
             <KaynakRozet source={varlik.source} />
             <YakaRozet yaka={varlik.yaka} />
             {/* Isin hangi mudurlugu bekledigi: otomatik atama yalnizca o
@@ -742,7 +742,7 @@ export default function SahaEkipleri() {
               >
                 Tümü
               </button>
-              {ASSET_TYPES.map((t) => (
+              {turKodlari().map((t) => (
                 <button
                   key={t}
                   onClick={() => setHavuzTip(t)}
@@ -752,7 +752,7 @@ export default function SahaEkipleri() {
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                   }`}
                 >
-                  {ASSET_TYPE_LABELS[t]}
+                  {turAdi(t)}
                 </button>
               ))}
             </div>

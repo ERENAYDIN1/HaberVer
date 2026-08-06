@@ -265,6 +265,145 @@ def departman_kapsami() -> None:
     print(f"[ok] Fen Isleri -> 'agac' varligi olustur: 403 ({disari.json()['detail']})")
 
 
+def bolge_kapsami() -> None:
+    """A9: bir mudurlugun cizdigi alan/guzergah digerinin ekranina dusmemeli.
+
+    Talep/varlik kapsami TURDEN cozulur, ama bir bolgenin turu yoktur - kural
+    kaydin kendi `departman` sutunundan gecer (bkz. routers/bolgeler.py). Bu
+    ayri bir kod yolu oldugu icin ayrica olculur: onceden butun bolgeler
+    herkese acikti ve bir mudurluk digerinin calisma alanini kendi alakasiz
+    ekibine atayabiliyordu.
+
+    Ayrica kaydin GENEL olani (departman NULL) herkese gorunmeye devam
+    etmeli: admin'in departmani yoktur, onun cizdigi kayitlar bu kovaya duser
+    ve kapanmalari tum bolgeleri gorunmez yapardi."""
+    bolum("A9 - bolge (alan/guzergah) kapsami")
+    fen = giris("calisan1@greenasset.com", "calisan1234")
+    park = giris("calisan2@greenasset.com", "calisan1234")
+
+    fen_bolgeler = fen.get(f"{API}/api/bolgeler").json()
+    park_bolgeler = park.get(f"{API}/api/bolgeler").json()
+    fen_departmanlari = {b["departman"] for b in fen_bolgeler}
+    park_departmanlari = {b["departman"] for b in park_bolgeler}
+    assert fen_departmanlari <= {"fen_isleri", None}, fen_departmanlari
+    assert park_departmanlari <= {"park_bahceler", None}, park_departmanlari
+    print(f"[ok] Fen Isleri yalnizca {sorted(map(str, fen_departmanlari))} goruyor")
+    print(f"[ok] Park ve Bahceler yalnizca {sorted(map(str, park_departmanlari))} goruyor")
+    assert None in fen_departmanlari and None in park_departmanlari, (
+        "genel (departmansiz) bolge iki tarafta da gorunmeli"
+    )
+    print("[ok] genel bolge (departman=NULL) iki mudurlukte de gorunuyor")
+
+    # Yabanci bir kaydin id'sini admin'den ogrenip dogrudan API'ye gidiyoruz:
+    # arayuz onu hic gostermezdi, kural arayuzde degil burada durmali.
+    yonetici = admin_girisi()
+    hepsi = yonetici.get(f"{API}/api/bolgeler").json()
+    yabanci = next(b for b in hepsi if b["departman"] == "park_bahceler")
+
+    for yol, govde in (
+        (f"/api/bolgeler/{yabanci['id']}", None),
+        (f"/api/bolgeler/{yabanci['id']}/ata", {"worker_id": None}),
+        (f"/api/bolgeler/{yabanci['id']}/tamamla", {"tamamlandi": True}),
+    ):
+        yanit = (
+            fen.patch(f"{API}{yol}", json={"ad": "ele gecirildi"}, headers=ORIGIN)
+            if govde is None
+            else fen.post(f"{API}{yol}", json=govde, headers=ORIGIN)
+        )
+        assert yanit.status_code == 404, f"{yol}: beklenen 404, gelen {yanit.status_code}"
+    print("[ok] Fen Isleri -> park bolgesini duzenle/ata/tamamla: 404")
+
+    silme = fen.delete(f"{API}/api/bolgeler/{yabanci['id']}", headers=ORIGIN)
+    assert silme.status_code == 404, f"beklenen 404, gelen {silme.status_code}"
+    print("[ok] Fen Isleri -> park bolgesini sil: 404")
+
+    # Kendi kaydinda bile MUDURLUK DEVRI admin'in isi: aksi halde bir mudurluk
+    # kendi kaydini digerine iterek ya da genele birakarak kapsami asabilirdi.
+    kendi = next(b for b in fen_bolgeler if b["departman"] == "fen_isleri")
+    devir = fen.patch(
+        f"{API}/api/bolgeler/{kendi['id']}",
+        json={"departman": None},
+        headers=ORIGIN,
+    )
+    assert devir.status_code == 403, f"beklenen 403, gelen {devir.status_code}"
+    print(f"[ok] Fen Isleri -> kendi bolgesini genele cek: 403 ({devir.json()['detail']})")
+
+    # Kaydin mudurlugu disindaki bir ekibe atama da reddedilmeli (ekip listesi
+    # zaten suzuluyor, ama kural o listeye guvenmemeli).
+    park_ekipleri = yonetici.get(f"{API}/api/saha/ekipler").json()
+    yabanci_ekip = next(e for e in park_ekipleri if e["departman"] == "park_bahceler")
+    atama = fen.post(
+        f"{API}/api/bolgeler/{kendi['id']}/ata",
+        json={"worker_id": yabanci_ekip["id"]},
+        headers=ORIGIN,
+    )
+    assert atama.status_code == 403, f"beklenen 403, gelen {atama.status_code}"
+    print(f"[ok] Fen Isleri -> park ekibine ata: 403 ({atama.json()['detail']})")
+
+
+def tur_sozlugu_yetkisi() -> None:
+    """A10: tur/mudurluk sozlugunu YALNIZCA admin degistirebilir.
+
+    Sozluk artik veri (admin ekranindan yonetiliyor); bir tur eklemek ya da
+    yonlendirmesini degistirmek her personelin ne gorebildigini degistirir.
+    Okuma herkese acik (vatandas talep formu tur listesini oradan cizer)."""
+    bolum("A10 - tur/mudurluk sozlugu yetkisi")
+    calisan = giris("calisan1@greenasset.com", "calisan1234")
+
+    okuma = calisan.get(f"{API}/api/turler")
+    assert okuma.status_code == 200, okuma.status_code
+    print(f"[ok] calisan tur listesini okuyabiliyor ({len(okuma.json())} tur)")
+
+    denemeler = [
+        (
+            "POST /api/turler",
+            calisan.post(
+                f"{API}/api/turler",
+                json={
+                    "kod": "guvenlik_testi",
+                    "ad": "Güvenlik Testi",
+                    "grup": "diger",
+                    "glif": None,
+                    "departman": "fen_isleri",
+                },
+                headers=ORIGIN,
+            ),
+        ),
+        (
+            "PATCH /api/turler/agac",
+            calisan.patch(f"{API}/api/turler/agac", json={"ad": "X"}, headers=ORIGIN),
+        ),
+        ("DELETE /api/turler/agac", calisan.delete(f"{API}/api/turler/agac", headers=ORIGIN)),
+        (
+            "POST /api/departmanlar",
+            calisan.post(
+                f"{API}/api/departmanlar",
+                json={"kod": "sahte", "ad": "Sahte", "aciklama": None,
+                      "renk": "#000000", "aktif": True},
+                headers=ORIGIN,
+            ),
+        ),
+        (
+            "PUT /api/departmanlar/esleme",
+            calisan.put(
+                f"{API}/api/departmanlar/esleme",
+                json={"esleme": {"agac": "fen_isleri"}},
+                headers=ORIGIN,
+            ),
+        ),
+    ]
+    for ad, yanit in denemeler:
+        assert yanit.status_code == 403, f"{ad}: beklenen 403, gelen {yanit.status_code}"
+    print("[ok] calisan -> tur/mudurluk ekle-degistir-sil ve yonlendirme: 403")
+
+    # KULLANIMDA olan bir tur admin icin bile silinemez: tur kodu kayitlarin
+    # icinde yasar, silinirse gecmis okunamaz hale gelirdi.
+    yonetici = admin_girisi()
+    silme = yonetici.delete(f"{API}/api/turler/agac", headers=ORIGIN)
+    assert silme.status_code == 409, f"beklenen 409, gelen {silme.status_code}"
+    print(f"[ok] admin -> kullanimdaki turu sil: 409 ({silme.json()['detail']})")
+
+
 def main() -> None:
     print(f"Hedef: {API}")
     talep_id = yukleme_siniri()
@@ -274,6 +413,8 @@ def main() -> None:
     acik_yonlendirme()
     azp_dogrulamasi()
     departman_kapsami()
+    bolge_kapsami()
+    tur_sozlugu_yetkisi()
 
     # Test talebini temizle.
     personel = admin_girisi()

@@ -1,15 +1,11 @@
 import { forwardRef, useState } from "react";
 
 import { fotoUrl } from "../api/reports";
-import {
-  ASSET_TYPE_LABELS,
-  TIP_ROZET_SINIFI,
-  TIP_ROZET_SINIFI_VARSAYILAN,
-} from "../types/asset";
+import { turAdi, turRozetSinifi } from "../data/turSozlugu";
 import { talepNoktasi } from "../types/report";
 import type { ReportFeature } from "../types/report";
 import FotoBuyutucu from "./FotoBuyutucu";
-import { IconPin, TIP_IKONU } from "./icons";
+import { tipIkonu } from "./icons";
 import TalepDurumRozeti from "./TalepDurumRozeti";
 
 interface TalepSatiriProps {
@@ -46,7 +42,7 @@ const TalepSatiri = forwardRef<HTMLLIElement, TalepSatiriProps>(function TalepSa
   const { id, name, type, status, photo_url } = report.properties;
   // Cizgi/alan taleplerde satirda seklin temsil noktasi gosterilir.
   const [lng, lat] = talepNoktasi(report) ?? [0, 0];
-  const TipIkonu = TIP_IKONU[type] ?? IconPin;
+  const TipIkonu = tipIkonu(type);
   const bekliyor = status === "beklemede";
   const reddedildi = status === "reddedildi";
   const foto = fotoUrl(photo_url);
@@ -84,7 +80,7 @@ const TalepSatiri = forwardRef<HTMLLIElement, TalepSatiriProps>(function TalepSa
           ) : (
             <span
               className={`flex h-6 w-6 shrink-0 items-center justify-center border ${
-                TIP_ROZET_SINIFI[type] ?? TIP_ROZET_SINIFI_VARSAYILAN
+                turRozetSinifi(type)
               }`}
             >
               <TipIkonu className="h-3.5 w-3.5" />
@@ -92,7 +88,7 @@ const TalepSatiri = forwardRef<HTMLLIElement, TalepSatiriProps>(function TalepSa
           )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-slate-800">{name}</p>
-            <p className="text-xs text-slate-500">{ASSET_TYPE_LABELS[type]}</p>
+            <p className="text-xs text-slate-500">{turAdi(type)}</p>
             <div className="mt-1.5 flex items-center gap-2">
               {/* Gorunum (dort deger) durumdan (uc deger) once gelir: tamir
                   edilmis bir is "Onaylandı" diye kalmasin. */}

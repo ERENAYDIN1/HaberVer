@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
+import { useTurler } from "../hooks/useTurler";
 import type { UserRole } from "../types/auth";
 import { useAuth } from "./AuthContext";
 import { girisBaslat, girisDongusuVarMi } from "./token";
@@ -64,5 +65,34 @@ export default function RequireRole({ roller, children }: RequireRoleProps) {
     return <Navigate to={rolAnaSayfasi(user.role)} replace />;
   }
 
+  return <SozlukKapisi>{children}</SozlukKapisi>;
+}
+
+/** Tur sozlugu gelmeden korumali ekranlar cizilmez.
+ *
+ *  Sozluk artik backend verisi (admin tur ekleyebiliyor), ama onu okuyanlarin
+ *  cogu React DISI: harita katmanlari, popup HTML'leri, CSV disa aktarma.
+ *  Bunlari tek tek bir React aboneligine baglamak yerine tek bir kapi
+ *  konuluyor - asagidaki her sey sozlugun dolu oldugunu varsayabilir. Bedeli
+ *  ilk acilista bir istek kadar bekleme; karsiliginda "tur adi bir an kod
+ *  olarak gorunuyor" sinifindan hatalarin tamami yok. */
+function SozlukKapisi({ children }: { children: ReactNode }) {
+  const { isPending, isError, error, refetch } = useTurler();
+
+  if (isPending) return <Bekleme metin="Tür sözlüğü yükleniyor…" />;
+  if (isError) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-3 text-sm text-slate-600">
+        <p>Tür sözlüğü yüklenemedi: {(error as Error).message}</p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+        >
+          Tekrar dene
+        </button>
+      </div>
+    );
+  }
   return <>{children}</>;
 }

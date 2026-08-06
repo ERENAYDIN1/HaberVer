@@ -1,43 +1,62 @@
+import { turAdi } from "../data/turSozlugu";
 import {
-  ASSET_TYPE_LABELS,
-  GRUP_TURLERI,
-  TIP_GRUPLARI,
-  TIP_GRUP_ETIKETLERI,
-  type AssetType,
-} from "../types/asset";
+  useDepartmanlar,
+  useTurDepartmanEslemesi,
+} from "../hooks/useDepartmanlar";
+import {
+  YONLENDIRILMEMIS_AD,
+  departmanTurGruplari,
+} from "../types/departman";
+import type { AssetType } from "../types/asset";
 
 interface TipSecenekleriProps {
-  /** Gosterilecek turler. Vatandas talep formu tumunu (`ASSET_TYPES`),
-   *  personelin envanter formu `KAYITLI_ASSET_TYPES`'i gecer. */
+  /** Gosterilecek turler; cagiranlar `turKodlari()` gecer (bkz.
+   *  data/turSozlugu.ts). */
   turler: readonly AssetType[];
 }
 
 /**
  * Bir `<select>` icin gruplanmis tur `<option>`'lari.
  *
- * 13 tur duz bir listede okunamiyor; turler `<optgroup>`'larla 5 gruba
- * ayrilir (Yeşil Alan ve Park / Aydınlatma ve Elektrik / Yol ve Kaldırım /
- * Altyapı-Su / Diğer) - haritadaki renk gruplariyla BIREBIR ayni ayrim, bkz.
- * types/asset.ts `TIP_GRUBU`. Ayni gruplama uc ayri secicide (vatandas talep
- * formu, varlik ekleme formu, varlik listesi filtresi) gerektiginden tek
- * bilesende toplandi. Bos/"Seçiniz" secenegini cagiran ekler.
+ * Gruplama MUDURLUGE goredir ("Park ve Bahçeler Müdürlüğü"), turun renk
+ * grubuna degil: kullanicinin bir tur secerken sordugu soru "bu is kime
+ * gidecek"tir, "haritada hangi renkle cizilecek" degil. Ayni kategorileme
+ * lejantta ve yonetim ekraninda da kullanilir (`departmanTurGruplari`).
+ *
+ * Sozluk henuz gelmediyse gruplama yapilmaz, turler duz listelenir - bir an
+ * "yönlendirilmemiş" baslikari gorunup sonra yerine oturmasindansa.
  */
 export default function TipSecenekleri({ turler }: TipSecenekleriProps) {
+  const { data: departmanlar } = useDepartmanlar();
+  const { data: esleme } = useTurDepartmanEslemesi();
+  const gruplar = departmanTurGruplari(departmanlar, esleme, turler);
+
+  if (!gruplar) {
+    return (
+      <>
+        {turler.map((t) => (
+          <option key={t} value={t}>
+            {turAdi(t)}
+          </option>
+        ))}
+      </>
+    );
+  }
+
   return (
     <>
-      {TIP_GRUPLARI.map((grup) => {
-        const grupTurleri = GRUP_TURLERI[grup].filter((t) => turler.includes(t));
-        if (grupTurleri.length === 0) return null;
-        return (
-          <optgroup key={grup} label={TIP_GRUP_ETIKETLERI[grup]}>
-            {grupTurleri.map((t) => (
-              <option key={t} value={t}>
-                {ASSET_TYPE_LABELS[t]}
-              </option>
-            ))}
-          </optgroup>
-        );
-      })}
+      {gruplar.map((grup) => (
+        <optgroup
+          key={grup.departman?.kod ?? "__yonlendirilmemis"}
+          label={grup.departman?.ad ?? YONLENDIRILMEMIS_AD}
+        >
+          {grup.turler.map((t) => (
+            <option key={t} value={t}>
+              {turAdi(t)}
+            </option>
+          ))}
+        </optgroup>
+      ))}
     </>
   );
 }

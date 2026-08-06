@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useEffect, useRef, useState } from "react";
 
 import { bolgeAta, bolgeGuncelle, bolgeSil, bolgeler as bolgeleriGetir } from "../api/bolgeler";
+import { useDepartmanlar } from "../hooks/useDepartmanlar";
+import { departmanBul } from "../types/departman";
 import type { Bolge } from "../types/bolge";
 import type { EkipOzet } from "../types/saha";
 import { YAKA_KISA, type Yaka } from "../types/saha";
@@ -351,6 +353,8 @@ const BolgeKarti = forwardRef<HTMLLIElement, KartProps>(function BolgeKarti(
     : bolge.uzunluk_m != null
       ? mesafeEtiketi(bolge.uzunluk_m)
       : null;
+  const { data: departmanlar } = useDepartmanlar();
+  const kaydinDepartmani = departmanBul(departmanlar, bolge.departman);
 
   return (
     <li
@@ -383,6 +387,24 @@ const BolgeKarti = forwardRef<HTMLLIElement, KartProps>(function BolgeKarti(
             </p>
           )}
           <p className="mt-1 flex flex-wrap items-center gap-1">
+            {/* Mudurluk rozeti: admin butun mudurluklerin kayitlarini bir arada
+                gorur, hangi kaydin kime ait oldugu okunabilir olmali. */}
+            {kaydinDepartmani ? (
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 text-[11px] font-medium"
+                style={{
+                  background: `${kaydinDepartmani.renk}1a`,
+                  color: kaydinDepartmani.renk,
+                }}
+                title="Bu kaydı yalnızca bu müdürlük görür"
+              >
+                {kaydinDepartmani.ad}
+              </span>
+            ) : (
+              <span className="inline-flex items-center bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">
+                Genel
+              </span>
+            )}
             {bolge.worker_ad ? (
               <span className="inline-flex items-center gap-1 bg-indigo-100 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700">
                 <IconUsers className="h-3 w-3" />
@@ -454,12 +476,21 @@ const BolgeKarti = forwardRef<HTMLLIElement, KartProps>(function BolgeKarti(
             className="min-w-0 flex-1 border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-emerald-500 disabled:opacity-50"
           >
             <option value="">Atanmamış</option>
-            {(ekipler ?? []).map((ekip) => (
-              <option key={ekip.id} value={ekip.id}>
-                {ekip.full_name || ekip.email}
-                {ekip.yaka ? ` · ${YAKA_KISA[ekip.yaka as Yaka] ?? ekip.yaka}` : ""}
-              </option>
-            ))}
+            {/* Kaydin mudurlugu disindaki ekipler ISARETLENIR ama gizlenmez -
+                yaka uyarisiyla ayni desen: yetki personeldedir, bilgi eksik
+                degil. (Admin disi personel zaten yalnizca kendi mudurlugunun
+                ekiplerini gorur, backend de digerini reddeder.) */}
+            {(ekipler ?? []).map((ekip) => {
+              const baskaMudurluk =
+                bolge.departman !== null && ekip.departman !== bolge.departman;
+              return (
+                <option key={ekip.id} value={ekip.id}>
+                  {ekip.full_name || ekip.email}
+                  {ekip.yaka ? ` · ${YAKA_KISA[ekip.yaka as Yaka] ?? ekip.yaka}` : ""}
+                  {baskaMudurluk ? " · ⚠ başka müdürlük" : ""}
+                </option>
+              );
+            })}
           </select>
           {atamaBekliyor && <span className="text-[11px] text-slate-400">…</span>}
         </div>

@@ -3,7 +3,7 @@ import type maplibregl from "maplibre-gl";
 import { BOS_GEOJSON } from "./geojson";
 import {
   TALEP_OPAKLIK_IFADESI,
-  TIP_RENGI_IFADESI,
+  tipRengiIfadesi,
   VARLIK_UYARI_RENK,
 } from "./haritaIkonlari";
 import type { AssetFeatureCollection } from "../types/asset";
@@ -105,7 +105,7 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
       source: SOURCE_ID,
       paint: {
         "circle-radius": ISARETCI.varlikYaricap as never,
-        "circle-color": TIP_RENGI_IFADESI as never,
+        "circle-color": tipRengiIfadesi() as never,
         "circle-stroke-width": ISARETCI.beyazHalka,
         "circle-stroke-color": "#ffffff",
       },

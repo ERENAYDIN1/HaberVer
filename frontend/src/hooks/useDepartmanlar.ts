@@ -1,7 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getEsleme, listDepartmanlar, updateEsleme } from "../api/departmanlar";
-import type { TurDepartmanEslemesi } from "../types/departman";
+import {
+  createDepartman,
+  deleteDepartman,
+  getEsleme,
+  listDepartmanlar,
+  updateDepartman,
+  updateEsleme,
+} from "../api/departmanlar";
+import type {
+  DepartmanUpdateInput,
+  TurDepartmanEslemesi,
+} from "../types/departman";
 
 /** Departman sozlugu ve tur -> departman eslemesi.
  *
@@ -33,16 +43,44 @@ export function useTurDepartmanEslemesi() {
   });
 }
 
+/** Mudurluk/yonlendirme degisince kimin neyi gorebildigi de degisir: varlik,
+ *  talep ve bolge listeleri tazelenmeli. */
+function kapsamSonrasiTazele(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["departmanlar"] });
+  qc.invalidateQueries({ queryKey: ["assets"] });
+  qc.invalidateQueries({ queryKey: ["reports"] });
+  qc.invalidateQueries({ queryKey: ["bolgeler"] });
+}
+
 export function useEslemeGuncelle() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (esleme: TurDepartmanEslemesi) => updateEsleme(esleme),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["departmanlar"] });
-      // Yonlendirme degisince kimin neyi gorebildigi de degisir: varlik ve
-      // talep listeleri tazelenmeli.
-      qc.invalidateQueries({ queryKey: ["assets"] });
-      qc.invalidateQueries({ queryKey: ["reports"] });
-    },
+    onSuccess: () => kapsamSonrasiTazele(qc),
+  });
+}
+
+export function useDepartmanEkle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createDepartman,
+    onSuccess: () => kapsamSonrasiTazele(qc),
+  });
+}
+
+export function useDepartmanGuncelle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ kod, data }: { kod: string; data: DepartmanUpdateInput }) =>
+      updateDepartman(kod, data),
+    onSuccess: () => kapsamSonrasiTazele(qc),
+  });
+}
+
+export function useDepartmanSil() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteDepartman,
+    onSuccess: () => kapsamSonrasiTazele(qc),
   });
 }

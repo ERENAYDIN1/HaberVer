@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { ilSiniri } from "../api/sinirlar";
 import { HARITA_STILLERI, type HaritaStilId } from "../data/mapStyles";
+import { turSozluguSurumu } from "../data/turSozlugu";
 import type { TamamlananAlan } from "../types/alan";
 import type { Bolge, SekilDuzenleme } from "../types/bolge";
 import type { AssetFeatureCollection } from "../types/asset";
@@ -34,6 +35,7 @@ import {
   TALEP_OPAKLIK_IFADESI,
   gorunumFiltresi,
   tipIkonlariniHazirla,
+  tipRengiIfadesi,
 } from "../utils/haritaIkonlari";
 // Kaynak/katman tanimlari. Olay baglama ve veri yazma burada kalir.
 import {
@@ -1442,6 +1444,21 @@ export default function MapView({
     // Yalnizca stil kimligi degisince calismali (bkz. kurulum effect'i).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aktifStilId]);
+
+  // --- Tur sozlugu degisince renk ifadesini ve glifleri tazele ---
+  // Ikisi de katmanlar kurulurken sozlukten URETILIYOR (bkz. tipRengiIfadesi /
+  // tipIkonlariniHazirla), yani admin calisirken yeni bir tur eklerse ya da bir
+  // turun grubunu/glifini degistirirse harita bir sonraki stil degisimine kadar
+  // bayat kalirdi. Sozluk pratikte nadiren degistigi icin ucuz bir effect.
+  const sozlukSurumu = turSozluguSurumu();
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !hazirRef.current) return;
+    if (map.getLayer("assets-circle")) {
+      map.setPaintProperty("assets-circle", "circle-color", tipRengiIfadesi());
+    }
+    tipIkonlariniHazirla(map);
+  }, [sozlukSurumu]);
 
   // --- Veri degisince kaynagi guncelle ---
   useEffect(() => {

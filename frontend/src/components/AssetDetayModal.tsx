@@ -11,9 +11,9 @@ import {
   useTurDepartmanEslemesi,
 } from "../hooks/useDepartmanlar";
 import { departmanAdi } from "../types/departman";
+import { turAdi } from "../data/turSozlugu";
 import {
   ASSET_SOURCE_LABELS,
-  ASSET_TYPE_LABELS,
   durumEtiketi,
   kalanSilmeGunu,
   type AssetFeature,
@@ -224,7 +224,7 @@ export default function AssetDetayModal({
 
         <div>
           <h3 className="text-base font-semibold text-slate-900">{p.name}</h3>
-          <p className="text-xs text-slate-500">{ASSET_TYPE_LABELS[p.type]}</p>
+          <p className="text-xs text-slate-500">{turAdi(p.type)}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

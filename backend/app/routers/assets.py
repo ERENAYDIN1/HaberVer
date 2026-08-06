@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..crud import asset as crud
 from ..crud import assignment as assignment_crud
+from ..crud import tur as tur_crud
 from ..crud.session import OturumBaglami
 from ..database import get_db
 from ..models.asset import AssetSource, AssetStatus, AssetType
@@ -19,6 +20,16 @@ from ..schemas.asset import (
 from ..security import Kapsam, get_context, kapsam, personel, saha_dahil
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
+
+
+def _tur_dogrula(db: Session, tur: AssetType) -> None:
+    """Tur artik bir enum degil `turler` tablosunun bir satiri, dolayisiyla
+    pydantic onu dogrulayamaz. Kontrol burada yapilmazsa gecersiz bir tur
+    veritabanindaki FK'ye carpar ve kullaniciya 500 doner."""
+    if not tur_crud.gecerli(db, tur):
+        raise HTTPException(
+            status_code=422, detail=f"Gecersiz tur: {tur}"
+        )
 
 
 def _kapsamda(row, alan: Kapsam):
@@ -42,6 +53,7 @@ def create_asset(
     alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
+    _tur_dogrula(db, data.type)
     alan.dogrula(data.type)
     row = crud.create_asset(db, data, actor=user)
     return AssetFeature.from_row(row)
@@ -112,6 +124,7 @@ def update_asset(
     # varligini baska departmanin turune cevirip erisimini kaybettirebilirdi.
     alan.dogrula(mevcut[0].type)
     if data.type is not None:
+        _tur_dogrula(db, data.type)
         alan.dogrula(data.type)
 
     row = crud.update_asset(db, asset_id, data, actor=user)

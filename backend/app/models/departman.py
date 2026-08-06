@@ -6,13 +6,23 @@ Bahceler'e gider. Bu yonlendirme kodda sabit degil `tur_departman` tablosunda
 durur - bir belediye orgutlenmesini degistirdiginde migration yazilmasin,
 admin panelinden guncellensin diye.
 
-Tur SOZLUGUNUN kendisi (13 tur, gliflari, renk gruplari) yerinde kalir:
-`asset_type` PG enum'u ve frontend'deki `types/asset.ts`. Departmanlastirma
-turlerin ne oldugunu degil, KIME GITTIGINI tanimlar."""
+Tur SOZLUGUNUN kendisi ayri bir tablodur (`turler`, bkz. models/tur.py):
+departmanlastirma turlerin ne oldugunu degil, KIME GITTIGINI tanimlar. Ikisi
+de admin ekranindan yonetilir ama ayri kalir - bir turu yeniden yonlendirmek
+onu yeniden TANIMLAMAK degildir."""
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, func, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
@@ -35,6 +45,14 @@ class Departman(Base):
     aktif: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
+    # Listeleme sirasi (`turler.sira` ile ayni desen). Alfabetik siralama
+    # "Cozum Merkezi (Beyaz Masa)"yi - siniflandirilamayan talebin dustugu
+    # triyaj kovasini - listenin basina tasiyordu; bir "diger" kovasi her
+    # zaman en altta durmali. Yeni mudurlukler varsayilan 100 ile onun onune
+    # girer.
+    sira: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("100")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -47,8 +65,10 @@ class TurDepartman(Base):
 
     __tablename__ = "tur_departman"
 
+    # Turun kendisi `turler` tablosunda yasar; buradaki FK CASCADE'dir:
+    # yonlendirme turun bir ozelligidir, tur silinince pesinden gider.
     tur: Mapped[AssetType] = mapped_column(
-        Enum(AssetType, name="asset_type", create_type=False), primary_key=True
+        String(32), ForeignKey("turler.kod", ondelete="CASCADE"), primary_key=True
     )
     departman_kod: Mapped[str] = mapped_column(
         String(32), ForeignKey("departmanlar.kod", ondelete="RESTRICT"), nullable=False

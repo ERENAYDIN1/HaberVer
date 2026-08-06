@@ -19,6 +19,7 @@ def add_log(
     entity_name: str | None = None,
     detail: str | None = None,
     tur: AssetType | None = None,
+    departman: str | None = None,
 ) -> ActivityLog:
     """Log kaydini olusturup session'a ekler; commit cagirmaz - ait oldugu
     islemin (asset/report/user degisikligi) commit'iyle birlikte atomik
@@ -26,7 +27,10 @@ def add_log(
 
     `tur` verilirse kaydin departmani O ANDA cozulur ve satira yazilir. Bu,
     silme kayitlarinin okunabilir kalmasi icin sart: varlik silindikten sonra
-    turu - dolayisiyla hangi mudurlugun isi oldugu - artik ogrenilemez."""
+    turu - dolayisiyla hangi mudurlugun isi oldugu - artik ogrenilemez.
+
+    `departman` ise turu OLMAYAN kayitlar icindir (gorev bolgeleri): mudurluk
+    kaydin kendi sutunundadir, turden cozulemez. Ikisi birlikte verilmez."""
     log = ActivityLog(
         action=action,
         actor_id=actor.id if actor else None,
@@ -35,7 +39,9 @@ def add_log(
         entity_id=entity_id,
         entity_name=entity_name,
         detail=detail,
-        departman=tur_departmani(db, tur) if tur is not None else None,
+        departman=(
+            tur_departmani(db, tur) if tur is not None else departman
+        ),
     )
     db.add(log)
     return log

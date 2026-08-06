@@ -28,6 +28,7 @@ function bolge(ozel: Partial<Bolge> = {}): Bolge {
     noktalar: ozel.noktalar ?? [UCGEN_KAPALI],
     alan_m2: null,
     uzunluk_m: null,
+    departman: null,
     worker_id: null,
     worker_ad: null,
     assigned_at: null,

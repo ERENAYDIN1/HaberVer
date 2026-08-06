@@ -18,13 +18,8 @@ import {
   useDepartmanlar,
   useTurDepartmanEslemesi,
 } from "../hooks/useDepartmanlar";
-import {
-  ASSET_TYPES,
-  ASSET_TYPE_LABELS,
-  GRUP_RENGI,
-  TIP_GRUBU,
-  type AssetType,
-} from "../types/asset";
+import { turAdi, turGrubu, turKodlari } from "../data/turSozlugu";
+import { GRUP_RENGI, type AssetType } from "../types/asset";
 import { departmanAdi } from "../types/departman";
 import {
   MAKS_TALEP_NOKTASI,
@@ -123,7 +118,7 @@ export default function VatandasEkran() {
 
   // Cizim rengi turun grup rengidir: form ile haritadaki sekil ayni sinyali
   // tasisin (tur secilmemisken notr yesil).
-  const cizimRengi = tip ? GRUP_RENGI[TIP_GRUBU[tip]] : "#059669";
+  const cizimRengi = tip ? GRUP_RENGI[turGrubu(tip)] : "#059669";
 
   const cizim: CizimAyari | null = useMemo(() => {
     if (sekil === "Point") return null;
@@ -366,7 +361,7 @@ export default function VatandasEkran() {
                 onChange={(e) => setTip(e.target.value as AssetType | "")}
               >
                 <option value="">Seçiniz…</option>
-                <TipSecenekleri turler={ASSET_TYPES} />
+                <TipSecenekleri turler={turKodlari()} />
               </select>
               {/* Talebin nereye gidecegi SECIM ANINDA soylenir: vatandas
                   "kime bildirdim" sorusunu gonderdikten sonra sormasin. */}
@@ -751,7 +746,7 @@ function TalepKarti({ talep, kaldiriliyor, onKaldir }: TalepKartiProps) {
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-slate-800">{p.name}</p>
           <p className="text-xs text-slate-500">
-            {ASSET_TYPE_LABELS[p.type]}
+            {turAdi(p.type)}
             {talep.geometry.type !== "Point" && (
               <span className="text-slate-400">
                 {" · "}

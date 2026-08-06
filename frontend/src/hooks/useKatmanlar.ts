@@ -1,9 +1,9 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { KatmanAnahtari } from "../components/KatmanKontrolu";
+import { turKodlari, turSozluguSurumu } from "../data/turSozlugu";
 import {
   ASSET_STATUSES,
-  ASSET_TYPES,
   type AssetStatus,
   type AssetType,
 } from "../types/asset";
@@ -27,9 +27,43 @@ export interface KatmanDurumu {
   katmanDurumlari: Record<TalepGorunumu, boolean>;
 }
 
-/** Departmani olmayan (henuz atanmamis) ekiplerin alt-filtre anahtari. Gercek
- *  bir departman kodu olamayacagi icin cakismaz. */
+/** Departmani olmayan kayitlarin alt-filtre anahtari (ekipte "Departmansız",
+ *  bolge/guzergahta "Genel"). Gercek bir departman kodu olamayacagi icin
+ *  cakismaz. */
 export const DEPARTMANSIZ = "__departmansiz__";
+
+/** Departman alt-filtresi olan katmanlar. */
+export type BolgeKatmani = "bolgeler" | "guzergahlar";
+
+export interface DepartmanFiltresi {
+  secili: (kod: string | null) => boolean;
+  degistir: (anahtar: string) => void;
+}
+
+/** Departman alt-filtresinin state'i. Diger alt-filtrelerden farkli olarak
+ *  anahtarlar DERLEME ANINDA BILINMEZ (departman sozlugu backend'den gelir),
+ *  bu yuzden tam bir kayit yerine "yalnizca kapatilanlar" tutulur: eksik
+ *  anahtar = secili. Boylece yeni bir mudurluk eklendiginde kayitlari
+ *  kendiliginden gorunur olur, sessizce gizlenmez. */
+function useDepartmanFiltresi() {
+  const [kapali, setKapali] = useState<Record<string, true>>({});
+
+  const secili = useCallback(
+    (kod: string | null) => !kapali[kod ?? DEPARTMANSIZ],
+    [kapali]
+  );
+  const degistir = useCallback((anahtar: string) => {
+    setKapali((k) => {
+      const yeni = { ...k };
+      if (yeni[anahtar]) delete yeni[anahtar];
+      else yeni[anahtar] = true;
+      return yeni;
+    });
+  }, []);
+  const sifirla = useCallback(() => setKapali({}), []);
+
+  return useMemo(() => ({ secili, degistir, sifirla }), [secili, degistir, sifirla]);
+}
 
 /** Tum anahtarlari `true` yapan kayit. Sabitler elle yazilmak yerine
  *  sozlukten turetilsin diye: elle yazilan listeler bayatliyor. */
@@ -51,8 +85,9 @@ export function yalnizca<K extends string>(
   };
 }
 
-/** Acilis durumu. `katmanTurleri` sozlukten turetilir (bkz. `hepsi`). */
-export const KATMAN_BASLANGIC: KatmanDurumu = {
+/** Acilis durumu. `katmanTurleri` BURADA YOK: tur sozlugu backend'den gelir,
+ *  yani modul yuklendiginde henuz bilinmez - hook mount aninda kurar. */
+export const KATMAN_BASLANGIC: Omit<KatmanDurumu, "katmanTurleri"> = {
   /** Varliklar + talepler + ekipler gorunur; bolgeler/guzergahlar gizli
    *  (kullanici lejanttan ya da Bölgeler sekmesinden acar). */
   katmanlar: {
@@ -62,7 +97,6 @@ export const KATMAN_BASLANGIC: KatmanDurumu = {
     guzergahlar: false,
     ekipler: true,
   },
-  katmanTurleri: hepsi(ASSET_TYPES),
   /** Acilista yalnizca "Bakım Lazım": saglam envanter haritayi doldurmasin. */
   katmanVarlikDurumlari: { iyi: false, bakim_lazim: true },
   /** Ayni mantik: acilista ise donusmus (onaylanmis) talepler isaretli. */
@@ -86,34 +120,37 @@ const BOS_KATMANLAR: Record<KatmanAnahtari, boolean> = {
 
 export function useKatmanlar() {
   const [katmanlar, setKatmanlar] = useState(KATMAN_BASLANGIC.katmanlar);
-  const [katmanTurleri, setKatmanTurleri] = useState(KATMAN_BASLANGIC.katmanTurleri);
+  // Tur sozlugu backend verisidir; korumali ekranlar o yuklenmeden cizilmedigi
+  // icin (auth/RequireRole) mount aninda dolu okunur.
+  const [katmanTurleri, setKatmanTurleri] = useState<Record<AssetType, boolean>>(
+    () => hepsi(turKodlari())
+  );
+  // Admin calisirken yeni bir tur eklerse kutucugu ACIK baslar: eksik anahtar
+  // sessizce "gizli" anlamina gelseydi yeni tur haritada hic gorunmezdi.
+  const sozlukSurumu = turSozluguSurumu();
+  useEffect(() => {
+    setKatmanTurleri((onceki) => {
+      const eksik = turKodlari().filter((t) => !(t in onceki));
+      return eksik.length ? { ...onceki, ...hepsi(eksik) } : onceki;
+    });
+  }, [sozlukSurumu]);
   const [katmanVarlikDurumlari, setKatmanVarlikDurumlari] = useState(
     KATMAN_BASLANGIC.katmanVarlikDurumlari
   );
   const [katmanDurumlari, setKatmanDurumlari] = useState(
     KATMAN_BASLANGIC.katmanDurumlari
   );
-  /** Saha ekibi katmaninin departman alt-filtresi. Diger alt-filtrelerden
-   *  farkli olarak anahtarlar DERLEME ANINDA BILINMEZ (departman sozlugu
-   *  backend'den gelir), bu yuzden tam bir kayit yerine "yalnizca kapatilanlar"
-   *  tutulur: eksik anahtar = secili. Boylece yeni bir mudurluk eklendiginde
-   *  ekipleri kendiliginden gorunur olur, sessizce gizlenmez. */
-  const [kapaliEkipDepartmanlari, setKapaliEkipDepartmanlari] = useState<
-    Record<string, true>
-  >({});
-
-  const ekipDepartmaniSecili = useCallback(
-    (kod: string | null) => !kapaliEkipDepartmanlari[kod ?? DEPARTMANSIZ],
-    [kapaliEkipDepartmanlari]
+  /** Saha ekibi katmaninin departman alt-filtresi. */
+  const ekipDepartmani = useDepartmanFiltresi();
+  /** Bolge ve guzergah katmanlarinin departman alt-filtresi. Ikisi AYRI
+   *  state'tir: lejantta ayri katmanlar, sayaclari ayri - birinde bir
+   *  mudurlugu kapatmak digerini de gizleseydi kutucuk yalan soylerdi. */
+  const alanDepartmani = useDepartmanFiltresi();
+  const cizgiDepartmani = useDepartmanFiltresi();
+  const bolgeDepartmani = useMemo<Record<BolgeKatmani, DepartmanFiltresi>>(
+    () => ({ bolgeler: alanDepartmani, guzergahlar: cizgiDepartmani }),
+    [alanDepartmani, cizgiDepartmani]
   );
-  const ekipDepartmaniDegistir = useCallback((anahtar: string) => {
-    setKapaliEkipDepartmanlari((k) => {
-      const yeni = { ...k };
-      if (yeni[anahtar]) delete yeni[anahtar];
-      else yeni[anahtar] = true;
-      return yeni;
-    });
-  }, []);
 
   // --- Lejant kutucuklari (coklu secim) ---
   const katmanDegistir = useCallback((anahtar: KatmanAnahtari) => {
@@ -122,6 +159,18 @@ export function useKatmanlar() {
   const katmanTuruDegistir = useCallback((anahtar: string) => {
     setKatmanTurleri((t) => ({ ...t, [anahtar]: !t[anahtar as AssetType] }));
   }, []);
+  /** Lejantta bir mudurluk basligina tiklandiginda: o mudurlugun TUM turlerini
+   *  birlikte acar/kapatir. Tek tur kutucuklariyla ayni state'e yazar - baslik
+   *  bir katman degil, altindaki kutucuklarin toplu anahtaridir. */
+  const katmanTurGrubuDegistir = useCallback(
+    (turler: readonly AssetType[], secili: boolean) => {
+      setKatmanTurleri((t) => ({
+        ...t,
+        ...Object.fromEntries(turler.map((x) => [x, secili])),
+      }));
+    },
+    []
+  );
   const katmanVarlikDurumuDegistir = useCallback((anahtar: string) => {
     setKatmanVarlikDurumlari((d) => ({ ...d, [anahtar]: !d[anahtar as AssetStatus] }));
   }, []);
@@ -131,7 +180,7 @@ export function useKatmanlar() {
 
   // --- Panel acilirlari (tekil secim) ---
   const panelTuruSec = useCallback((tur: AssetType | null) => {
-    setKatmanTurleri(yalnizca(ASSET_TYPES, tur));
+    setKatmanTurleri(yalnizca(turKodlari(), tur));
   }, []);
   const panelDurumuSec = useCallback((durum: AssetStatus | null) => {
     setKatmanVarlikDurumlari(yalnizca(ASSET_STATUSES, durum));
@@ -146,10 +195,11 @@ export function useKatmanlar() {
    *  `turler` bos/null ise tum turler acilir ("Tüm departmanlar"). */
   const departmanTurleriniSec = useCallback((turler: readonly AssetType[] | null) => {
     setKatmanTurleri((onceki) => {
+      const kodlar = turKodlari();
       const yeni = Object.fromEntries(
-        ASSET_TYPES.map((t) => [t, turler ? turler.includes(t) : true])
+        kodlar.map((t) => [t, turler ? turler.includes(t) : true])
       ) as Record<AssetType, boolean>;
-      return ASSET_TYPES.every((t) => onceki[t] === yeni[t]) ? onceki : yeni;
+      return kodlar.every((t) => onceki[t] === yeni[t]) ? onceki : yeni;
     });
   }, []);
 
@@ -176,23 +226,27 @@ export function useKatmanlar() {
    *  katman tekrar acildiginda kullanici toplam sayiyi gorur. */
   const sifirla = useCallback(() => {
     setKatmanlar(BOS_KATMANLAR);
-    setKatmanTurleri(KATMAN_BASLANGIC.katmanTurleri);
+    setKatmanTurleri(hepsi(turKodlari()));
     setKatmanVarlikDurumlari(hepsi(ASSET_STATUSES));
     setKatmanDurumlari(hepsi(TALEP_GORUNUMLERI));
-    setKapaliEkipDepartmanlari({});
-  }, []);
+    ekipDepartmani.sifirla();
+    alanDepartmani.sifirla();
+    cizgiDepartmani.sifirla();
+  }, [ekipDepartmani, alanDepartmani, cizgiDepartmani]);
 
   return {
     katmanlar,
     katmanTurleri,
     katmanVarlikDurumlari,
     katmanDurumlari,
-    ekipDepartmaniSecili,
+    ekipDepartmaniSecili: ekipDepartmani.secili,
+    bolgeDepartmani,
     katmanDegistir,
     katmanTuruDegistir,
+    katmanTurGrubuDegistir,
     katmanVarlikDurumuDegistir,
     katmanDurumuDegistir,
-    ekipDepartmaniDegistir,
+    ekipDepartmaniDegistir: ekipDepartmani.degistir,
     panelTuruSec,
     panelDurumuSec,
     departmanTurleriniSec,

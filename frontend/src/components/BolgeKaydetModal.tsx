@@ -1,6 +1,9 @@
 import { useState } from "react";
 
 import { bolgeOlustur } from "../api/bolgeler";
+import { useAuth } from "../auth/AuthContext";
+import { useDepartmanlar } from "../hooks/useDepartmanlar";
+import { departmanBul } from "../types/departman";
 import type { Bolge, BolgeTipi } from "../types/bolge";
 import { alanEtiketi, cokHalkaliAlanM2, mesafeEtiketi, toplamMesafeMetre } from "../utils/geo";
 import { RENK_PALETI } from "./CizimPaneli";
@@ -32,6 +35,14 @@ export default function BolgeKaydetModal({ taslak, onKapat, onKaydedildi }: Prop
   const [ad, setAd] = useState("");
   const [aciklama, setAciklama] = useState("");
   const [renk, setRenk] = useState(taslak?.renk ?? "#059669");
+  // Mudurluk secimi YALNIZCA admin icindir: departmani olan personelin kaydi
+  // backend'de zaten kendi mudurlugune yazilir (gonderilen deger yok sayilir),
+  // ona secim sunmak yaniltici olurdu.
+  const { user } = useAuth();
+  const adminMi = user?.role === "admin";
+  const { data: departmanlar } = useDepartmanlar();
+  const [departman, setDepartman] = useState("");
+  const kendiDepartmani = departmanBul(departmanlar, user?.departman);
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   // Taslak degisince (yeni bir cizim kaydedilecek) formu bastan kur.
@@ -41,6 +52,7 @@ export default function BolgeKaydetModal({ taslak, onKapat, onKaydedildi }: Prop
     setAd(taslak?.onerilenAd ?? "");
     setAciklama("");
     setRenk(taslak?.renk ?? "#059669");
+    setDepartman("");
     setHata(null);
   }
 
@@ -61,6 +73,7 @@ export default function BolgeKaydetModal({ taslak, onKapat, onKaydedildi }: Prop
         aciklama: aciklama.trim() || null,
         tip: taslak.tip,
         renk,
+        departman: departman || null,
         noktalar: taslak.noktalar,
       });
       onKaydedildi(bolge);
@@ -115,6 +128,40 @@ export default function BolgeKaydetModal({ taslak, onKapat, onKaydedildi }: Prop
             className="w-full resize-none border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
           />
         </label>
+
+        {adminMi ? (
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">
+              Müdürlük
+            </span>
+            <select
+              value={departman}
+              onChange={(e) => setDepartman(e.target.value)}
+              className="w-full border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+            >
+              <option value="">Genel (tüm müdürlükler görür)</option>
+              {(departmanlar ?? []).map((d) => (
+                <option key={d.kod} value={d.kod}>
+                  {d.ad}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-[11px] text-slate-500">
+              Seçilen müdürlüğün dışındaki personel bu kaydı göremez ve kendi
+              ekibine atayamaz.
+            </span>
+          </label>
+        ) : (
+          kendiDepartmani && (
+            <p className="text-[11px]" style={{ color: kendiDepartmani.renk }}>
+              <span className="font-medium">{kendiDepartmani.ad}</span>
+              <span className="text-slate-400">
+                {" "}
+                · kayıt bu müdürlüğe ait olacak
+              </span>
+            </p>
+          )
+        )}
 
         <div>
           <span className="mb-1.5 block text-xs font-medium text-slate-600">Renk</span>

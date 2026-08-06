@@ -3,33 +3,18 @@ import uuid
 from datetime import date, datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Date, DateTime, Enum, String, func, text
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
 
-
-class AssetType(str, enum.Enum):
-    """Varlik/talep turu. `reports.type` ayni PG enum'unu paylasir (bkz.
-    models/report.py) - vatandas talebi ile envanter ayni sozlugu kullanir.
-    Arayuzde turler 5 gruba (yesil alan/aydinlatma/yol/altyapi/diger)
-    ayrilir; gruplama yalnizca frontend kavramidir (types/asset.ts).
-    `diger` yalnizca talepten gelir, envantere elle eklenemez."""
-
-    agac = "agac"
-    direk = "direk"
-    sulama = "sulama"
-    rogar = "rogar"
-    yol = "yol"
-    kaldirim = "kaldirim"
-    bank = "bank"
-    cop_kutusu = "cop_kutusu"
-    trafik_levhasi = "trafik_levhasi"
-    elektrik_panosu = "elektrik_panosu"
-    oyun_grubu = "oyun_grubu"
-    su_hatti = "su_hatti"
-    diger = "diger"
+# Varlik/talep turu artik bir enum DEGIL, `turler` tablosunun dogal anahtaridir
+# (bkz. models/tur.py): admin arayuzden tur ekleyip cikarabilsin diye sozluk
+# veriye tasindi. Bu takma ad yalnizca okunabilirlik icindir - "str" yazan bir
+# imza turden mi addan mi bahsettigini soylemez. Gecerlilik kontrolu
+# `crud/tur.py::dogrula` ve veritabanindaki FK'dir.
+AssetType = str
 
 
 class AssetStatus(str, enum.Enum):
@@ -55,7 +40,7 @@ class Asset(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     type: Mapped[AssetType] = mapped_column(
-        Enum(AssetType, name="asset_type"), nullable=False
+        String(32), ForeignKey("turler.kod", ondelete="RESTRICT"), nullable=False
     )
     status: Mapped[AssetStatus] = mapped_column(
         Enum(AssetStatus, name="asset_status"),

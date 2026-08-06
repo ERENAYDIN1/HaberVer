@@ -3,11 +3,8 @@ import { useForm } from "react-hook-form";
 
 import { useCreateAsset, useUpdateAsset } from "../hooks/useAssets";
 import { useKonumCozumu } from "../hooks/useSinirlar";
-import {
-  ASSET_STATUSES,
-  ASSET_STATUS_LABELS,
-  KAYITLI_ASSET_TYPES,
-} from "../types/asset";
+import { turKodlari } from "../data/turSozlugu";
+import { ASSET_STATUSES, ASSET_STATUS_LABELS } from "../types/asset";
 import type { AssetFeature, AssetStatus, AssetType } from "../types/asset";
 import TipSecenekleri from "./TipSecenekleri";
 import { inputClass, labelClass } from "../utils/formSiniflari";
@@ -59,11 +56,9 @@ const errorClass = "mt-1 text-xs text-red-600";
 export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) {
   const duzenlemeModu = asset !== undefined;
 
-  // Kayitli varlik olarak yalnizca KAYITLI_ASSET_TYPES eklenebilir ("Diğer"
-  // yalnizca talepten gelir). Duzenleme modunda mevcut varligin tipi listede
-  // yoksa (orn. talepten dogmus bir "Diğer" varligi) eklenir ki secim
-  // bozulmasin; gruplu listede kendi grubunun altinda gorunur.
-  const tipSecenekleri: AssetType[] = [...KAYITLI_ASSET_TYPES];
+  // Duzenleme modunda mevcut varligin tipi sozlukten silinmisse listeye
+  // eklenir ki secim bozulmasin; gruplu listede kendi grubunun altinda gorunur.
+  const tipSecenekleri: AssetType[] = [...turKodlari()];
   if (asset && !tipSecenekleri.includes(asset.properties.type)) {
     tipSecenekleri.push(asset.properties.type);
   }

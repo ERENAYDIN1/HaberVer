@@ -182,6 +182,68 @@ SEKILLI_TALEPLER = [
     ),
 ]
 
+# --- Kaydedilmis bolgeler/guzergahlar ---------------------------------------
+#
+# (ad, aciklama, tip, renk, departman, geojson, atanan_ekip_emaili)
+#
+# Bolgeler MUDURLUGE aittir: bir mudurlugun cizdigi calisma alanini digeri
+# gormez ve kendi ekibine atayamaz. Ornekler bilincli olarak dort ayri
+# mudurluge dagitildi + biri GENEL (departman NULL) birakildi, ki "yalnizca
+# kendi mudurlugunu goren personel" ile "hepsini goren admin" farki demo
+# ortaminda elle gorulebilsin. Atanan ekipler de kendi mudurluklerinden.
+BOLGELER = [
+    (
+        "Kadıköy Sahil Parkı Bakım Bölgesi",
+        "Haftalık budama ve çim bakımı yapılacak alan.",
+        "alan",
+        "#059669",
+        "park_bahceler",
+        '{"type":"Polygon","coordinates":[[[29.0230,40.9865],[29.0320,40.9872],'
+        '[29.0332,40.9832],[29.0242,40.9825],[29.0230,40.9865]]]}',
+        "sahaekibi1@greenasset.com",
+    ),
+    (
+        "Barbaros Bulvarı Asfalt Güzergâhı",
+        "Çatlak taraması yapılacak hat.",
+        "cizgi",
+        "#f97316",
+        "fen_isleri",
+        '{"type":"LineString","coordinates":[[29.0043,41.0468],[29.0051,41.0452],'
+        '[29.0058,41.0436],[29.0064,41.0421],[29.0071,41.0405]]}',
+        "sahaekibi3@greenasset.com",
+    ),
+    (
+        "Şişli Aydınlatma Denetim Güzergâhı",
+        "Gece turunda yanmayan direklerin tespiti.",
+        "cizgi",
+        "#4338ca",
+        "aydinlatma_enerji",
+        '{"type":"LineString","coordinates":[[28.9855,41.0585],[28.9878,41.0608],'
+        '[28.9901,41.0631],[28.9925,41.0650]]}',
+        "sahaekibi5@greenasset.com",
+    ),
+    (
+        "Fatih Su Hattı Kontrol Bölgesi",
+        "Basınç düşüşü bildirilen mahalle; vana kontrolü.",
+        "alan",
+        "#0891b2",
+        "su_kanalizasyon",
+        '{"type":"Polygon","coordinates":[[[28.9450,41.0140],[28.9540,41.0155],'
+        '[28.9555,41.0110],[28.9465,41.0095],[28.9450,41.0140]]]}',
+        "sahaekibi7@greenasset.com",
+    ),
+    (
+        "Kent Merkezi Koordinasyon Alanı",
+        "Müdürlükler arası ortak çalışma alanı — tüm personel görür.",
+        "alan",
+        "#7c3aed",
+        None,
+        '{"type":"Polygon","coordinates":[[[28.9650,41.0080],[28.9820,41.0120],'
+        '[28.9850,41.0000],[28.9680,40.9960],[28.9650,41.0080]]]}',
+        None,
+    ),
+]
+
 # --- Baslangic atamalari: (varlik_adi, ekip_emaili) --------------------------
 # Ekipler islerin DEPARTMANINA gore secildi: otomatik atama da bunu yapardi.
 ATAMALAR = [
@@ -236,10 +298,10 @@ def sil(db) -> None:
         sa.text("DELETE FROM users WHERE email = ANY(:mailler)"),
         {"mailler": TUM_EMAILLER},
     )
-    # Kaydedilmis alanlar/guzergahlar tohumlanmaz, elle cizilir; bu yuzden ada
-    # gore secilemezler ve tamami silinir. Demo ortamini gercekten bosaltmanin
-    # tek yolu bu: aksi halde silinen ekiplerden arta kalan (worker_id NULL'a
-    # dusmus) bolgeler haritada oylece kalirdi.
+    # Bolgelerin bir kismi tohumlanir, bir kismi elle cizilir; ada gore
+    # secmek yerine TAMAMI silinir. Demo ortamini gercekten bosaltmanin tek
+    # yolu bu: aksi halde silinen ekiplerden arta kalan (worker_id NULL'a
+    # dusmus) elle cizilmis bolgeler haritada oylece kalirdi.
     bolge = db.execute(sa.text("DELETE FROM gorev_bolgeleri")).rowcount
     db.commit()
     print(f"Demo veri silindi (kaydedilmis alan/guzergah: {bolge}).")
@@ -303,7 +365,7 @@ def ekle(db) -> None:
             sa.text(
                 """
                 INSERT INTO assets (name, type, status, source, geometry)
-                SELECT :ad, CAST(:tip AS asset_type), 'bakim_lazim', 'kayitli',
+                SELECT :ad, :tip, 'bakim_lazim', 'kayitli',
                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)
                 WHERE NOT EXISTS (SELECT 1 FROM assets WHERE name = :ad)
                 """
@@ -321,7 +383,7 @@ def ekle(db) -> None:
                 """
                 INSERT INTO assets (name, type, status, source, geometry,
                                     brand_model, install_date)
-                SELECT :ad, CAST(:tip AS asset_type), 'iyi', 'kayitli',
+                SELECT :ad, :tip, 'iyi', 'kayitli',
                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
                        :marka, CAST(:tarih AS date)
                 WHERE NOT EXISTS (SELECT 1 FROM assets WHERE name = :ad)
@@ -342,7 +404,7 @@ def ekle(db) -> None:
                 """
                 INSERT INTO reports (reporter_id, name, type, note, geometry, nokta)
                 SELECT (SELECT id FROM users WHERE email = 'vatandas1@greenasset.com'),
-                       :ad, CAST(:tip AS asset_type), :note,
+                       :ad, :tip, :note,
                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)
                 WHERE NOT EXISTS (SELECT 1 FROM reports WHERE name = :ad)
@@ -367,7 +429,7 @@ def ekle(db) -> None:
                 """
                 INSERT INTO reports (reporter_id, name, type, note, geometry, nokta)
                 SELECT (SELECT id FROM users WHERE email = 'vatandas1@greenasset.com'),
-                       :ad, CAST(:tip AS asset_type), :note,
+                       :ad, :tip, :note,
                        ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326),
                        CASE ST_GeometryType(ST_GeomFromGeoJSON(:geojson))
                            WHEN 'ST_LineString' THEN ST_LineInterpolatePoint(
@@ -406,6 +468,42 @@ def ekle(db) -> None:
             )
         )
 
+    # Kaydedilmis bolgeler/guzergahlar. Alanlar MULTIPOLYGON'a cevrilir
+    # (sutun tek tipte iki geometri tutuyor, bkz. models/bolge.py); cizgiler
+    # oldugu gibi yazilir.
+    for ad, aciklama, tip, renk, departman, geojson, ekip in BOLGELER:
+        db.execute(
+            sa.text(
+                """
+                INSERT INTO gorev_bolgeleri
+                       (ad, aciklama, tip, renk, departman, geom,
+                        worker_id, assigned_at)
+                SELECT :ad, :aciklama, CAST(:tip AS bolge_tipi), :renk,
+                       :departman,
+                       CASE WHEN :tip = 'alan'
+                            THEN ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326))
+                            ELSE ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326)
+                       END,
+                       u.id,
+                       CASE WHEN u.id IS NULL THEN NULL ELSE now() END
+                  FROM (SELECT 1) AS d
+                  -- LEFT JOIN: atanmamis bolge (ekip = NULL) de yazilabilsin.
+                  LEFT JOIN users u ON u.email = :ekip
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM gorev_bolgeleri WHERE ad = :ad
+                 )
+                """
+            ).bindparams(
+                sa.bindparam("ad", ad, type_=sa.String),
+                sa.bindparam("aciklama", aciklama, type_=sa.String),
+                sa.bindparam("tip", tip, type_=sa.String),
+                sa.bindparam("renk", renk, type_=sa.String),
+                sa.bindparam("departman", departman, type_=sa.String),
+                sa.bindparam("geojson", geojson, type_=sa.String),
+                sa.bindparam("ekip", ekip, type_=sa.String),
+            )
+        )
+
     # Ekiplerin kadro yakasini son konumlarindan ata.
     db.execute(
         sa.text(
@@ -428,9 +526,11 @@ def ekle(db) -> None:
     iyi = say("SELECT count(*) FROM assets WHERE status = 'iyi'")
     talep = say("SELECT count(*) FROM reports")
     gorev = say("SELECT count(*) FROM assignments WHERE status = 'atandi'")
+    bolge = say("SELECT count(*) FROM gorev_bolgeleri")
     print(
         f"Demo veri hazır: {kullanici} kullanıcı, {varlik} varlık ({iyi} iyi / "
-        f"{varlik - iyi} bakım bekliyor), {talep} talep, {gorev} aktif görev."
+        f"{varlik - iyi} bakım bekliyor), {talep} talep, {gorev} aktif görev, "
+        f"{bolge} bölge/güzergâh."
     )
 
 

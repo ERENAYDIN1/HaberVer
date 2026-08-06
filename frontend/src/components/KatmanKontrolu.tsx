@@ -43,6 +43,18 @@ export interface AltFiltre {
  *  tek grup vardir; tek grupta baslik gereksiz oldugu icin opsiyoneldir. */
 export interface AltGrup {
   baslik?: string;
+  /** Basligin kendi rengi (or. mudurluk rengi). Seceneklerin swatch'i bundan
+   *  BAGIMSIZDIR: baslik "kime gidiyor", swatch "haritada nasil gorunuyor"
+   *  der ve ikisi ortusmek zorunda degildir. */
+  baslikRengi?: string;
+  /** Basligin kendi kutucugunun durumu. Verilirse baslik bir ac/kapat
+   *  dugmesine doner ve altindaki TUM secenekleri birlikte tersler - "hangi
+   *  mudurluk gorunsun" sorusu tur tur tiklamayi gerektirmemeli. */
+  baslikDurumu?: "hepsi" | "kismi" | "hicbiri";
+  /** Basliktaki toplam sayi (secenek sayaclarinin toplami degil, cagiranin
+   *  hesabi - grup kapatilinca da dogru kalsin diye). */
+  baslikSayisi?: number;
+  onBaslikSec?: () => void;
   secenekler: AltFiltre[];
   onSec: (anahtar: string) => void;
 }
@@ -208,6 +220,72 @@ function BolgeBolumu({ bolge }: { bolge: BolgeFiltresi }) {
   );
 }
 
+/** Alt-filtre grubunun tiklanabilir basligi (mudurluk). Kirilim uc kademeli
+ *  okunur: Varlıklar → Müdürlükler → Türler. Baslik kutucugu altindaki tum
+ *  turleri birlikte acip kapatir; bazisi acikken "kismi" gorunur (dolgu var,
+ *  tik yerine cizgi) - yalan soylememesi icin bosla dolu arasinda bir ucuncu
+ *  hal gerekir. */
+function GrupBasligi({
+  grup,
+  katmanAcik,
+  onSec,
+}: {
+  grup: AltGrup;
+  katmanAcik: boolean;
+  onSec: () => void;
+}) {
+  const renk = grup.baslikRengi ?? "#64748b";
+  const durum = grup.baslikDurumu ?? "hepsi";
+  const dolu = durum !== "hicbiri";
+
+  return (
+    <button
+      type="button"
+      onClick={onSec}
+      disabled={!katmanAcik}
+      aria-pressed={durum === "hepsi"}
+      title={
+        dolu ? `${grup.baslik}: tüm türleri kapat` : `${grup.baslik}: tüm türleri aç`
+      }
+      className={`flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left transition ${
+        katmanAcik ? "hover:brightness-95" : "cursor-not-allowed opacity-50"
+      }`}
+      style={{
+        color: dolu ? renk : "#94a3b8",
+        backgroundColor: `${renk}14`,
+        boxShadow: `inset 2px 0 0 ${renk}`,
+      }}
+    >
+      <span
+        className="flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-[4px] border-2 transition"
+        style={{
+          borderColor: dolu ? renk : "#cbd5e1",
+          backgroundColor: durum === "hepsi" ? renk : "transparent",
+        }}
+      >
+        {durum === "hepsi" && <IconCheck className="h-2.5 w-2.5 text-white" />}
+        {durum === "kismi" && (
+          <span
+            className="h-[2px] w-[7px] rounded-full"
+            style={{ backgroundColor: renk }}
+          />
+        )}
+      </span>
+      <span
+        className="min-w-0 flex-1 truncate text-[11px] font-bold leading-tight"
+        title={grup.baslik}
+      >
+        {grup.baslik}
+      </span>
+      {grup.baslikSayisi != null && (
+        <span className="shrink-0 text-[11px] font-bold tabular-nums">
+          {grup.baslikSayisi.toLocaleString("tr-TR")}
+        </span>
+      )}
+    </button>
+  );
+}
+
 /**
  * Haritanin sag-ust kosesindeki lejant + katman filtresi. Kullanici varlik,
  * talep ve saha ekibi katmanlarini "tik atarak" bagimsizca acip kapatabilir;
@@ -248,7 +326,9 @@ export default function KatmanKontrolu({
   }
 
   return (
-    <div className="absolute right-3 top-3 z-20 w-52 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 shadow-xl shadow-slate-900/10 backdrop-blur-md">
+    // Genislik mudurluk adlarina gore: "Park ve Bahçeler Müdürlüğü" lejantin
+    // ana basligi oldugundan w-52'de her satir kirpiliyordu.
+    <div className="absolute right-3 top-3 z-20 w-60 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 shadow-xl shadow-slate-900/10 backdrop-blur-md">
       <button
         onClick={() => setAcik(false)}
         className="flex w-full items-center gap-2 border-b border-slate-200/70 px-3 py-2.5 text-left transition hover:bg-slate-50/70"
@@ -306,7 +386,8 @@ export default function KatmanKontrolu({
                   className="flex min-w-0 flex-1 items-center gap-1.5 py-2 text-left"
                 >
                   <span
-                    className={`flex-1 whitespace-nowrap text-[13px] font-semibold leading-tight ${
+                    title={katman.etiket}
+                    className={`min-w-0 flex-1 truncate text-[13px] font-semibold leading-tight ${
                       secili ? "text-slate-800" : "text-slate-400"
                     }`}
                   >
@@ -332,21 +413,43 @@ export default function KatmanKontrolu({
               {/* Alt-filtreler: dikey liste, sola girintili, hafif ayrac cizgisiyle. */}
               {altlar && genisletilmis && (
                 // 13 varlik turu + durumlar listeyi uzattigindan kaydirmali.
-                <div className="mb-1 ml-4 max-h-[15rem] overflow-y-auto border-l border-slate-200 pl-1.5">
+                <div className="mb-1 ml-3 max-h-[17rem] space-y-1.5 overflow-y-auto pl-0.5">
                   {altlar.map((grup, i) => (
-                    <div key={grup.baslik ?? i} className={i > 0 ? "mt-1" : undefined}>
-                      {grup.baslik && (
-                        <p className="px-1.5 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                          {grup.baslik}
-                        </p>
-                      )}
-                      {grup.secenekler.map((alt) => (
+                    <div key={grup.baslik ?? i}>
+                      {/* Mudurluk basligi: adin tamami ("… Müdürlüğü"), kendi
+                          renginde bir seritle. Basligin altindaki turler o
+                          mudurlugun isleridir; swatch'lari ise haritada
+                          basilan grup rengidir - ikisi ortusmek zorunda
+                          degil (bkz. CLAUDE.md, lejant kurali). */}
+                      {grup.baslik &&
+                        (grup.onBaslikSec ? (
+                          <GrupBasligi
+                            grup={grup}
+                            katmanAcik={secili}
+                            onSec={grup.onBaslikSec}
+                          />
+                        ) : (
+                          <p
+                            className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[11px] font-bold leading-tight"
+                            style={{
+                              color: grup.baslikRengi ?? "#64748b",
+                              backgroundColor: `${grup.baslikRengi ?? "#64748b"}14`,
+                              boxShadow: `inset 2px 0 0 ${grup.baslikRengi ?? "#94a3b8"}`,
+                            }}
+                          >
+                            <span className="min-w-0 truncate" title={grup.baslik}>
+                              {grup.baslik}
+                            </span>
+                          </p>
+                        ))}
+                      <div className={grup.baslik ? "mt-0.5 pl-1" : undefined}>
+                        {grup.secenekler.map((alt) => (
                         <button
                           key={alt.anahtar}
                           onClick={() => grup.onSec(alt.anahtar)}
                           aria-pressed={alt.secili}
                           disabled={!secili}
-                          className={`flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition ${
+                          className={`flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left transition ${
                             secili ? "hover:bg-slate-50" : "cursor-not-allowed opacity-50"
                           }`}
                         >
@@ -367,8 +470,12 @@ export default function KatmanKontrolu({
                           >
                             {alt.secili && <IconCheck className="h-2.5 w-2.5 text-white" />}
                           </span>
+                          {/* Uzun mudurluk/tur adlari sayaci satirdan itiyordu:
+                              ad kirpilir (tam hali tooltip'te), sayi her zaman
+                              gorunur kalir - lejantin isi zaten saydirmak. */}
                           <span
-                            className={`flex-1 whitespace-nowrap text-[12px] font-medium leading-tight ${
+                            title={alt.etiket}
+                            className={`min-w-0 flex-1 truncate text-[12px] font-medium leading-tight ${
                               alt.secili ? "text-slate-700" : "text-slate-400"
                             }`}
                           >
@@ -378,7 +485,8 @@ export default function KatmanKontrolu({
                             {alt.sayi.toLocaleString("tr-TR")}
                           </span>
                         </button>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>

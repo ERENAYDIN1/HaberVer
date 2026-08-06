@@ -55,18 +55,26 @@ import { useAssets } from "./hooks/useAssets";
 import { useAlanSecimi } from "./hooks/useAlanSecimi";
 import { useTalepGorunumleri } from "./hooks/useTalepGorunumleri";
 import { useSekilDuzenleme } from "./hooks/useSekilDuzenleme";
-import { DEPARTMANSIZ, useKatmanlar } from "./hooks/useKatmanlar";
-import { useDepartmanlar } from "./hooks/useDepartmanlar";
+import {
+  DEPARTMANSIZ,
+  useKatmanlar,
+  type BolgeKatmani,
+} from "./hooks/useKatmanlar";
+import {
+  useDepartmanlar,
+  useTurDepartmanEslemesi,
+} from "./hooks/useDepartmanlar";
+import { turAdi, turKodlari, turRengi } from "./data/turSozlugu";
+import {
+  YONLENDIRILMEMIS_AD,
+  YONLENDIRILMEMIS_RENK,
+  departmanTurGruplari,
+} from "./types/departman";
 import {
   ASSET_STATUS_LABELS,
   ASSET_STATUSES,
-  ASSET_TYPE_LABELS,
-  ASSET_TYPES,
   GRUP_RENGI,
-  GRUP_TURLERI,
-  TIP_GRUP_ETIKETLERI,
   TIP_GRUPLARI,
-  TIP_RENGI,
 } from "./types/asset";
 import { USER_ROLE_LABELS } from "./types/auth";
 import type {
@@ -77,7 +85,7 @@ import type {
   AssetType,
 } from "./types/asset";
 import type { TamamlananAlan } from "./types/alan";
-import type { Bolge } from "./types/bolge";
+import type { Bolge, BolgeTipi } from "./types/bolge";
 import {
   TALEP_DURUM_RENGI,
   TALEP_GORUNUMLERI,
@@ -123,6 +131,10 @@ const BOLGE_SEKMELERI = {
   bolgeler: { tip: "alan", katman: "bolgeler" },
   guzergahlar: { tip: "cizgi", katman: "guzergahlar" },
 } as const;
+
+/** Mudurlugu olmayan ("Genel") bolge/guzergah kayitlarinin lejant rengi.
+ *  Notr slate: bir mudurlugun rengiyle karistirilmasin. */
+const GENEL_BOLGE_RENGI = "#64748b";
 
 /** Bir sekme kaydedilmis bolge/guzergah paneli mi? */
 function bolgeSekmesi(s: Sekme | null): s is keyof typeof BOLGE_SEKMELERI {
@@ -178,8 +190,10 @@ export default function App() {
     katmanVarlikDurumlari,
     katmanDurumlari,
     ekipDepartmaniSecili,
+    bolgeDepartmani,
     katmanDegistir,
     katmanTuruDegistir,
+    katmanTurGrubuDegistir,
     katmanVarlikDurumuDegistir,
     katmanDurumuDegistir,
     ekipDepartmaniDegistir,
@@ -435,6 +449,8 @@ export default function App() {
   // Departman sozlugu: ekip isaretcilerinin rengi ve lejanttaki ekip
   // alt-filtresi buradan beslenir (uzun staleTime, bkz. useDepartmanlar).
   const departmanSorgu = useDepartmanlar();
+  // Tur -> mudurluk yonlendirmesi; lejanttaki varlik kirilimi bunu okur.
+  const eslemeSorgu = useTurDepartmanEslemesi();
 
   // Kaydedilmis bolgeler: panel ve haritadaki kalici katman ayni sorguyu paylasir.
   const bolgeSorgu = useQuery({
@@ -444,15 +460,21 @@ export default function App() {
   });
   // Alanlar ve guzergahlar ayri katmanlar oldugu icin gorunur listeleri de
   // ayri hesaplanir; MapView'a yalnizca acik olanlarin birlesimi gider.
+  // Departman alt-filtresi de burada uygulanir (ekip katmanindaki desen):
+  // admin butun mudurluklerin calisma alanlarini ayni anda goruyor.
   const [gorunurAlanlar, gorunurGuzergahlar] = useMemo(() => {
     const gorunur = (bolgeSorgu.data ?? [])
       .filter((b) => !gizliBolgeler.has(b.id))
       .filter((b) => bolgeAlanda(b));
     return [
-      gorunur.filter((b) => b.tip === "alan"),
-      gorunur.filter((b) => b.tip === "cizgi"),
+      gorunur.filter(
+        (b) => b.tip === "alan" && bolgeDepartmani.bolgeler.secili(b.departman)
+      ),
+      gorunur.filter(
+        (b) => b.tip === "cizgi" && bolgeDepartmani.guzergahlar.secili(b.departman)
+      ),
     ];
-  }, [bolgeSorgu.data, gizliBolgeler, bolgeAlanda]);
+  }, [bolgeSorgu.data, gizliBolgeler, bolgeAlanda, bolgeDepartmani]);
   const haritaBolgeleri = useMemo(() => {
     const liste = [
       ...(katmanlar.bolgeler ? gorunurAlanlar : []),
@@ -588,7 +610,7 @@ export default function App() {
   // taban uzerinden sayilir; boylece rakamlar haritadakiyle tutarli kalir.
   const { varlikTurSayilari, varlikDurumSayilari } = useMemo(() => {
     const turSayilari = Object.fromEntries(
-      ASSET_TYPES.map((t) => [t, 0])
+      turKodlari().map((t) => [t, 0])
     ) as Record<AssetType, number>;
     const durumSayilari: Record<AssetStatus, number> = { iyi: 0, bakim_lazim: 0 };
     for (const f of varlikKatmanTaban?.features ?? []) {
@@ -600,7 +622,7 @@ export default function App() {
   }, [varlikKatmanTaban, katmanTurleri, katmanVarlikDurumlari]);
   const varlikKatmanVeri = useMemo<AssetFeatureCollection | undefined>(() => {
     if (!varlikKatmanTaban) return undefined;
-    const tumTurler = ASSET_TYPES.every((t) => katmanTurleri[t]);
+    const tumTurler = turKodlari().every((t) => katmanTurleri[t]);
     const tumDurumlar = ASSET_STATUSES.every((s) => katmanVarlikDurumlari[s]);
     if (tumTurler && tumDurumlar) return varlikKatmanTaban;
     return {
@@ -688,44 +710,71 @@ export default function App() {
   };
 
   // Sag-ustteki katman kontrolune gecen alt-filtre tanimlari (etiket/renk/sayi).
-  const varlikAltFiltre = useMemo<AltGrup[]>(
-    () => [
-      // Turler grup grup listelenir: grup basligi ayni zamanda renk
-      // aciklamasidir, gruptaki turler ayni renkle farkli glifle cizilir.
-      ...TIP_GRUPLARI.map((grup) => ({
-        baslik: TIP_GRUP_ETIKETLERI[grup],
+  const varlikAltFiltre = useMemo<AltGrup[]>(() => {
+    // Turler MUDURLUK MUDURLUK listelenir: baslik "bu is kime gidiyor"u
+    // anlatir ve mudurlugun kendi rengini tasir. Secenegin swatch'i ise
+    // haritada gercekten basilan grup rengidir; 0012'den beri ikisi tum
+    // turlerde ayni renge oturur.
+    const esleme = eslemeSorgu.data;
+    const secenek = (t: AssetType) => ({
+      anahtar: t,
+      etiket: turAdi(t),
+      renk: turRengi(t),
+      secili: katmanTurleri[t],
+      sayi: varlikTurSayilari[t],
+    });
+
+    // Ortak kategorileme: acilir listeler ve yonetim ekrani da ayni gruplamayi
+    // kullanir. Sozluk gelmeden gruplanmaz - yoksa ilk karede her tur
+    // "yönlendirilmemiş" basligi altina duser, sonra yerine otururdu.
+    const kirilim = departmanTurGruplari(departmanSorgu.data, esleme, turKodlari());
+    const gruplar: AltGrup[] = (
+      kirilim ?? [{ departman: null, turler: turKodlari() }]
+    ).map((g) => {
+      // Kirilim uc kademeli: Varlıklar → Müdürlükler → Türler. Baslik
+      // kutucugu mudurlugun tum turlerini birlikte acar/kapatir; sayaci da
+      // mudurlugun toplamidir (kapali turler dahil - baslik "bu mudurlukte kac
+      // varlik var"i anlatir, "kacini seciyorum"u degil).
+      const acik = g.turler.filter((t) => katmanTurleri[t]).length;
+      return {
+        baslik: g.departman?.ad ?? (kirilim ? YONLENDIRILMEMIS_AD : "Tür"),
+        baslikRengi: g.departman?.renk ?? YONLENDIRILMEMIS_RENK,
+        baslikDurumu:
+          acik === g.turler.length ? "hepsi" : acik === 0 ? "hicbiri" : "kismi",
+        baslikSayisi: g.turler.reduce((t, tur) => t + varlikTurSayilari[tur], 0),
+        onBaslikSec: () =>
+          katmanTurGrubuDegistir(g.turler, acik !== g.turler.length),
         onSec: katmanTuruDegistir,
-        secenekler: GRUP_TURLERI[grup].map((t) => ({
-          anahtar: t,
-          etiket: ASSET_TYPE_LABELS[t],
-          renk: TIP_RENGI[t],
-          secili: katmanTurleri[t],
-          sayi: varlikTurSayilari[t],
-        })),
+        secenekler: g.turler.map(secenek),
+      } satisfies AltGrup;
+    });
+
+    gruplar.push({
+      baslik: "Durum",
+      onSec: katmanVarlikDurumuDegistir,
+      secenekler: ASSET_STATUSES.map((s) => ({
+        anahtar: s,
+        etiket: ASSET_STATUS_LABELS[s],
+        renk: VARLIK_DURUM_RENGI[s],
+        // Dolgu her iki durumda da tur rengi; farki kenarlik tasir.
+        renkler: IYI_SWATCH_RENKLERI,
+        secili: katmanVarlikDurumlari[s],
+        sayi: varlikDurumSayilari[s],
       })),
-      {
-        baslik: "Durum",
-        onSec: katmanVarlikDurumuDegistir,
-        secenekler: ASSET_STATUSES.map((s) => ({
-          anahtar: s,
-          etiket: ASSET_STATUS_LABELS[s],
-          renk: VARLIK_DURUM_RENGI[s],
-          // Dolgu her iki durumda da tur rengi; farki kenarlik tasir.
-          renkler: IYI_SWATCH_RENKLERI,
-          secili: katmanVarlikDurumlari[s],
-          sayi: varlikDurumSayilari[s],
-        })),
-      },
-    ],
-    [
-      katmanTurleri,
-      varlikTurSayilari,
-      katmanVarlikDurumlari,
-      varlikDurumSayilari,
-      katmanTuruDegistir,
-      katmanVarlikDurumuDegistir,
-    ]
-  );
+    });
+
+    return gruplar;
+  }, [
+    departmanSorgu.data,
+    eslemeSorgu.data,
+    katmanTurleri,
+    varlikTurSayilari,
+    katmanVarlikDurumlari,
+    varlikDurumSayilari,
+    katmanTuruDegistir,
+    katmanTurGrubuDegistir,
+    katmanVarlikDurumuDegistir,
+  ]);
   /** Saha Ekipleri katmaninin departman alt-filtresi.
    *
    *  Yalnizca EKIBI OLAN mudurlukler listelenir: bos bir satir kullaniciya
@@ -743,7 +792,9 @@ export default function App() {
       .filter((d) => sayilar.has(d.kod))
       .map((d) => ({
         anahtar: d.kod,
-        etiket: d.ad.replace(/\s*Müdürlüğü$/, ""),
+        // Ad kisaltilmaz: lejantin her yerinde mudurluk tam adiyla anilir
+        // (uzun ad kirpilir, tam hali tooltip'te).
+        etiket: d.ad,
         renk: d.renk,
         secili: ekipDepartmaniSecili(d.kod),
         sayi: sayilar.get(d.kod) ?? 0,
@@ -764,6 +815,52 @@ export default function App() {
     ekipDepartmaniSecili,
     ekipDepartmaniDegistir,
   ]);
+
+  /** Bolge ve guzergah katmanlarinin departman alt-filtresi (ikisi de ayni
+   *  kirilimi alir, ayri state uzerinden).
+   *
+   *  Ekip katmanindan bir farkla: burada AKTIF TUM mudurlukler listelenir,
+   *  kaydi olmayan "0" ile gorunur. Lejant o katmanda hangi mudurluklerin
+   *  calisma alani oldugunu da anlatir - satirin hic olmamasi ile "0" yazmasi
+   *  arasindaki fark budur. Kapanmis (pasif) mudurluk yalnizca kaydi varsa
+   *  listelenir: emekliye ayrilmis bir mudurlugu bos satirla diriltmeyelim.
+   *  Sayaclar alan secimi/gizleme uygulanmamis tam listeden gelir.
+   *  Departmansiz kayitlar "Genel"dir (tum personelin gordugu calisma
+   *  alanlari), "sahipsiz" degil - o satir her zaman durur. */
+  const bolgeAltFiltreleri = useMemo<Record<BolgeKatmani, AltGrup[]>>(() => {
+    const kirilim = (tip: BolgeTipi, katman: BolgeKatmani): AltGrup[] => {
+      const sayilar = new Map<string, number>();
+      for (const b of bolgeSorgu.data ?? []) {
+        if (b.tip !== tip) continue;
+        const anahtar = b.departman ?? DEPARTMANSIZ;
+        sayilar.set(anahtar, (sayilar.get(anahtar) ?? 0) + 1);
+      }
+      const filtre = bolgeDepartmani[katman];
+      const secenekler = (departmanSorgu.data ?? [])
+        .filter((d) => d.aktif || sayilar.has(d.kod))
+        .map((d) => ({
+          anahtar: d.kod,
+          // Ad kisaltilmaz: lejantin her yerinde mudurluk tam adiyla anilir
+        // (uzun ad kirpilir, tam hali tooltip'te).
+        etiket: d.ad,
+          renk: d.renk,
+          secili: filtre.secili(d.kod),
+          sayi: sayilar.get(d.kod) ?? 0,
+        }));
+      secenekler.push({
+        anahtar: DEPARTMANSIZ,
+        etiket: "Genel",
+        renk: GENEL_BOLGE_RENGI,
+        secili: filtre.secili(null),
+        sayi: sayilar.get(DEPARTMANSIZ) ?? 0,
+      });
+      return [{ baslik: "Müdürlük", onSec: filtre.degistir, secenekler }];
+    };
+    return {
+      bolgeler: kirilim("alan", "bolgeler"),
+      guzergahlar: kirilim("cizgi", "guzergahlar"),
+    };
+  }, [bolgeSorgu.data, departmanSorgu.data, bolgeDepartmani]);
 
   const talepAltFiltre = useMemo<AltGrup[]>(
     () => [
@@ -852,7 +949,7 @@ export default function App() {
         tip: p.type,
         baslik: `${p.name} bakım bekliyor`,
         altbaslik:
-          ASSET_TYPE_LABELS[p.type] + (p.source === "ihbar" ? " · Talepten" : ""),
+          turAdi(p.type) + (p.source === "ihbar" ? " · Talepten" : ""),
         zaman: p.updated_at,
         kategori: "bakim",
         onTikla: () => bildirimVarligaGit(f),
@@ -865,7 +962,7 @@ export default function App() {
           id: p.id,
           tip: p.type,
           baslik: `Yeni talep: ${p.name}`,
-          altbaslik: p.note?.trim() || ASSET_TYPE_LABELS[p.type],
+          altbaslik: p.note?.trim() || turAdi(p.type),
           zaman: p.created_at,
           kategori: "talep",
           onTikla: () => bildirimTalepaGit(r),
@@ -1275,6 +1372,8 @@ export default function App() {
           altlar={{
             varliklar: varlikAltFiltre,
             talepler: talepAltFiltre,
+            bolgeler: bolgeAltFiltreleri.bolgeler,
+            guzergahlar: bolgeAltFiltreleri.guzergahlar,
             ekipler: ekipAltFiltre,
           }}
           // Ilce/mahalle secimi AssetList'teki acilirlarla ayni state.

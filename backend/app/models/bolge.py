@@ -50,6 +50,13 @@ class Bolge(Base):
         Geometry(geometry_type="GEOMETRY", srid=4326, spatial_index=False),
         nullable=False,
     )
+    # Kaydi sahiplenen mudurluk. Talep/varlik kapsami TURDEN cozulur, ama bir
+    # bolgenin turu yoktur - bu yuzden mudurluk kaydin kendi sutununda durur.
+    # NULL = GENEL (tum personel gorur), "sahipsiz" degil: admin'in departmani
+    # olmadigindan onun cizdigi bolgeler dogal olarak NULL kalir.
+    departman: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("departmanlar.kod"), nullable=True
+    )
     # Bolgenin atandigi saha ekibi (saha_calisani). NULL ise atanmamis.
     worker_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

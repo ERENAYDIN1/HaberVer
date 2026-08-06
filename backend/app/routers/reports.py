@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..crud import report as crud
+from ..crud import tur as tur_crud
 from ..database import get_db
 from ..models.asset import AssetType
 from ..models.report import ReportStatus
@@ -115,6 +116,9 @@ def create_report(
     temsil noktasi PostGIS tarafinda turetilir (bkz. crud.temsil_nokta)."""
     if not note.strip():
         raise HTTPException(status_code=400, detail="Aciklama bos olamaz")
+    # Tur bir enum degil `turler` tablosunun satiri: pydantic dogrulayamaz.
+    if not tur_crud.gecerli(db, type):
+        raise HTTPException(status_code=422, detail=f"Gecersiz tur: {type}")
     try:
         sekil = TalepGeometrisi.model_validate_json(geometry)
     except ValidationError as e:
@@ -194,6 +198,10 @@ def approve(
     report = row[0]
     if report.status != ReportStatus.beklemede:
         raise HTTPException(status_code=409, detail="Talep zaten sonuclandirilmis")
+    if data and data.type is not None and not tur_crud.gecerli(db, data.type):
+        raise HTTPException(
+            status_code=422, detail=f"Gecersiz tur: {data.type}"
+        )
     return ReportFeature.from_row(
         crud.approve_report(db, report, user, yeni_tip=data.type if data else None)
     )

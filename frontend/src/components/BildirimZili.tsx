@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
-import { TIP_RENGI, TIP_RENGI_VARSAYILAN, type AssetType } from "../types/asset";
-import { IconBell, IconInbox, IconWarning, TIP_IKONU } from "./icons";
+import { turRengi } from "../data/turSozlugu";
+import type { AssetType } from "../types/asset";
+import { IconBell, IconInbox, IconWarning, tipIkonu } from "./icons";
 
 export interface Bildirim {
   id: string;
@@ -87,8 +88,8 @@ export default function BildirimZili({ bildirimler }: BildirimZiliProps) {
           ) : (
             <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
               {bildirimler.map((b) => {
-                const Ikon = TIP_IKONU[b.tip] ?? IconInbox;
-                const renk = TIP_RENGI[b.tip] ?? TIP_RENGI_VARSAYILAN;
+                const Ikon = tipIkonu(b.tip);
+                const renk = turRengi(b.tip);
                 return (
                   <li key={`${b.kategori}-${b.id}`}>
                     <button

@@ -34,7 +34,7 @@ class Report(Base):
     # Vatandasin talep ettigi seyin adi/aciklamasi.
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     type: Mapped[AssetType] = mapped_column(
-        Enum(AssetType, name="asset_type"), nullable=False
+        String(32), ForeignKey("turler.kod", ondelete="RESTRICT"), nullable=False
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Vatandasin cizdigi HAM SEKIL: POINT, LINESTRING veya POLYGON. Bir yol
