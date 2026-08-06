@@ -93,6 +93,10 @@ const SECIM_UCUS_HARITADAN = { zoom: 12.5, duration: 1500 };
 const SECIM_UCUS_LISTEDEN = { zoom: 12.5, duration: 2000 };
 const UCUS_SURESI_VARSAYILAN = 1600;
 
+/** Bolge/guzergah ad+olcu etiketleri bu zoom'un altinda hic cizilmez: uzakta
+ *  onlarca etiket ust uste binip haritayi kirletiyordu. Degeri buradan ayarla. */
+const BOLGE_ETIKET_MINZOOM = 13;
+
 const IKON_KATMAN_YERLESIMI: Record<string, unknown> = {
   "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.55, 16, 0.95],
   "icon-allow-overlap": true,
@@ -176,6 +180,9 @@ interface MapViewProps {
   onTalepDetay?: (id: string) => void;
   /** Gorunen alani bildirir (konum aramasini onceliklendirmek icin). */
   onGorunumDegisti?: (bounds: [[number, number], [number, number]]) => void;
+  /** Harita kurulunca/yikilinca instance'i disari verir. Stil onizlemeleri ana
+   *  haritanin kadrajini React state'ine ugramadan takip etmek icin kullanir. */
+  onHaritaHazir?: (map: maplibregl.Map | null) => void;
   /** Canli saha ekibi konumlari (personel gorunumu). */
   ekipler?: EkipGorevleri[];
   /** Departman kodu -> ad + renk. Ekip pinleri bagli olduklari mudurlugun
@@ -218,6 +225,7 @@ export default function MapView({
   aktifStilId,
   ucusHedefi,
   onGorunumDegisti,
+  onHaritaHazir,
   onVarlikDetay,
   onTalepDetay,
   ekipler,
@@ -280,6 +288,7 @@ export default function MapView({
   const bolgeTiklanabilirRef = useRef(bolgeTiklanabilir);
   const onOlcumNoktaRef = useRef(onOlcumNokta);
   const onGorunumDegistiRef = useRef(onGorunumDegisti);
+  const onHaritaHazirRef = useRef(onHaritaHazir);
   const olcumModuRef = useRef(olcumModu);
   const olcumNoktalariRef = useRef(olcumNoktalari);
   const assetsRef = useRef(assets);
@@ -312,6 +321,7 @@ export default function MapView({
     bolgeTiklanabilirRef.current = bolgeTiklanabilir;
     onOlcumNoktaRef.current = onOlcumNokta;
     onGorunumDegistiRef.current = onGorunumDegisti;
+    onHaritaHazirRef.current = onHaritaHazir;
     olcumModuRef.current = olcumModu;
     olcumNoktalariRef.current = olcumNoktalari;
     assetsRef.current = assets;
@@ -612,9 +622,21 @@ export default function MapView({
   }
 
   /** Her bolgenin ad + olcu (+ atanan ekip) etiketi. Ad kismi yetkili
-   *  kullanicilar icin etiket uzerinde duzenlenebilir. */
+   *  kullanicilar icin etiket uzerinde duzenlenebilir. Uzaklastikca onlarca
+   *  etiket ust uste binip haritayi kirletiyordu: BOLGE_ETIKET_MINZOOM
+   *  altinda hicbiri cizilmez, yalnizca sekil/cizgi kalir. */
   function bolgeEtiketleriUygula(map: maplibregl.Map, liste: Bolge[]) {
     const guncelIdler = new Set<string>();
+    const gorunur = map.getZoom() >= BOLGE_ETIKET_MINZOOM;
+
+    if (!gorunur) {
+      for (const [id, marker] of bolgeEtiketleriRef.current) {
+        if (etiketDuzenlenenRef.current === id) etiketDuzenlenenRef.current = null;
+        marker.remove();
+        bolgeEtiketleriRef.current.delete(id);
+      }
+      return;
+    }
 
     for (const bolge of liste) {
       guncelIdler.add(bolge.id);
@@ -1383,6 +1405,7 @@ export default function MapView({
       attributionControl: false,
     });
     mapRef.current = map;
+    onHaritaHazirRef.current?.(map);
 
     map.addControl(new maplibregl.NavigationControl(), "bottom-right");
     map.addControl(new maplibregl.ScaleControl(), "bottom-left");
@@ -1390,6 +1413,8 @@ export default function MapView({
 
     map.on("load", () => kaynaklariHazirla(map));
     map.on("render", popupHizalaRef.current);
+    // Bolge etiketleri BOLGE_ETIKET_MINZOOM esiginde gorunur/gizlenir olmali.
+    map.on("zoomend", () => bolgeEtiketleriUygula(map, bolgelerRef.current ?? []));
 
     // MapLibre kapsayici boyutu degisince kendiliginden yeniden boyutlanmaz.
     const boyutGozlemci = new ResizeObserver(() => map.resize());
@@ -1423,6 +1448,7 @@ export default function MapView({
       map.remove();
       mapRef.current = null;
       hazirRef.current = false;
+      onHaritaHazirRef.current?.(null);
     };
     // `kaynaklariHazirla` bilerek bagimlilik degil: her render'da yeniden
     // olustugu icin listeye girerse harita her render'da yikilip kurulurdu.

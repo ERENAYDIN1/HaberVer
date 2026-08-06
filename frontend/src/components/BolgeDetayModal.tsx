@@ -89,6 +89,8 @@ export default function BolgeDetayModal({
     }
   };
 
+  const { data: departmanlar } = useDepartmanlar();
+
   if (!bolge) return null;
 
   const cizgi = bolge.tip === "cizgi";
@@ -105,7 +107,6 @@ export default function BolgeDetayModal({
     ? cizgiOrtaNoktasi(bolge.noktalar[0] ?? [])
     : enBuyukHalkaMerkezi(bolge.noktalar);
 
-  const { data: departmanlar } = useDepartmanlar();
   const kaydinDepartmani = departmanBul(departmanlar, bolge.departman);
 
   const satirlar: [string, string | null][] = [

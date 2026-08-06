@@ -56,10 +56,18 @@ export const HARITA_STILLERI: HaritaStilTanimi[] = [
   },
 ];
 
-/** Tum stil onizlemeleri ayni kadraji gosterir: Bogaz'in iki yakasi, "Istanbul"
- *  etiketiyle birlikte Bakirkoy-Umraniye arasini kapsayan hafif genis aci.
- *  Zoom, kucuk onizleme kutularinda bu kadrajin sigmasi icin secildi. */
+/** Ana harita bilinmiyorken (ve testlerde) kullanilan kadraj: Bogaz'in iki
+ *  yakasi, Bakirkoy-Umraniye arasini kapsayan hafif genis aci. */
 export const ONIZLEME_MERKEZI: [number, number] = [28.975, 41.025];
 export const ONIZLEME_ZOOM = 9.6;
+
+/** Onizleme kutusu 80x80 piksel; ana haritanin zoom'u orada tek bir sokak
+ *  parcasina denk gelirdi. Birkac kademe geri cekilince onizleme "burasi
+ *  neresi" sorusunu cevaplar ve daha az tile ister. */
+const ONIZLEME_ZOOM_FARKI = 2.5;
+
+export function onizlemeZoomu(anaZoom: number): number {
+  return Math.max(0, anaZoom - ONIZLEME_ZOOM_FARKI);
+}
 
 export const VARSAYILAN_STIL: HaritaStilId = "liberty";

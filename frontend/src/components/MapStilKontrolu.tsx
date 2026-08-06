@@ -5,6 +5,7 @@ import {
   HARITA_STILLERI,
   ONIZLEME_MERKEZI,
   ONIZLEME_ZOOM,
+  onizlemeZoomu,
   type HaritaStilId,
   type HaritaStilTanimi,
 } from "../data/mapStyles";
@@ -13,12 +14,14 @@ import { IconLayers } from "./icons";
 interface MapStilKontroluProps {
   aktifId: HaritaStilId;
   onSec: (id: HaritaStilId) => void;
+  /** Ana harita. Verilirse onizlemeler onun kadrajini canli takip eder. */
+  harita?: maplibregl.Map | null;
 }
 
 /** Haritanin sag-alt kosesinde, o an aktif stili kucuk bir onizlemeyle gosteren
  *  kare bir kart (Google Haritalar'daki harita turu kontrolune benzer). Tiklaninca
  *  butun stil secenekleri bir izgara halinde acilir; secim burada yapilir. */
-export default function MapStilKontrolu({ aktifId, onSec }: MapStilKontroluProps) {
+export default function MapStilKontrolu({ aktifId, onSec, harita }: MapStilKontroluProps) {
   const [acik, setAcik] = useState(false);
   const kutuRef = useRef<HTMLDivElement>(null);
 
@@ -59,7 +62,7 @@ export default function MapStilKontrolu({ aktifId, onSec }: MapStilKontroluProps
                       : "ring-slate-200 group-hover:ring-slate-400"
                   }`}
                 >
-                  <Onizleme stil={stil} />
+                  <Onizleme stil={stil} harita={harita} />
                 </div>
                 <span
                   className={`mt-1.5 block truncate text-xs transition ${
@@ -83,7 +86,7 @@ export default function MapStilKontrolu({ aktifId, onSec }: MapStilKontroluProps
         className="group block rounded-xl bg-white/90 p-1 shadow-[0_6px_20px_-6px_rgba(15,23,42,0.45)] ring-1 ring-slate-900/10 backdrop-blur transition hover:ring-slate-900/25"
       >
         <div className="relative h-20 w-20 overflow-hidden rounded-lg">
-          {aktifStil && <Onizleme stil={aktifStil} />}
+          {aktifStil && <Onizleme stil={aktifStil} harita={harita} />}
           <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/85 via-slate-900/45 to-transparent pt-3">
             <span className="flex items-center justify-center gap-1 pb-1 text-[10px] font-medium text-white">
               <IconLayers className="h-3 w-3" />
@@ -96,9 +99,21 @@ export default function MapStilKontrolu({ aktifId, onSec }: MapStilKontroluProps
   );
 }
 
-/** Tum stiller icin ayni merkez/zoom degerleriyle olusturulan, etkilesimsiz
- *  mini onizleme haritasi — boylece bes onizleme de ayni kadraji gosterir. */
-function Onizleme({ stil }: { stil: HaritaStilTanimi }) {
+/** Etkilesimsiz mini onizleme haritasi. Ana harita verilirse onun kadrajini
+ *  canli takip eder (OSM'deki gibi: kullanici nereye bakiyorsa onizleme de
+ *  orayi gosterir), yoksa sabit `ONIZLEME_MERKEZI`'ne duser.
+ *
+ *  Senkron `move` uzerinden ve dogrudan `jumpTo` ile yapilir: React state'e
+ *  yazilsaydi surukleme boyunca her karede yeniden render tetiklenirdi.
+ *  Bu bileşen yalnizca panel acikken bes kez, kapaliyken bir kez mount olur —
+ *  yani kapali durumdaki surekli yuk tek bir 80x80 haritadir. */
+function Onizleme({
+  stil,
+  harita,
+}: {
+  stil: HaritaStilTanimi;
+  harita?: maplibregl.Map | null;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -107,14 +122,25 @@ function Onizleme({ stil }: { stil: HaritaStilTanimi }) {
     const mini = new maplibregl.Map({
       container: containerRef.current,
       style: stil.stil,
-      center: ONIZLEME_MERKEZI,
-      zoom: ONIZLEME_ZOOM,
+      center: harita ? harita.getCenter() : ONIZLEME_MERKEZI,
+      zoom: harita ? onizlemeZoomu(harita.getZoom()) : ONIZLEME_ZOOM,
       interactive: false,
       attributionControl: false,
     });
 
-    return () => mini.remove();
-  }, [stil]);
+    if (!harita) return () => mini.remove();
+
+    // 80x80'lik kutuda ana haritanin zoom'u tek bir sokak parcasi gosterirdi;
+    // birkac kademe geri cekilince onizleme "neresi" sorusunu cevaplar.
+    const senkron = () => {
+      mini.jumpTo({ center: harita.getCenter(), zoom: onizlemeZoomu(harita.getZoom()) });
+    };
+    harita.on("move", senkron);
+    return () => {
+      harita.off("move", senkron);
+      mini.remove();
+    };
+  }, [stil, harita]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

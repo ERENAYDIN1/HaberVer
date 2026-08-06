@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type maplibregl from "maplibre-gl";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -223,6 +224,9 @@ export default function App() {
   const [haritaGorunumu, setHaritaGorunumu] = useState<
     [[number, number], [number, number]] | null
   >(null);
+  // Stil onizlemeleri ana haritanin kadrajini takip eder; kurulunca bir kez
+  // yazilir, sonrasinda senkron MapLibre olaylari uzerinden yurur.
+  const [harita, setHarita] = useState<maplibregl.Map | null>(null);
 
   /** Alan secimi: cizim, olcum, secili alanlarin varlik sonuclari ve
    *  ilce/mahalle sinirlari - hepsi ayni `tamamlananAlanlar` listesini besler. */
@@ -1343,6 +1347,7 @@ export default function App() {
           aktifStilId={aktifStilId}
           ucusHedefi={ucusHedefi}
           onGorunumDegisti={setHaritaGorunumu}
+          onHaritaHazir={setHarita}
           // Popup'lardaki tek dugme: duzenleme, atama, onay/ret, reddi geri
           // alma ve sekil duzenleme acilan detay modallerinin isidir.
           onVarlikDetay={() => setDetayAsset(seciliVarlik)}
@@ -1380,7 +1385,7 @@ export default function App() {
           bolge={{ ilceKodu, onIlceSec: ilceSec, mahalleKodu, onMahalleSec: mahalleSec }}
         />
 
-        <MapStilKontrolu aktifId={aktifStilId} onSec={setAktifStilId} />
+        <MapStilKontrolu aktifId={aktifStilId} onSec={setAktifStilId} harita={harita} />
 
         {/* Aktif sekmenin yuzen paneli: kenar cubugunun sagindan acilir,
             sol bosluk `--kenar` uzerinden verilir. */}
