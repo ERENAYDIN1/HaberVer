@@ -27,6 +27,8 @@ import {
   IconWarning,
   tipIkonu,
 } from "../components/icons";
+import Sheet from "../components/mobil/Sheet";
+import { useMobil } from "../hooks/useMobil";
 import { turAdi } from "../data/turSozlugu";
 import type { Bolge } from "../types/bolge";
 import { TALEP_SEKIL_ETIKETLERI } from "../types/report";
@@ -89,6 +91,10 @@ export default function SahaEkran() {
   // Islem sonrasi bilgilendirme seridi.
   const [durum, setDurum] = useState<{ ok: boolean; metin: string } | null>(null);
   const [panelAcik, setPanelAcik] = useState(true);
+  const mobil = useMobil();
+  // Mobilde gorev listesi bir sheet: acilista yarim kademede durur ki ekip
+  // hem isini hem haritadaki yerini ayni anda gorsun - ekranin tek isi bu.
+  const [sheetAcik, setSheetAcik] = useState(true);
 
   // Konum yayini: acilista ve her 30 sn'de bir backend'e gonderilir.
   useEffect(() => {
@@ -305,62 +311,11 @@ export default function SahaEkran() {
     }
   };
 
-  return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100">
-      <header className="z-20 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setPanelAcik((v) => !v)}
-            aria-label="Görev panelini aç/kapat"
-            aria-pressed={panelAcik}
-            title="Görev paneli"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-          >
-            <IconMenu className="h-5 w-5" />
-          </button>
-
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 shadow-sm shadow-emerald-600/30">
-            <IconPin className="h-4 w-4 text-white" />
-          </div>
-          <div className="leading-tight">
-            <h1 className="text-sm font-semibold tracking-tight text-slate-900">
-              GreenAsset · Saha
-            </h1>
-            <p className="text-[11px] text-slate-500">Görev Ekranı</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Ekip hangi mudurlugun isini aldigini gormeli: otomatik atama
-              departmana gore de suzuluyor (bkz. en_yakin_uygun_ekip). */}
-          <div className="flex flex-col items-end leading-tight">
-            <span className="text-xs text-slate-500">
-              {user?.full_name || user?.email}
-            </span>
-            <DepartmanEtiketi kod={user?.departman} className="mt-0.5" />
-          </div>
-          <button
-            onClick={cikisYap}
-            className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-red-500"
-          >
-            <IconLogout className="h-3.5 w-3.5" />
-            Çıkış
-          </button>
-        </div>
-      </header>
-
-      {/* Panel haritanin uzerine biner: akista olsaydi acilip kapanmasi
-          haritayi yeniden boyutlandirir ve goruntu titrerdi. */}
-      <div className="relative min-h-0 flex-1">
-        {/* Sol: gorev listesi */}
-        <aside
-          className={`absolute inset-y-0 left-0 z-30 flex flex-col overflow-y-auto overflow-x-hidden border-r bg-slate-50 transition-[width] duration-200 ease-out ${
-            panelAcik
-              ? "w-[380px] border-slate-200 shadow-lg"
-              : "w-0 border-transparent"
-          }`}
-        >
-         <div className="flex min-h-full w-[380px] shrink-0 flex-col">
+  /* --- Iki kabugun paylastigi panel icerigi ---
+     JSX burada bir kez kurulur, asagida ya masaustu yan paneline ya da mobil
+     sheet'ine yerlestirilir; iki kabuk arasinda kopyalanan tek satir yok. */
+  const panelIcerigi = (
+    <>
           {/* Ust ozet: is yuku + konum yayininin canli olup olmadigi (personel
               ekibi haritada ancak konum gelirse gorur). */}
           <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 p-4 backdrop-blur-sm">
@@ -865,21 +820,160 @@ export default function SahaEkran() {
               </div>
             )}
           </div>
+    </>
+  );
+
+  const harita = (
+    <KonumSecMap
+      secili={null}
+      onSec={() => {}}
+      tiklanabilir={false}
+      isaretler={isaretler}
+      alanlar={haritaAlanlari}
+      benimKonumum={benimKonumum}
+      ucus={ucus}
+    />
+  );
+
+  // --- Mobil kabuk ---
+  if (mobil) {
+    return (
+      <div className="ekran-yuksekligi flex w-screen flex-col overflow-hidden bg-slate-100">
+        <header className="z-20 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 shadow-sm shadow-emerald-600/30">
+              <IconPin className="h-4 w-4 text-white" />
+            </div>
+            <div className="min-w-0 leading-tight">
+              <h1 className="truncate text-sm font-semibold tracking-tight text-slate-900">
+                GreenAsset · Saha
+              </h1>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate text-[11px] text-slate-500">
+                  {user?.full_name || user?.email}
+                </span>
+                <DepartmanEtiketi kod={user?.departman} />
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={cikisYap}
+            aria-label="Çıkış yap"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm"
+          >
+            <IconLogout className="h-4 w-4" />
+          </button>
+        </header>
+
+        <div className="relative min-h-0 flex-1">
+          <div className="absolute inset-0">{harita}</div>
+
+          {/* Sheet kapaliyken haritayi tam gormek icin; seritteki sayilar
+              paneli acmadan da "kac isim var" sorusunu cevaplar. */}
+          {!sheetAcik && (
+            <button
+              type="button"
+              onClick={() => setSheetAcik(true)}
+              aria-label="Görevlerimi aç"
+              className="guvenli-alt absolute inset-x-0 bottom-0 z-30 flex items-center gap-2 border-t border-slate-200 bg-white px-4 py-3 text-left"
+            >
+              <span className="text-sm font-semibold text-slate-800">
+                Görevlerim
+              </span>
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                {gorevler.length} aktif
+              </span>
+              {aktifBolgeler.length > 0 && (
+                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                  {aktifBolgeler.length} bölge
+                </span>
+              )}
+              <IconChevronRight className="ml-auto h-4 w-4 -rotate-90 text-slate-400" />
+            </button>
+          )}
+
+          <Sheet
+            acik={sheetAcik}
+            baslik="Görevlerim"
+            onKapat={() => setSheetAcik(false)}
+            baslikSinifi="border-slate-200 bg-slate-50"
+            ikon={
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500 text-white">
+                <IconWarning className="h-4 w-4" />
+              </span>
+            }
+            govdeSinifi="flex-1 overflow-y-auto overscroll-contain bg-slate-50"
+          >
+            {panelIcerigi}
+          </Sheet>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Masaustu kabugu (degismedi) ---
+  return (
+    <div className="ekran-yuksekligi flex w-screen flex-col overflow-hidden bg-slate-100">
+      <header className="z-20 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setPanelAcik((v) => !v)}
+            aria-label="Görev panelini aç/kapat"
+            aria-pressed={panelAcik}
+            title="Görev paneli"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <IconMenu className="h-5 w-5" />
+          </button>
+
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 shadow-sm shadow-emerald-600/30">
+            <IconPin className="h-4 w-4 text-white" />
+          </div>
+          <div className="leading-tight">
+            <h1 className="text-sm font-semibold tracking-tight text-slate-900">
+              GreenAsset · Saha
+            </h1>
+            <p className="text-[11px] text-slate-500">Görev Ekranı</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Ekip hangi mudurlugun isini aldigini gormeli: otomatik atama
+              departmana gore de suzuluyor (bkz. en_yakin_uygun_ekip). */}
+          <div className="flex flex-col items-end leading-tight">
+            <span className="text-xs text-slate-500">
+              {user?.full_name || user?.email}
+            </span>
+            <DepartmanEtiketi kod={user?.departman} className="mt-0.5" />
+          </div>
+          <button
+            onClick={cikisYap}
+            className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-red-500"
+          >
+            <IconLogout className="h-3.5 w-3.5" />
+            Çıkış
+          </button>
+        </div>
+      </header>
+
+      {/* Panel haritanin uzerine biner: akista olsaydi acilip kapanmasi
+          haritayi yeniden boyutlandirir ve goruntu titrerdi. */}
+      <div className="relative min-h-0 flex-1">
+        {/* Sol: gorev listesi */}
+        <aside
+          className={`absolute inset-y-0 left-0 z-30 flex flex-col overflow-y-auto overflow-x-hidden border-r bg-slate-50 transition-[width] duration-200 ease-out ${
+            panelAcik
+              ? "w-[380px] border-slate-200 shadow-lg"
+              : "w-0 border-transparent"
+          }`}
+        >
+         <div className="flex min-h-full w-[380px] shrink-0 flex-col">
+          {panelIcerigi}
          </div>
         </aside>
 
         {/* Harita: gorev pinleri + kendi konumu + gorev bolgesi */}
-        <div className="absolute inset-0">
-          <KonumSecMap
-            secili={null}
-            onSec={() => {}}
-            tiklanabilir={false}
-            isaretler={isaretler}
-            alanlar={haritaAlanlari}
-            benimKonumum={benimKonumum}
-            ucus={ucus}
-          />
-        </div>
+        <div className="absolute inset-0">{harita}</div>
       </div>
     </div>
   );

@@ -27,6 +27,8 @@ interface BolgeSekilPaneliProps {
   genisletiliyor?: boolean;
   /** Taslagi kaydin son kaydedilmis haline dondurur. */
   onSifirla: () => void;
+  /** Mobil: panelin ekran dibinden yuksekligi (px), bkz. CizimPaneli. */
+  altOfset?: number;
 }
 
 /** Bir gorev bolgesinin / guzergahin seklini harita uzerinde duzenlerken
@@ -44,6 +46,7 @@ export default function BolgeSekilPaneli({
   onGenislet,
   genisletiliyor,
   onSifirla,
+  altOfset,
 }: BolgeSekilPaneliProps) {
   const [ozelMesafe, setOzelMesafe] = useState("");
   const cizgi = duzenleme.tip === "cizgi";
@@ -60,7 +63,16 @@ export default function BolgeSekilPaneli({
   };
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4">
+    <div
+      className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"
+      // Mobilde alt sekme cubugunun ustune oturur; verilmezse masaustundeki
+      // `bottom-6` gecerlidir (`CizimPaneli` ile ayni kural).
+      style={{
+        bottom: altOfset
+          ? `calc(${altOfset}px + env(safe-area-inset-bottom, 0px))`
+          : "1.5rem",
+      }}
+    >
       <div className="pointer-events-auto flex w-full max-w-sm flex-col gap-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur-sm">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-violet-700">
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-100 text-violet-600">

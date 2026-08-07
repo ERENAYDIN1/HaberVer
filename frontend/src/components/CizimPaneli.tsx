@@ -56,6 +56,9 @@ interface CizimPaneliProps {
   onOlcumGeriAl: () => void;
   onOlcumBitir: () => void;
   onOlcumTemizle: () => void;
+  /** Mobil: panelin ekran dibinden yuksekligi (px). Alt sekme cubugunun
+   *  ustune oturmasi icin verilir; verilmezse masaustundeki 1.5rem gecerli. */
+  altOfset?: number;
 }
 
 /** Cizim/olcum araclari aktifken ekranin alt ortasinda beliren arac paneli. */
@@ -86,6 +89,7 @@ export default function CizimPaneli({
   onOlcumGeriAl,
   onOlcumBitir,
   onOlcumTemizle,
+  altOfset,
 }: CizimPaneliProps) {
   const alanBitti = !cizimModu && tamamlananAlanlar.length > 0;
   const olcumBitti = !olcumModu && olcumNoktalari.length >= 2;
@@ -105,7 +109,16 @@ export default function CizimPaneli({
   );
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4">
+    <div
+      className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"
+      // Mobilde alt sekme cubugu ekranin dibini kapliyor; panel onun ustune
+      // oturmali. Verilmezse masaustundeki `bottom-6` gecerlidir.
+      style={{
+        bottom: altOfset
+          ? `calc(${altOfset}px + env(safe-area-inset-bottom, 0px))`
+          : "1.5rem",
+      }}
+    >
       <div className="pointer-events-auto flex w-full max-w-sm flex-col gap-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur-sm">
         {cizimModu && (
           <div>

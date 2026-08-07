@@ -109,6 +109,9 @@ interface KatmanKontroluProps {
   altlar: Partial<Record<KatmanAnahtari, AltGrup[]>>;
   /** Verilirse lejantin altinda ilce/mahalle filtresi gorunur. */
   bolge?: BolgeFiltresi;
+  /** Mobil: kart yuzen bir kutu degil, acan sheet'in govdesi olarak cizilir -
+   *  kendi konumlandirmasi, daraltma dugmesi ve golgesi olmaz. */
+  gomulu?: boolean;
 }
 
 const selectClass =
@@ -299,6 +302,7 @@ export default function KatmanKontrolu({
   sayilar,
   altlar: altFiltreler,
   bolge,
+  gomulu,
 }: KatmanKontroluProps) {
   const [acik, setAcik] = useState(true);
   // Hangi ana katmanlarin alt-filtresi genisletilmis (varsayilan: kapali).
@@ -308,7 +312,9 @@ export default function KatmanKontrolu({
   const genisletmeDegistir = (anahtar: string) =>
     setGenis((g) => ({ ...g, [anahtar]: !g[anahtar] }));
 
-  if (!acik) {
+  // Gomulu kipte kart bir yuzen kutu degil, acan/kapatan sheet'in govdesidir:
+  // kendi kapatma dugmesi ve daraltilmis hali olmaz.
+  if (!acik && !gomulu) {
     return (
       <div className="absolute right-3 top-3 z-20">
         <button
@@ -328,17 +334,25 @@ export default function KatmanKontrolu({
   return (
     // Genislik mudurluk adlarina gore: "Park ve Bahçeler Müdürlüğü" lejantin
     // ana basligi oldugundan w-52'de her satir kirpiliyordu.
-    <div className="absolute right-3 top-3 z-20 w-60 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 shadow-xl shadow-slate-900/10 backdrop-blur-md">
-      <button
-        onClick={() => setAcik(false)}
-        className="flex w-full items-center gap-2 border-b border-slate-200/70 px-3 py-2.5 text-left transition hover:bg-slate-50/70"
-      >
-        <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
-          <IconLegend className="h-3.5 w-3.5" />
-        </span>
-        <span className="flex-1 text-sm font-semibold text-slate-800">Katmanlar</span>
-        <IconChevronRight className="h-4 w-4 -rotate-90 text-slate-400" />
-      </button>
+    <div
+      className={
+        gomulu
+          ? "w-full"
+          : "absolute right-3 top-3 z-20 w-60 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 shadow-xl shadow-slate-900/10 backdrop-blur-md"
+      }
+    >
+      {!gomulu && (
+        <button
+          onClick={() => setAcik(false)}
+          className="flex w-full items-center gap-2 border-b border-slate-200/70 px-3 py-2.5 text-left transition hover:bg-slate-50/70"
+        >
+          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+            <IconLegend className="h-3.5 w-3.5" />
+          </span>
+          <span className="flex-1 text-sm font-semibold text-slate-800">Katmanlar</span>
+          <IconChevronRight className="h-4 w-4 -rotate-90 text-slate-400" />
+        </button>
+      )}
 
       <div className="p-1.5">
         {KATMANLAR.map((katman) => {

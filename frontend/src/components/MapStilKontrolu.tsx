@@ -16,12 +16,20 @@ interface MapStilKontroluProps {
   onSec: (id: HaritaStilId) => void;
   /** Ana harita. Verilirse onizlemeler onun kadrajini canli takip eder. */
   harita?: maplibregl.Map | null;
+  /** Mobil: sag-alttaki yuzen kart yerine yalnizca stil izgarasi cizilir
+   *  (katman sheet'inin icinde durur). */
+  gomulu?: boolean;
 }
 
 /** Haritanin sag-alt kosesinde, o an aktif stili kucuk bir onizlemeyle gosteren
  *  kare bir kart (Google Haritalar'daki harita turu kontrolune benzer). Tiklaninca
  *  butun stil secenekleri bir izgara halinde acilir; secim burada yapilir. */
-export default function MapStilKontrolu({ aktifId, onSec, harita }: MapStilKontroluProps) {
+export default function MapStilKontrolu({
+  aktifId,
+  onSec,
+  harita,
+  gomulu,
+}: MapStilKontroluProps) {
   const [acik, setAcik] = useState(false);
   const kutuRef = useRef<HTMLDivElement>(null);
 
@@ -38,6 +46,42 @@ export default function MapStilKontrolu({ aktifId, onSec, harita }: MapStilKontr
 
   const aktifStil = HARITA_STILLERI.find((s) => s.id === aktifId);
 
+  const izgara = (
+    <div className="grid grid-cols-2 gap-2">
+      {HARITA_STILLERI.map((stil) => (
+        <button
+          key={stil.id}
+          onClick={() => {
+            onSec(stil.id);
+            setAcik(false);
+          }}
+          className="group text-left"
+        >
+          <div
+            className={`relative h-20 w-full overflow-hidden rounded-lg bg-slate-100 ring-1 transition ${
+              stil.id === aktifId
+                ? "ring-2 ring-emerald-500"
+                : "ring-slate-200 group-hover:ring-slate-400"
+            }`}
+          >
+            <Onizleme stil={stil} harita={harita} />
+          </div>
+          <span
+            className={`mt-1.5 block truncate text-xs transition ${
+              stil.id === aktifId
+                ? "font-semibold text-emerald-700"
+                : "text-slate-600 group-hover:text-slate-900"
+            }`}
+          >
+            {stil.etiket}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+
+  if (gomulu) return izgara;
+
   return (
     <div ref={kutuRef} className="absolute bottom-6 right-4 z-20">
       {acik && (
@@ -45,37 +89,7 @@ export default function MapStilKontrolu({ aktifId, onSec, harita }: MapStilKontr
           <p className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
             Harita çeşidi
           </p>
-          <div className="grid grid-cols-2 gap-2">
-            {HARITA_STILLERI.map((stil) => (
-              <button
-                key={stil.id}
-                onClick={() => {
-                  onSec(stil.id);
-                  setAcik(false);
-                }}
-                className="group text-left"
-              >
-                <div
-                  className={`relative h-20 w-full overflow-hidden rounded-lg bg-slate-100 ring-1 transition ${
-                    stil.id === aktifId
-                      ? "ring-2 ring-emerald-500"
-                      : "ring-slate-200 group-hover:ring-slate-400"
-                  }`}
-                >
-                  <Onizleme stil={stil} harita={harita} />
-                </div>
-                <span
-                  className={`mt-1.5 block truncate text-xs transition ${
-                    stil.id === aktifId
-                      ? "font-semibold text-emerald-700"
-                      : "text-slate-600 group-hover:text-slate-900"
-                  }`}
-                >
-                  {stil.etiket}
-                </span>
-              </button>
-            ))}
-          </div>
+          {izgara}
         </div>
       )}
 

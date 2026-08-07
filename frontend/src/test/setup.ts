@@ -33,6 +33,22 @@ Object.defineProperty(window.navigator, "geolocation", {
   },
 });
 
+// jsdom `matchMedia` uygulamiyor; `hooks/useMobil.ts` mobil kabuga gecisi
+// buradan okuyor. Testler MASAUSTU dalini olcer (`matches: false`) - mobil
+// kabuk harita/dokunma davranisiyla ic ice oldugundan elle dogrulanir.
+if (!window.matchMedia) {
+  window.matchMedia = vi.fn((sorgu: string) => ({
+    matches: false,
+    media: sorgu,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(() => false),
+  })) as unknown as typeof window.matchMedia;
+}
+
 // jsdom URL.createObjectURL uygulamiyor (foto onizleme yollarinda kullaniliyor).
 if (!URL.createObjectURL) {
   URL.createObjectURL = vi.fn(() => "blob:test");

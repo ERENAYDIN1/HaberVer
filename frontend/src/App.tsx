@@ -33,6 +33,7 @@ import {
   IconRefresh,
   IconRoute,
   IconRuler,
+  IconSearch,
   IconUsers,
   IconX,
 } from "./components/icons";
@@ -42,6 +43,11 @@ import KatmanKontrolu, {
   type KatmanAnahtari,
 } from "./components/KatmanKontrolu";
 import Kenarcubugu, { type KenarOgesi } from "./components/Kenarcubugu";
+import AltSekmeCubugu, {
+  ALT_CUBUK_YUKSEKLIGI,
+} from "./components/mobil/AltSekmeCubugu";
+import Sheet from "./components/mobil/Sheet";
+import { useMobil } from "./hooks/useMobil";
 import { LogoAmblem } from "./components/icons";
 import KonumArama from "./components/KonumArama";
 import LogPaneli from "./components/LogPaneli";
@@ -185,6 +191,18 @@ export default function App() {
   const [aktifStilId, setAktifStilId] = useState<HaritaStilId>(VARSAYILAN_STIL);
   // Sol kenar cubugu genis (etiketli) mi.
   const [kenarAcik, setKenarAcik] = useState(true);
+
+  // --- Yalnizca mobil kabuk ---
+  // Masaustunde bu islerin hepsi ayni anda ekranda durabiliyor; mobilde her
+  // biri kendi sheet'ini acar, cunku ustuste binen dort yuzen kutu kucuk
+  // ekranda haritayi tamamen kapatiyor.
+  const mobil = useMobil();
+  /** Yonetim ekranlari + kullanici + cikis (header'daki hamburger). */
+  const [mobilMenu, setMobilMenu] = useState(false);
+  /** Lejant + tur/durum filtresi + harita stili tek sheet'te. */
+  const [mobilKatman, setMobilKatman] = useState(false);
+  /** Konum arama alani header'da yer kaplamasin diye acilir. */
+  const [mobilArama, setMobilArama] = useState(false);
   // Katman gorunurlugu + tur/durum alt-filtreleri. Sag-ustteki lejant ile sol
   // paneldeki acilirlar ayni state'i yazar (bkz. useKatmanlar).
   const {
@@ -214,6 +232,11 @@ export default function App() {
 
   // Aktif kutucuga tekrar tiklamak paneli kapatir.
   const sekmeSec = (id: Sekme) => {
+    // Mobilde katman/menu sheet'leri panelin uzerine biniyor; yeni bir sekme
+    // istendiginde ustteki kapanmali, yoksa acilan panel gorunmez.
+    // (Masaustunde bu iki state kullanilmiyor, cagri etkisizdir.)
+    setMobilKatman(false);
+    setMobilMenu(false);
     if (panelAcik && sekme === id) {
       setPanelAcik(false);
       return;
@@ -1156,8 +1179,188 @@ export default function App() {
     }
   }, []);
 
-  return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100">
+  /** Aktif sekmenin govdesi. Masaustunde yuzen panelin, mobilde sheet'in
+   *  icine girer - iki kabuk da AYNI paneli gosterir, mobil icin ayri bir
+   *  liste/form yazilmadi. */
+  const panelGovdesi = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {sekme === "liste" && (
+        <AssetList
+          // Haritayla ayni koleksiyon: liste, sayaclar ve isaretciler
+          // tek filtre state'inden turer.
+          data={varlikKatmanVeri}
+          isLoading={sorgu.isLoading}
+          isError={sorgu.isError}
+          error={sorgu.error as Error | null}
+          turler={katmanTurleri}
+          onTurSec={panelTuruSec}
+          onDepartmanSec={departmanTurleriniSec}
+          durumlar={katmanVarlikDurumlari}
+          onDurumSec={panelDurumuSec}
+          seciliId={seciliId}
+          onSec={varlikSecildi}
+          onDuzenle={setDuzenlenen}
+          ilceKodu={ilceKodu}
+          onIlceSec={ilceSec}
+          mahalleKodu={mahalleKodu}
+          onMahalleSec={mahalleSec}
+          idariHatasi={idariHatasi}
+          ekipler={ekipSorgu.data}
+          onVarligaGit={varligaGit}
+        />
+      )}
+
+      {sekme === "ekle" && (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <p className="mb-3 border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Harita{mobil ? "da" : "da"} boş bir nokta
+            {mobil ? "ya dokunarak" : "ya tıklayarak"} koordinatı otomatik
+            doldurabilirsin.
+          </p>
+          <AssetForm koordinat={koordinat} />
+        </div>
+      )}
+
+      {sekme === "talepler" && (
+        <TalepPaneli
+          durum={talepDurum}
+          onDurumChange={setTalepDurum}
+          onVarlikOlustu={() => {
+            // Onay yeni bir varlik olusturup ekibe atar; iki sorgu da
+            // tazelenmeli.
+            queryClient.invalidateQueries({ queryKey: ["assets"] });
+            queryClient.invalidateQueries({ queryKey: ["saha"] });
+          }}
+          onTaleplerChange={setTalepler}
+          seciliRaporId={seciliTalepId}
+          onRaporSec={talepSecildi}
+          talepVarlikSorgu={talepVarlikSorgu}
+          seciliVarlikId={seciliId}
+          onVarlikSec={varlikSecildi}
+          ekipler={ekipSorgu.data}
+          onVarligaGit={varligaGit}
+          // Lejant/harita ile ayni sinir: secili ilce-mahalle disindaki
+          // talepler listede de gorunmez.
+          alandaMi={alandaMi}
+        />
+      )}
+
+      {bolgeSekmesi(sekme) && (
+        <BolgePaneli
+          tip={BOLGE_SEKMELERI[sekme].tip}
+          alanda={alandaMi ? bolgeAlanda : null}
+          ekipler={ekipSorgu.data}
+          gizliler={gizliBolgeler}
+          onGorunurlukDegis={bolgeGorunurlukDegis}
+          onTumunuGoster={bolgeleriGoster}
+          onTumunuGizle={bolgeleriGizle}
+          katmanAcik={katmanlar[BOLGE_SEKMELERI[sekme].katman]}
+          onKatmaniAc={() => katmanDegistir(BOLGE_SEKMELERI[sekme].katman)}
+          onBolgeyeGit={bolgeyeGit}
+          onSekilDuzenle={sekilDuzenlemeBaslat}
+          sekilDuzenlenenId={sekilDuzenleme?.id ?? null}
+          seciliId={seciliBolgeId}
+          onDetay={setDetayBolge}
+        />
+      )}
+    </div>
+  );
+
+  /** Harita. Iki kabuk da AYNI ornegi kullanir; mobilde tek fark, uzerine
+   *  binen kontrollerin yerlesimidir. */
+  const haritaBlogu = (
+    <MapView
+      assets={katmanlar.varliklar ? varlikKatmanVeri : undefined}
+      reports={katmanlar.talepler ? talepKatmanVeri : undefined}
+      seciliTalepId={seciliTalepId}
+      onTalepSec={talepSecildi}
+      seciliId={seciliId}
+      onVarlikSec={varlikSecildi}
+      onHaritaTikla={haritaTiklandi}
+      cizimModu={cizimModu}
+      cizimNoktalari={cizimNoktalari}
+      onCizimNokta={cizimNoktaEkle}
+      cizimRengi={cizimRengi}
+      tamamlananAlanlar={tamamlananAlanlar}
+      olcumModu={olcumModu}
+      olcumNoktalari={olcumNoktalari}
+      onOlcumNokta={olcumNoktaEkle}
+      aktifStilId={aktifStilId}
+      ucusHedefi={ucusHedefi}
+      onGorunumDegisti={setHaritaGorunumu}
+      onHaritaHazir={setHarita}
+      // Popup'lardaki tek dugme: duzenleme, atama, onay/ret, reddi geri
+      // alma ve sekil duzenleme acilan detay modallerinin isidir.
+      onVarlikDetay={() => setDetayAsset(seciliVarlik)}
+      onTalepDetay={() => setDetayRapor(seciliRapor)}
+      ekipler={katmanlar.ekipler ? haritaEkipleri : undefined}
+      ekipDepartmanlari={ekipDepartmanlari}
+      onEkipGorevSec={personel ? ekipGoreviAcildi : undefined}
+      bolgeler={haritaBolgeleri}
+      seciliBolgeId={seciliBolgeId}
+      onBolgeSec={bolgeSecildi}
+      onBolgeDetay={(id) =>
+        setDetayBolge(bolgeSorgu.data?.find((b) => b.id === id) ?? null)
+      }
+      // Ad haritadaki etiket uzerinden de degistirilebilir (yalniz personel).
+      onBolgeAdDegis={personel ? bolgeAdiDegistir : undefined}
+      sekilDuzenleme={sekilDuzenleme}
+      onSekilDegis={sekilDegisti}
+      bolgeTiklanabilir={!(panelAcik && sekme === "ekle")}
+    />
+  );
+
+  /** Alt-ortada tek panel durur: sekil duzenlenirken cizim/olcum paneli yerine
+   *  sekil paneli gorunur. Mobilde ikisi de alt sekme cubugunun ustune oturur
+   *  (`altOfset`), masaustunde ekranin dibinden 1.5rem yukarida. */
+  const aracOfseti = mobil ? ALT_CUBUK_YUKSEKLIGI : undefined;
+  const aracPaneli = sekilDuzenleme ? (
+    <BolgeSekilPaneli
+      duzenleme={sekilDuzenleme}
+      degisti={sekilDegismis}
+      onVazgec={sekilDuzenlemeKapat}
+      onKaydet={sekilKaydet}
+      kaydediliyor={sekilKaydediliyor}
+      hata={sekilHatasi}
+      onGenislet={sekilGenislet}
+      genisletiliyor={sekilGenisletiliyor}
+      onSifirla={sekilSifirla}
+      altOfset={aracOfseti}
+    />
+  ) : (
+    <CizimPaneli
+      cizimModu={cizimModu}
+      cizimNoktalari={cizimNoktalari}
+      cizimRengi={cizimRengi}
+      onCizimRengiSec={setCizimRengi}
+      alanM2={alanM2}
+      alanHatasi={alanHatasi}
+      alanYukleniyor={alanYukleniyor}
+      onAlanIptal={alanSecimiIptal}
+      onAlanGeriAl={cizimGeriAl}
+      onAlanTamamla={alanSecimiTamamla}
+      tamamlananAlanlar={tamamlananAlanlar}
+      onAlanKaldir={alanKaldir}
+      onTumAlanlariTemizle={tumAlanlariTemizle}
+      alanOlculeri={alanOlculeri}
+      toplamNetM2={alanOzetiSonuc?.toplam_m2}
+      hamToplamM2={alanOzetiSonuc?.ham_toplam_m2}
+      kaydedebilir={personel}
+      onAlanKaydet={alanKaydetIste}
+      onOlcumKaydet={olcumKaydetIste}
+      olcumModu={olcumModu}
+      olcumNoktalari={olcumNoktalari}
+      olcumMesafeM={olcumMesafeM}
+      onOlcumIptal={olcumIptal}
+      onOlcumGeriAl={olcumGeriAl}
+      onOlcumBitir={olcumBitir}
+      onOlcumTemizle={olcumTemizle}
+      altOfset={aracOfseti}
+    />
+  );
+
+  const masaustuKabuk = (
+    <>
       {/* Ust bar (uygulama header'i) */}
       <header className="z-20 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
         <div className="flex items-center gap-3">
@@ -1286,50 +1489,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Alt-ortada tek panel durur: sekil duzenlenirken cizim/olcum paneli
-          yerine sekil paneli gorunur. */}
-      {sekilDuzenleme ? (
-        <BolgeSekilPaneli
-          duzenleme={sekilDuzenleme}
-          degisti={sekilDegismis}
-          onVazgec={sekilDuzenlemeKapat}
-          onKaydet={sekilKaydet}
-          kaydediliyor={sekilKaydediliyor}
-          hata={sekilHatasi}
-          onGenislet={sekilGenislet}
-          genisletiliyor={sekilGenisletiliyor}
-          onSifirla={sekilSifirla}
-        />
-      ) : (
-      <CizimPaneli
-        cizimModu={cizimModu}
-        cizimNoktalari={cizimNoktalari}
-        cizimRengi={cizimRengi}
-        onCizimRengiSec={setCizimRengi}
-        alanM2={alanM2}
-        alanHatasi={alanHatasi}
-        alanYukleniyor={alanYukleniyor}
-        onAlanIptal={alanSecimiIptal}
-        onAlanGeriAl={cizimGeriAl}
-        onAlanTamamla={alanSecimiTamamla}
-        tamamlananAlanlar={tamamlananAlanlar}
-        onAlanKaldir={alanKaldir}
-        onTumAlanlariTemizle={tumAlanlariTemizle}
-        alanOlculeri={alanOlculeri}
-        toplamNetM2={alanOzetiSonuc?.toplam_m2}
-        hamToplamM2={alanOzetiSonuc?.ham_toplam_m2}
-        kaydedebilir={personel}
-        onAlanKaydet={alanKaydetIste}
-        onOlcumKaydet={olcumKaydetIste}
-        olcumModu={olcumModu}
-        olcumNoktalari={olcumNoktalari}
-        olcumMesafeM={olcumMesafeM}
-        onOlcumIptal={olcumIptal}
-        onOlcumGeriAl={olcumGeriAl}
-        onOlcumBitir={olcumBitir}
-        onOlcumTemizle={olcumTemizle}
-      />
-      )}
+      {aracPaneli}
 
       {/* Govde: tam ekran harita + uzerine binen kenar cubugu ve yuzen paneller.
           Cubuk akisin disindadir, yoksa acilip kapanmasi haritayi yeniden
@@ -1349,45 +1509,7 @@ export default function App() {
         />
 
         <div className="relative h-full w-full">
-          <MapView
-          assets={katmanlar.varliklar ? varlikKatmanVeri : undefined}
-          reports={katmanlar.talepler ? talepKatmanVeri : undefined}
-          seciliTalepId={seciliTalepId}
-          onTalepSec={talepSecildi}
-          seciliId={seciliId}
-          onVarlikSec={varlikSecildi}
-          onHaritaTikla={haritaTiklandi}
-          cizimModu={cizimModu}
-          cizimNoktalari={cizimNoktalari}
-          onCizimNokta={cizimNoktaEkle}
-          cizimRengi={cizimRengi}
-          tamamlananAlanlar={tamamlananAlanlar}
-          olcumModu={olcumModu}
-          olcumNoktalari={olcumNoktalari}
-          onOlcumNokta={olcumNoktaEkle}
-          aktifStilId={aktifStilId}
-          ucusHedefi={ucusHedefi}
-          onGorunumDegisti={setHaritaGorunumu}
-          onHaritaHazir={setHarita}
-          // Popup'lardaki tek dugme: duzenleme, atama, onay/ret, reddi geri
-          // alma ve sekil duzenleme acilan detay modallerinin isidir.
-          onVarlikDetay={() => setDetayAsset(seciliVarlik)}
-          onTalepDetay={() => setDetayRapor(seciliRapor)}
-          ekipler={katmanlar.ekipler ? haritaEkipleri : undefined}
-          ekipDepartmanlari={ekipDepartmanlari}
-          onEkipGorevSec={personel ? ekipGoreviAcildi : undefined}
-          bolgeler={haritaBolgeleri}
-          seciliBolgeId={seciliBolgeId}
-          onBolgeSec={bolgeSecildi}
-          onBolgeDetay={(id) =>
-            setDetayBolge(bolgeSorgu.data?.find((b) => b.id === id) ?? null)
-          }
-          // Ad haritadaki etiket uzerinden de degistirilebilir (yalniz personel).
-          onBolgeAdDegis={personel ? bolgeAdiDegistir : undefined}
-          sekilDuzenleme={sekilDuzenleme}
-          onSekilDegis={sekilDegisti}
-          bolgeTiklanabilir={!(panelAcik && sekme === "ekle")}
-        />
+          {haritaBlogu}
 
         {/* Sag-ustteki lejant + katman filtresi. */}
         <KatmanKontrolu
@@ -1440,91 +1562,282 @@ export default function App() {
               </button>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col">
-              {sekme === "liste" && (
-                <AssetList
-                  // Haritayla ayni koleksiyon: liste, sayaclar ve isaretciler
-                  // tek filtre state'inden turer.
-                  data={varlikKatmanVeri}
-                  isLoading={sorgu.isLoading}
-                  isError={sorgu.isError}
-                  error={sorgu.error as Error | null}
-                  turler={katmanTurleri}
-                  onTurSec={panelTuruSec}
-                  onDepartmanSec={departmanTurleriniSec}
-                  durumlar={katmanVarlikDurumlari}
-                  onDurumSec={panelDurumuSec}
-                  seciliId={seciliId}
-                  onSec={varlikSecildi}
-                  onDuzenle={setDuzenlenen}
-                  ilceKodu={ilceKodu}
-                  onIlceSec={ilceSec}
-                  mahalleKodu={mahalleKodu}
-                  onMahalleSec={mahalleSec}
-                  idariHatasi={idariHatasi}
-                  ekipler={ekipSorgu.data}
-                  onVarligaGit={varligaGit}
-                />
-              )}
-
-              {sekme === "ekle" && (
-                <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                  <p className="mb-3 border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                    Haritada boş bir noktaya tıklayarak koordinatı otomatik
-                    doldurabilirsin.
-                  </p>
-                  <AssetForm koordinat={koordinat} />
-                </div>
-              )}
-
-              {sekme === "talepler" && (
-                <TalepPaneli
-                  durum={talepDurum}
-                  onDurumChange={setTalepDurum}
-                  onVarlikOlustu={() => {
-                    // Onay yeni bir varlik olusturup ekibe atar; iki sorgu da
-                    // tazelenmeli.
-                    queryClient.invalidateQueries({ queryKey: ["assets"] });
-                    queryClient.invalidateQueries({ queryKey: ["saha"] });
-                  }}
-                  onTaleplerChange={setTalepler}
-                  seciliRaporId={seciliTalepId}
-                  onRaporSec={talepSecildi}
-                  talepVarlikSorgu={talepVarlikSorgu}
-                  seciliVarlikId={seciliId}
-                  onVarlikSec={varlikSecildi}
-                  ekipler={ekipSorgu.data}
-                  onVarligaGit={varligaGit}
-                  // Lejant/harita ile ayni sinir: secili ilce-mahalle disindaki
-                  // talepler listede de gorunmez.
-                  alandaMi={alandaMi}
-                />
-              )}
-
-              {bolgeSekmesi(sekme) && (
-                <BolgePaneli
-                  tip={BOLGE_SEKMELERI[sekme].tip}
-                  alanda={alandaMi ? bolgeAlanda : null}
-                  ekipler={ekipSorgu.data}
-                  gizliler={gizliBolgeler}
-                  onGorunurlukDegis={bolgeGorunurlukDegis}
-                  onTumunuGoster={bolgeleriGoster}
-                  onTumunuGizle={bolgeleriGizle}
-                  katmanAcik={katmanlar[BOLGE_SEKMELERI[sekme].katman]}
-                  onKatmaniAc={() => katmanDegistir(BOLGE_SEKMELERI[sekme].katman)}
-                  onBolgeyeGit={bolgeyeGit}
-                  onSekilDuzenle={sekilDuzenlemeBaslat}
-                  sekilDuzenlenenId={sekilDuzenleme?.id ?? null}
-                  seciliId={seciliBolgeId}
-                  onDetay={setDetayBolge}
-                />
-              )}
-            </div>
+            {panelGovdesi}
           </div>
         )}
 
         </div>
       </div>
+    </>
+  );
+
+  /** Haritanin sag ustundeki dikey arac yigini: katman sheet'i + cizim
+   *  araclari. Masaustunde bu isler header ve yuzen kartlara dagilmis
+   *  durumda; kucuk ekranda hepsi tek bir sutunda toplanir. */
+  const mobilAracYigini = (
+    <div className="absolute right-3 top-3 z-20 flex flex-col gap-2">
+      <MobilAracDugmesi
+        etiket="Katmanlar ve lejant"
+        aktif={mobilKatman}
+        rozet={Object.values(katmanlar).filter(Boolean).length}
+        onClick={() => {
+          setMobilMenu(false);
+          setMobilKatman(true);
+        }}
+      >
+        <IconLayers className="h-5 w-5" />
+      </MobilAracDugmesi>
+
+      {personel && (
+        <>
+          <MobilAracDugmesi
+            etiket="Alan seç"
+            aktif={cizimModu || tamamlananAlanlar.length > 0}
+            onClick={() => {
+              // Cizim baslarken panel cekilir: kucuk ekranda kullanici
+              // haritaya dokunacak, panel onun yarisini kapatiyor.
+              if (cizimModu) alanSecimiIptal();
+              else {
+                setPanelAcik(false);
+                alanSecimiBaslat();
+              }
+            }}
+          >
+            <IconLasso className="h-5 w-5" />
+          </MobilAracDugmesi>
+
+          <MobilAracDugmesi
+            etiket="Çizgi çiz"
+            aktif={olcumModu || olcumNoktalari.length >= 2}
+            onClick={() => {
+              if (olcumModu) olcumIptal();
+              else {
+                setPanelAcik(false);
+                olcumBaslat();
+              }
+            }}
+          >
+            <IconRuler className="h-5 w-5" />
+          </MobilAracDugmesi>
+        </>
+      )}
+    </div>
+  );
+
+  const mobilKabuk = (
+    <>
+      <header className="z-20 flex h-14 shrink-0 items-center gap-1 border-b border-slate-200 bg-white px-2">
+        {mobilArama ? (
+          /* Arama acikken header'in tamamini alir: dar ekranda hem logo hem
+             kullanilabilir genislikte bir arama alani sigmiyor. */
+          <>
+            <div className="min-w-0 flex-1">
+              <KonumArama
+                gorunenAlan={haritaGorunumu}
+                zorunluAlan={idariSinirKutusu}
+                onSecildi={(konum) => {
+                  setUcusHedefi({
+                    anahtar: crypto.randomUUID(),
+                    tip: "nokta",
+                    merkez: konum,
+                    zoom: 16,
+                  });
+                  setMobilArama(false);
+                }}
+              />
+            </div>
+            <button
+              onClick={() => setMobilArama(false)}
+              aria-label="Aramayı kapat"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-500"
+            >
+              <IconX className="h-5 w-5" />
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => {
+                setMobilKatman(false);
+                setMobilMenu(true);
+              }}
+              aria-label="Menüyü aç"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-500"
+            >
+              <IconMenu className="h-5 w-5" />
+            </button>
+
+            <div className="flex min-w-0 select-none items-center gap-1.5">
+              <LogoAmblem className="h-8 w-8 shrink-0" />
+              <h1 className="truncate text-[15px] font-bold tracking-tight text-slate-900">
+                Green<span className="text-emerald-600">Asset</span>
+              </h1>
+            </div>
+
+            <div className="ml-auto flex shrink-0 items-center gap-0.5">
+              <button
+                onClick={() => setMobilArama(true)}
+                aria-label="Konum ara"
+                className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500"
+              >
+                <IconSearch className="h-5 w-5" />
+              </button>
+              <BildirimZili bildirimler={bildirimler} />
+            </div>
+          </>
+        )}
+      </header>
+
+      {aracPaneli}
+
+      <div className="relative min-h-0 flex-1">
+        <div className="absolute inset-0">{haritaBlogu}</div>
+
+        {mobilAracYigini}
+
+        <AltSekmeCubugu ogeler={kenarAnaOgeler} />
+
+        {/* Aktif sekmenin paneli. Sheet haritayi kapatmaz: kullanici yarim
+            kademede listeyi okurken isaretcileri gormeye devam eder. */}
+        <Sheet
+          acik={panelAcik}
+          baslik={SEKME_TANIMLARI[sekme].etiket}
+          onKapat={() => setPanelAcik(false)}
+          altBosluk={ALT_CUBUK_YUKSEKLIGI}
+          // "Ekle" dahil her sekme YARIM kademede acilir: bu panellerin hepsi
+          // haritayla birlikte kullaniliyor (koordinat icin haritaya dokunmak,
+          // secili satirin isaretcisini gormek). Tam kademe icin tutamak var.
+          baslangic="yarim"
+          baslikSinifi={SEKME_RENK_SINIFLARI[SEKME_TANIMLARI[sekme].renk].aktif}
+          govdeSinifi="flex min-h-0 flex-1 flex-col"
+          ikon={
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/70">
+              {(() => {
+                const Ikon = SEKME_TANIMLARI[sekme].ikon;
+                return (
+                  <Ikon
+                    className={`h-4 w-4 ${SEKME_RENK_SINIFLARI[SEKME_TANIMLARI[sekme].renk].ikonAktif}`}
+                  />
+                );
+              })()}
+            </span>
+          }
+        >
+          {panelGovdesi}
+        </Sheet>
+
+        {/* Lejant + tur/durum filtresi + harita cesidi tek sheet'te: uc ayri
+            yuzen kutu dar ekranda haritanin yarisini kapatiyordu. */}
+        <Sheet
+          acik={mobilKatman}
+          baslik="Katmanlar ve Lejant"
+          onKapat={() => setMobilKatman(false)}
+          altBosluk={ALT_CUBUK_YUKSEKLIGI}
+          ustte
+          ikon={
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+              <IconLayers className="h-4 w-4" />
+            </span>
+          }
+        >
+          <KatmanKontrolu
+            key={sifirlamaNo}
+            gomulu
+            gorunur={katmanlar}
+            onDegistir={katmanDegistir}
+            sayilar={katmanSayilari}
+            altlar={{
+              varliklar: varlikAltFiltre,
+              talepler: talepAltFiltre,
+              bolgeler: bolgeAltFiltreleri.bolgeler,
+              guzergahlar: bolgeAltFiltreleri.guzergahlar,
+              ekipler: ekipAltFiltre,
+            }}
+            bolge={{ ilceKodu, onIlceSec: ilceSec, mahalleKodu, onMahalleSec: mahalleSec }}
+          />
+          <div className="border-t border-slate-200 p-3">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Harita çeşidi
+            </p>
+            <MapStilKontrolu
+              gomulu
+              aktifId={aktifStilId}
+              onSec={setAktifStilId}
+              harita={harita}
+            />
+          </div>
+        </Sheet>
+
+        {/* Yonetim ekranlari + kullanici + cikis. Bunlar harita gerektirmedigi
+            icin alt sekme cubuguna girmez: gezinmenin ana ekseni haritayla
+            calisan islerdir. */}
+        <Sheet
+          acik={mobilMenu}
+          baslik="Menü"
+          onKapat={() => setMobilMenu(false)}
+          altBosluk={ALT_CUBUK_YUKSEKLIGI}
+          ustte
+          ikon={
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+              <IconMenu className="h-4 w-4" />
+            </span>
+          }
+        >
+          <div className="p-3">
+            <div className="mb-3 rounded-xl bg-slate-50 p-3">
+              <p className="text-sm font-medium text-slate-800">
+                {user?.full_name || user?.email}
+              </p>
+              {user && (
+                <p className="text-xs text-slate-500">
+                  {USER_ROLE_LABELS[user.role]}
+                </p>
+              )}
+              <DepartmanEtiketi kod={user?.departman} className="mt-1" />
+            </div>
+
+            {kenarYonetimOgeleri.length > 0 && (
+              <>
+                <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  Yönetim
+                </p>
+                <div className="mb-3 space-y-0.5">
+                  {kenarYonetimOgeleri.map((oge) => (
+                    <MobilMenuSatiri
+                      key={oge.id}
+                      oge={oge}
+                      onSecildi={() => setMobilMenu(false)}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div className="space-y-0.5 border-t border-slate-100 pt-2">
+              {kenarAltOgeler.map((oge) => (
+                <MobilMenuSatiri
+                  key={oge.id}
+                  oge={oge}
+                  onSecildi={() => setMobilMenu(false)}
+                />
+              ))}
+              <button
+                onClick={cikisYap}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-red-600 transition hover:bg-red-50"
+              >
+                <IconLogout className="h-5 w-5 shrink-0" />
+                Çıkış Yap
+              </button>
+            </div>
+          </div>
+        </Sheet>
+      </div>
+    </>
+  );
+
+  return (
+    <div className="ekran-yuksekligi flex w-screen flex-col overflow-hidden bg-slate-100">
+      {mobil ? mobilKabuk : masaustuKabuk}
 
       {/* Varlik detayi: harita popup'indaki "Detayları Gör" ile listedeki
           "Detay" ayni modali acar. */}
@@ -1708,3 +2021,74 @@ const SEKME_RENK_SINIFLARI: Record<
     ikonPasif: "text-slate-400",
   },
 };
+
+/** Mobilde haritanin sag ustundeki yuvarlak arac dugmesi. Dokunmatik hedef
+ *  44px'in uzerinde tutulur; masaustundeki kucuk ikon dugmeleri parmakla
+ *  tutturulamiyordu. */
+function MobilAracDugmesi({
+  etiket,
+  aktif,
+  rozet,
+  onClick,
+  children,
+}: {
+  etiket: string;
+  aktif?: boolean;
+  rozet?: number;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={etiket}
+      aria-pressed={aktif}
+      className={`relative flex h-11 w-11 items-center justify-center rounded-xl border shadow-lg backdrop-blur-md transition ${
+        aktif
+          ? "border-emerald-600 bg-emerald-600 text-white"
+          : "border-slate-200/80 bg-white/90 text-slate-600"
+      }`}
+    >
+      {children}
+      {rozet != null && rozet > 0 && (
+        <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-600 px-1 text-[10px] font-bold text-white ring-2 ring-white">
+          {rozet}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** Mobil menu sheet'indeki tek satir. Kenar cubugunun ogesini (`KenarOgesi`)
+ *  oldugu gibi alir - mobil ayri bir menu tanimi tasimaz. */
+function MobilMenuSatiri({
+  oge,
+  onSecildi,
+}: {
+  oge: KenarOgesi;
+  onSecildi: () => void;
+}) {
+  const { etiket, ikon: Ikon, onClick, aktif, rozet } = oge;
+  return (
+    <button
+      onClick={() => {
+        onClick();
+        onSecildi();
+      }}
+      aria-pressed={aktif}
+      className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition ${
+        aktif ? "bg-emerald-50 text-emerald-700" : "text-slate-700 hover:bg-slate-100"
+      }`}
+    >
+      <Ikon
+        className={`h-5 w-5 shrink-0 ${aktif ? "text-emerald-600" : "text-slate-400"}`}
+      />
+      <span className="flex-1 truncate text-left">{etiket}</span>
+      {rozet != null && rozet > 0 && (
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-xs font-semibold text-amber-700">
+          {rozet > 99 ? "99+" : rozet}
+        </span>
+      )}
+    </button>
+  );
+}

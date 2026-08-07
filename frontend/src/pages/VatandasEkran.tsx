@@ -11,8 +11,11 @@ import {
   IconLogout,
   IconMenu,
   IconPin,
+  IconPlus,
   IconTree,
 } from "../components/icons";
+import Sheet from "../components/mobil/Sheet";
+import { useMobil } from "../hooks/useMobil";
 import TipSecenekleri from "../components/TipSecenekleri";
 import {
   useDepartmanlar,
@@ -53,6 +56,7 @@ export default function VatandasEkran() {
   const { user, cikisYap } = useAuth();
   const { data: departmanlar } = useDepartmanlar();
   const { data: esleme } = useTurDepartmanEslemesi();
+  const mobil = useMobil();
 
   const [ad, setAd] = useState("");
   // Bilincli olarak BOS baslar: 13 tur arasinda sessiz bir varsayilan (eskiden
@@ -93,6 +97,17 @@ export default function VatandasEkran() {
   );
   const [kaldirilan, setKaldirilan] = useState<string | null>(null);
   const [panelAcik, setPanelAcik] = useState(true);
+
+  // --- Yalnizca mobil kabuk ---
+  // Masaustunde form ve liste tek bir yan panelde alt alta durur; mobilde
+  // ikisi ayri sheet'tir, cunku ekranin tamami bir tanesine bile zor yetiyor.
+  const [formAcik, setFormAcik] = useState(false);
+  const [listeSheetAcik, setListeSheetAcik] = useState(false);
+  // Konum isaretleme kipi: form sheet'i kapanir, harita tam ekran olur ve
+  // altta yalnizca isaretlemeye ait kontroller kalir. Mobilde form ile
+  // haritanin ayni anda kullanilabilir olmasi mumkun degil - kullanici
+  // haritaya dokunacaksa panelin cekilmesi gerekiyor.
+  const [konumKipi, setKonumKipi] = useState(false);
 
   const talepleriYukle = () => {
     myReports()
@@ -159,6 +174,20 @@ export default function VatandasEkran() {
     setNoktalar([]);
     setCizimTamam(false);
     setKonumHatasi(null);
+  };
+
+  /** Mobilde formu cekip haritayi tam ekrana alir. Cizim kipinde daha once
+   *  "Tamamla" denmisse yeniden acilir: kullanici duzeltmeye geldi demektir. */
+  const konumKipiniAc = () => {
+    setFormAcik(false);
+    setKonumHatasi(null);
+    if (sekil !== "Point") setCizimTamam(false);
+    setKonumKipi(true);
+  };
+
+  const konumKipiniKapat = () => {
+    setKonumKipi(false);
+    setFormAcik(true);
   };
 
   const konumumuKullan = () => {
@@ -253,6 +282,12 @@ export default function VatandasEkran() {
       formuSifirla();
       setBasari(true);
       talepleriYukle();
+      // Mobilde form bir sheet: gonderim bitince kapanip yerini talep
+      // listesine birakir - kullanicinin bir sonraki sorusu "gitti mi" olur.
+      if (mobil) {
+        setFormAcik(false);
+        setListeSheetAcik(true);
+      }
     } catch (err) {
       setHata((err as Error).message);
     } finally {
@@ -272,64 +307,19 @@ export default function VatandasEkran() {
     }
   };
 
-  return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100">
-      {/* Ust bar */}
-      <header className="z-20 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setPanelAcik((v) => !v)}
-            aria-label="Talep panelini aç/kapat"
-            aria-pressed={panelAcik}
-            title="Talep paneli"
-            className="flex h-9 w-9 items-center justify-center text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-          >
-            <IconMenu className="h-5 w-5" />
-          </button>
+  /* --- Iki kabugun paylastigi parcalar ---
+     JSX burada bir kez kurulur, asagida ya masaustu yan paneline ya da mobil
+     sheet'ine yerlestirilir. Bilesenlere bolup ~15 state degerini prop olarak
+     gecirmek yerine bu yol secildi: masaustu isaretlemesi aynen korunuyor ve
+     iki kabuk arasinda kopyalanan tek satir yok. */
 
-          <div className="flex h-8 w-8 items-center justify-center border border-emerald-700 bg-emerald-600">
-            <IconTree className="h-4 w-4 text-white" />
-          </div>
-          <div className="leading-tight">
-            <h1 className="text-sm font-semibold tracking-tight text-slate-900">
-              GreenAsset · Talep
-            </h1>
-            <p className="text-[11px] text-slate-500">Vatandaş Bildirim Ekranı</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-500">
-            {user?.full_name || user?.email}
-          </span>
-          <button
-            onClick={cikisYap}
-            className="flex items-center gap-1.5 border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            <IconLogout className="h-3.5 w-3.5" />
-            Çıkış
-          </button>
-        </div>
-      </header>
-
-      {/* Panel haritanin uzerine biner: akista olsaydi acilip kapanmasi
-          haritayi yeniden boyutlandirir ve goruntu titrerdi. */}
-      <div className="relative min-h-0 flex-1">
-        {/* Sol: form + taleplerim */}
-        <aside
-          className={`absolute inset-y-0 left-0 z-30 flex flex-col overflow-y-auto overflow-x-hidden border-r bg-white transition-[width] duration-200 ease-out ${
-            panelAcik
-              ? "w-[380px] border-slate-300 shadow-lg"
-              : "w-0 border-transparent"
-          }`}
-        >
-         <div className="flex min-h-full w-[380px] shrink-0 flex-col">
+  const formIcerigi = (
           <form
             onSubmit={gonder}
             className="space-y-4 border-b border-slate-200 p-4"
             noValidate
           >
-            <div>
+            <div className={mobil ? "hidden" : undefined}>
               <h2 className="text-sm font-semibold text-slate-900">Yeni Talep</h2>
               <p className="text-xs text-slate-500">
                 Bakıma muhtaç gördüğünüz bir şeyi bildirin. Onaylandıktan sonra
@@ -477,9 +467,23 @@ export default function VatandasEkran() {
 
               {sekil === "Point" ? (
                 <>
-                  <p className="mt-1.5 text-xs text-slate-400">
-                    veya sağdaki haritaya tıklayarak işaretleyin.
-                  </p>
+                  {/* Mobilde harita panelin ALTINDA kaldigi icin "isaretle"
+                      bir ipucu degil bir dugme olmali: panel cekilip harita
+                      tam ekrana gecer (konum kipi). */}
+                  {mobil ? (
+                    <button
+                      type="button"
+                      onClick={konumKipiniAc}
+                      className="mt-2 flex w-full items-center justify-center gap-2 border border-slate-300 bg-white py-2.5 text-sm font-medium text-slate-700"
+                    >
+                      <IconPin className="h-4 w-4 text-slate-400" />
+                      Haritadan İşaretle
+                    </button>
+                  ) : (
+                    <p className="mt-1.5 text-xs text-slate-400">
+                      veya sağdaki haritaya tıklayarak işaretleyin.
+                    </p>
+                  )}
                   {konum && (
                     <p className="mt-1 font-mono text-xs text-slate-600">
                       Seçilen: {konum[1].toFixed(5)}, {konum[0].toFixed(5)}
@@ -492,14 +496,29 @@ export default function VatandasEkran() {
                       konsolundaki `CizimPaneli` ile ayni yer): kullanicinin
                       gozu cizerken haritada, dugmeler de orada olmali. Burada
                       yalnizca durum ozeti kalir. */}
-                  <p className="mt-1.5 text-xs text-slate-400">
-                    Haritaya tıkladıkça
-                    {sekil === "LineString"
-                      ? " hat uzar"
-                      : " alanın köşeleri eklenir"}
-                    . En az {EN_AZ_NOKTA[sekil]} nokta gerekir; bitince
-                    haritanın altındaki “Tamamla” düğmesine basın.
-                  </p>
+                  {mobil ? (
+                    <button
+                      type="button"
+                      onClick={konumKipiniAc}
+                      className="mt-2 flex w-full items-center justify-center gap-2 border border-slate-300 bg-white py-2.5 text-sm font-medium text-slate-700"
+                    >
+                      <IconPin className="h-4 w-4 text-slate-400" />
+                      {noktalar.length
+                        ? "Çizimi Sürdür"
+                        : sekil === "LineString"
+                          ? "Haritada Hat Çiz"
+                          : "Haritada Alan Çiz"}
+                    </button>
+                  ) : (
+                    <p className="mt-1.5 text-xs text-slate-400">
+                      Haritaya tıkladıkça
+                      {sekil === "LineString"
+                        ? " hat uzar"
+                        : " alanın köşeleri eklenir"}
+                      . En az {EN_AZ_NOKTA[sekil]} nokta gerekir; bitince
+                      haritanın altındaki “Tamamla” düğmesine basın.
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-slate-600">
                     {noktalar.length} nokta
                     {olcu && (
@@ -527,19 +546,336 @@ export default function VatandasEkran() {
             )}
             {basari && (
               <p className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                Talebiniz alındı. İlgili müdürlük onayladığında aşağıdaki
-                listeden durumunu takip edebilirsiniz.
+                Talebiniz alındı. İlgili müdürlük onayladığında
+                {mobil ? " “Taleplerim”" : " aşağıdaki listeden"} durumunu takip
+                edebilirsiniz.
               </p>
             )}
 
             <button
               type="submit"
               disabled={gonderiliyor}
-              className="w-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              className={`w-full bg-emerald-600 px-4 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400 ${
+                mobil ? "py-3" : "py-2"
+              }`}
             >
               {gonderiliyor ? "Gönderiliyor…" : "Talebi Gönder"}
             </button>
           </form>
+  );
+
+  /** Talep listesinin kendisi; masaustunde katlanabilir basligin altinda,
+   *  mobilde kendi sheet'inin govdesinde durur. */
+  const talepListesi =
+    taleplerim.length === 0 ? (
+      <p className="mt-2 text-xs text-slate-400">Henüz talep göndermediniz.</p>
+    ) : (
+      <ul className="mt-2 space-y-2">
+        {taleplerim.map((t) => (
+          <TalepKarti
+            key={t.properties.id}
+            talep={t}
+            kaldiriliyor={kaldirilan === t.properties.id}
+            onKaldir={() => listedenKaldir(t.properties.id)}
+          />
+        ))}
+      </ul>
+    );
+
+  /** Cizim araci: masaustunde ekranin alt-ortasinda serbest durur, mobilde
+   *  konum kipinin alt seridine gomulur. `gomulu` yalnizca kabugu degistirir,
+   *  icerideki kontroller iki yerde de aynidir. */
+  const cizimKontrolu = (gomulu: boolean) => {
+    const govde = (
+      <>
+        <div className="flex items-center gap-2">
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-full"
+            style={{ background: cizimRengi }}
+          />
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+            {sekil === "LineString" ? "Hat Çizimi" : "Alan Çizimi"}
+          </span>
+          <span className="ml-auto text-xs text-slate-600">
+            {noktalar.length} nokta
+            {olcu && (
+              <span className="ml-1.5 font-medium text-slate-800">· {olcu}</span>
+            )}
+          </span>
+        </div>
+
+        <p className="mt-1.5 text-xs text-slate-500">
+          {cizimTamam
+            ? "Çizim tamamlandı. Değiştirmek isterseniz “Düzenle” ile köşe eklemeye devam edebilirsiniz."
+            : `Haritaya ${gomulu ? "dokunarak" : "tıklayarak"} köşe ekleyin (en az ${EN_AZ_NOKTA[sekil]}).`}
+        </p>
+
+        <div className="mt-2.5 flex gap-2">
+          {cizimTamam ? (
+            <button
+              type="button"
+              onClick={() => setCizimTamam(false)}
+              className={`flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 ${
+                gomulu ? "py-2.5" : "py-1.5"
+              }`}
+            >
+              Düzenle
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setNoktalar([])}
+                disabled={!noktalar.length}
+                className={`flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  gomulu ? "py-2.5" : "py-1.5"
+                }`}
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={() => setNoktalar((n) => n.slice(0, -1))}
+                disabled={!noktalar.length}
+                className={`flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  gomulu ? "py-2.5" : "py-1.5"
+                }`}
+              >
+                Geri al
+              </button>
+              <button
+                type="button"
+                onClick={() => setCizimTamam(true)}
+                disabled={!cizimYeterli}
+                className={`flex-1 rounded-lg bg-emerald-600 px-3 text-xs font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 ${
+                  gomulu ? "py-2.5" : "py-1.5"
+                }`}
+              >
+                Tamamla
+              </button>
+            </>
+          )}
+        </div>
+      </>
+    );
+
+    if (gomulu) return govde;
+    return (
+      <div className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4">
+        <div className="pointer-events-auto w-full max-w-sm rounded-xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur-sm">
+          {govde}
+        </div>
+      </div>
+    );
+  };
+
+  const harita = (
+    <KonumSecMap secili={konum} onSec={setKonum} cizim={cizim} ucus={ucus} />
+  );
+
+  // --- Mobil kabuk ---
+  if (mobil) {
+    return (
+      <div className="ekran-yuksekligi flex w-screen flex-col overflow-hidden bg-slate-100">
+        <header className="z-20 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-emerald-700 bg-emerald-600">
+              <IconTree className="h-4 w-4 text-white" />
+            </div>
+            <div className="min-w-0 leading-tight">
+              <h1 className="truncate text-sm font-semibold tracking-tight text-slate-900">
+                GreenAsset · Talep
+              </h1>
+              <p className="truncate text-[11px] text-slate-500">
+                {user?.full_name || user?.email}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={cikisYap}
+            aria-label="Çıkış yap"
+            className="flex h-10 w-10 shrink-0 items-center justify-center border border-slate-300 bg-white text-slate-600"
+          >
+            <IconLogout className="h-4 w-4" />
+          </button>
+        </header>
+
+        <div className="relative min-h-0 flex-1">
+          <div className="absolute inset-0">{harita}</div>
+
+          {konumKipi ? (
+            /* Konum isaretleme kipi: harita tam ekran, altta yalnizca
+               isaretlemeye ait kontroller. Form bu sirada kapalidir -
+               kucuk ekranda ikisi ayni anda kullanilamaz. */
+            <div className="guvenli-alt pointer-events-none absolute inset-x-0 bottom-0 z-40 px-3 pb-3">
+              <div className="pointer-events-auto rounded-xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur-sm">
+                {sekil === "Point" ? (
+                  <>
+                    <p className="text-xs text-slate-600">
+                      {konum ? (
+                        <span className="font-mono">
+                          Seçilen: {konum[1].toFixed(5)}, {konum[0].toFixed(5)}
+                        </span>
+                      ) : (
+                        "Haritaya dokunarak konumu işaretleyin."
+                      )}
+                    </p>
+                    <div className="mt-2.5 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={konumumuKullan}
+                        disabled={konumAraniyor}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-2.5 text-xs font-medium text-emerald-700 disabled:opacity-60"
+                      >
+                        <IconPin className="h-3.5 w-3.5" />
+                        {konumAraniyor ? "Alınıyor…" : "Konumum"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={konumKipiniKapat}
+                        disabled={!konum}
+                        className="flex-1 rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-medium text-white disabled:bg-slate-300"
+                      >
+                        Bitti
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {cizimKontrolu(true)}
+                    <button
+                      type="button"
+                      onClick={konumKipiniKapat}
+                      className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-medium text-slate-700"
+                    >
+                      Forma Dön
+                    </button>
+                  </>
+                )}
+                {konumHatasi && (
+                  <p className="mt-2 text-xs text-red-600">{konumHatasi}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Yeni talep: ekranin sag altinda, basparmak menzilinde. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setFormAcik(true);
+                  setListeSheetAcik(false);
+                }}
+                aria-label="Yeni talep oluştur"
+                className="absolute bottom-20 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-900/30 transition active:scale-95"
+              >
+                <IconPlus className="h-6 w-6" />
+              </button>
+
+              {/* Taleplerim seridi: vatandasin tekrar gelme sebebi
+                  gonderdigi talebin durumu, o yuzden acilista gorunur. */}
+              <button
+                type="button"
+                onClick={() => setListeSheetAcik(true)}
+                aria-label="Taleplerimi aç"
+                className="guvenli-alt absolute inset-x-0 bottom-0 z-30 flex items-center gap-2 border-t border-slate-200 bg-white px-4 py-3 text-left"
+              >
+                <span className="text-sm font-semibold text-slate-800">
+                  Taleplerim
+                </span>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                  {taleplerim.length}
+                </span>
+                <IconChevronRight className="ml-auto h-4 w-4 -rotate-90 text-slate-400" />
+              </button>
+            </>
+          )}
+
+          <Sheet
+            acik={formAcik}
+            baslik="Yeni Talep"
+            baslangic="tam"
+            onKapat={() => setFormAcik(false)}
+            ikon={
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50">
+                <IconPlus className="h-4 w-4 text-emerald-600" />
+              </span>
+            }
+          >
+            {formIcerigi}
+          </Sheet>
+
+          <Sheet
+            acik={listeSheetAcik}
+            baslik={`Taleplerim (${taleplerim.length})`}
+            onKapat={() => setListeSheetAcik(false)}
+            ikon={
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100">
+                <IconTree className="h-4 w-4 text-slate-500" />
+              </span>
+            }
+          >
+            <div className="px-4 pb-6">{talepListesi}</div>
+          </Sheet>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Masaustu kabugu (degismedi) ---
+  return (
+    <div className="ekran-yuksekligi flex w-screen flex-col overflow-hidden bg-slate-100">
+      {/* Ust bar */}
+      <header className="z-20 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setPanelAcik((v) => !v)}
+            aria-label="Talep panelini aç/kapat"
+            aria-pressed={panelAcik}
+            title="Talep paneli"
+            className="flex h-9 w-9 items-center justify-center text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <IconMenu className="h-5 w-5" />
+          </button>
+
+          <div className="flex h-8 w-8 items-center justify-center border border-emerald-700 bg-emerald-600">
+            <IconTree className="h-4 w-4 text-white" />
+          </div>
+          <div className="leading-tight">
+            <h1 className="text-sm font-semibold tracking-tight text-slate-900">
+              GreenAsset · Talep
+            </h1>
+            <p className="text-[11px] text-slate-500">Vatandaş Bildirim Ekranı</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500">
+            {user?.full_name || user?.email}
+          </span>
+          <button
+            onClick={cikisYap}
+            className="flex items-center gap-1.5 border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            <IconLogout className="h-3.5 w-3.5" />
+            Çıkış
+          </button>
+        </div>
+      </header>
+
+      {/* Panel haritanin uzerine biner: akista olsaydi acilip kapanmasi
+          haritayi yeniden boyutlandirir ve goruntu titrerdi. */}
+      <div className="relative min-h-0 flex-1">
+        {/* Sol: form + taleplerim */}
+        <aside
+          className={`absolute inset-y-0 left-0 z-30 flex flex-col overflow-y-auto overflow-x-hidden border-r bg-white transition-[width] duration-200 ease-out ${
+            panelAcik
+              ? "w-[380px] border-slate-300 shadow-lg"
+              : "w-0 border-transparent"
+          }`}
+        >
+         <div className="flex min-h-full w-[380px] shrink-0 flex-col">
+          {formIcerigi}
 
           {/* Taleplerim - katlanabilir */}
           <div className="p-4">
@@ -562,108 +898,20 @@ export default function VatandasEkran() {
               />
             </button>
 
-            {listeAcik &&
-              (taleplerim.length === 0 ? (
-                <p className="mt-2 text-xs text-slate-400">
-                  Henüz talep göndermediniz.
-                </p>
-              ) : (
-                <ul className="mt-2 space-y-2">
-                  {taleplerim.map((t) => (
-                    <TalepKarti
-                      key={t.properties.id}
-                      talep={t}
-                      kaldiriliyor={kaldirilan === t.properties.id}
-                      onKaldir={() => listedenKaldir(t.properties.id)}
-                    />
-                  ))}
-                </ul>
-              ))}
+            {listeAcik && talepListesi}
           </div>
          </div>
         </aside>
 
         {/* Harita: konum secme / cizim */}
         <div className="absolute inset-0">
-          <KonumSecMap
-            secili={konum}
-            onSec={setKonum}
-            cizim={cizim}
-            ucus={ucus}
-          />
+          {harita}
 
           {/* Cizim araci: personel konsolundaki `CizimPaneli` ile ayni yerde
               (ekranin alt-ortasi; sol panel acilip kapaninca yeri degismez)
               ve ayni islerde - kose sayisi + anlik olcu, geri al/iptal ve
               cizimi bitiren "Tamamla". */}
-          {sekil !== "Point" && (
-            <div className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4">
-              <div className="pointer-events-auto w-full max-w-sm rounded-xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur-sm">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ background: cizimRengi }}
-                  />
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-700">
-                    {sekil === "LineString" ? "Hat Çizimi" : "Alan Çizimi"}
-                  </span>
-                  <span className="ml-auto text-xs text-slate-600">
-                    {noktalar.length} nokta
-                    {olcu && (
-                      <span className="ml-1.5 font-medium text-slate-800">
-                        · {olcu}
-                      </span>
-                    )}
-                  </span>
-                </div>
-
-                <p className="mt-1.5 text-xs text-slate-500">
-                  {cizimTamam
-                    ? "Çizim tamamlandı. Değiştirmek isterseniz “Düzenle” ile köşe eklemeye devam edebilirsiniz."
-                    : `Haritaya tıklayarak köşe ekleyin (en az ${EN_AZ_NOKTA[sekil]}).`}
-                </p>
-
-                <div className="mt-2.5 flex gap-2">
-                  {cizimTamam ? (
-                    <button
-                      type="button"
-                      onClick={() => setCizimTamam(false)}
-                      className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-                    >
-                      Düzenle
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setNoktalar([])}
-                        disabled={!noktalar.length}
-                        className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        İptal
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNoktalar((n) => n.slice(0, -1))}
-                        disabled={!noktalar.length}
-                        className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Geri al
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCizimTamam(true)}
-                        disabled={!cizimYeterli}
-                        className="flex-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                      >
-                        Tamamla
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          {sekil !== "Point" && cizimKontrolu(false)}
         </div>
       </div>
     </div>

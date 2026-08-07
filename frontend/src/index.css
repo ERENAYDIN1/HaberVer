@@ -2,6 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
+/* --- Mobil temeller ---
+   Yalnizca mobil kabugun (bkz. hooks/useMobil.ts) ihtiyac duydugu, Tailwind
+   siniflariyla yazilamayan kurallar. Masaustu duzeni bunlardan etkilenmez:
+   `dvh` masaustunde `vh` ile ayni degeri verir ve safe-area degerleri 0'dir. */
+
+/* Adres cubugu gizlenip acildikca `100vh` degismedigi icin sayfa dibi
+   ekranin altina tasiyor; `dvh` gercek gorunur yuksekligi verir. */
+.ekran-yuksekligi {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Alt sekme cubugu / sheet gibi ekranin dibine oturan yuzeyler, centikli
+   telefonlarin ev cubugunun altinda kalmasin. */
+.guvenli-alt {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.guvenli-alt-bosluk {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Mobilde form alanina odaklanildiginda iOS'un sayfayi yakinlastirmasini
+   engelleyen tek guvenilir yol, yazi boyutunu 16px'te tutmaktir. Uygulamanin
+   geri kalani daha kucuk yazilar kullaniyor; kural yalnizca girdilere ve
+   yalnizca dokunmatik genislikte uygulanir. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Mobilde harita kontrolleri (zoom/pusula/olcek) sheet ve alt cubukla yer
+   kavgasi ediyor; dokunmatikte zaten cimdik hareketi kullaniliyor. */
+@media (max-width: 767px) {
+  .greenasset-harita .maplibregl-ctrl-bottom-right,
+  .greenasset-harita .maplibregl-ctrl-top-right {
+    display: none;
+  }
+  .greenasset-harita .maplibregl-ctrl-bottom-left {
+    left: 0;
+  }
+}
+
 /* Sol-alttaki olcek kontrolu: harita kapsayicisi artik sol kenar cubugunun
    ALTINA kadar uzaniyor (cubuk haritanin uzerine biniyor, bkz. Kenarcubugu),
    bu yuzden olcek cubugun arkasinda kalmasin diye `--kenar` kadar saga alinir.
