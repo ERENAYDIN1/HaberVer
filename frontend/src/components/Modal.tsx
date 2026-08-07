@@ -33,15 +33,13 @@ export default function Modal({
   if (!acik) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
-      onClick={onKapat}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      {/* Arka plana tiklamak kapatmaz: modallerin cogu kaydedilmemis bir form ya da
+       *  taslak tasiyor, yanlislikla disari tiklamak onlari yok ediyordu. */}
       <div
         className={`max-h-[90vh] w-full overflow-y-auto border border-slate-400 bg-white ${
           genis ? "max-w-2xl" : "max-w-lg"
         }`}
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-300 bg-slate-50 px-5 py-3">
           <h3 className="text-sm font-semibold text-slate-800">{baslik}</h3>
