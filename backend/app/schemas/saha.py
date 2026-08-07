@@ -125,6 +125,39 @@ class GorevOzet(BaseModel):
         )
 
 
+class BolgeGorevOzet(BaseModel):
+    """Bir ekibin uzerindeki gorev bolgesi / guzergah. Tekil bakim gorevleriyle
+    AYNI kotayi paylasir (bkz. MAKS_AKTIF_GOREV), bu yuzden panoda ve ekip
+    popup'inda onlarla birlikte listelenir. Ayri bir sema olmasinin tek sebebi
+    tasidigi alanlarin farkli olmasi (varlik degil bolge kaydi)."""
+
+    bolge_id: uuid.UUID
+    ad: str
+    tip: Literal["alan", "cizgi"]
+    renk: str
+    otomatik: bool
+    assigned_at: datetime | None = None
+    # Kaydin temsil noktasi (haritada gosterme/mesafe icin).
+    longitude: float | None = None
+    latitude: float | None = None
+    yaka: str | None = None
+
+    @classmethod
+    def from_row(cls, row) -> "BolgeGorevOzet":
+        bolge, longitude, latitude, yaka = row
+        return cls(
+            bolge_id=bolge.id,
+            ad=bolge.ad,
+            tip=bolge.tip.value,
+            renk=bolge.renk,
+            otomatik=bolge.assigned_by is None,
+            assigned_at=bolge.assigned_at,
+            longitude=longitude,
+            latitude=latitude,
+            yaka=yaka,
+        )
+
+
 class TamamlananOzet(BaseModel):
     """Bir ekibin yakinda tamamladigi (tamir ettigi) is. Haritadaki ekip
     popup'indaki kisa "Son Tamir Edilenler" listesi icin; aktif gorev ozetinden
@@ -165,6 +198,9 @@ class EkipGorevleri(BaseModel):
     yaka: str | None = None
     departman: str | None = None
     gorevler: list[GorevOzet]
+    # Ekibin uzerindeki bolge/guzergah gorevleri. `aktif_gorev` sayaci ikisini
+    # birden kapsar (tek kota), pano da ikisini birlikte gosterir.
+    bolge_gorevleri: list[BolgeGorevOzet] = []
     # Ekibin en son tamamladigi birkac is (bkz. crud.SON_TAMAMLANAN_SAYISI).
     son_tamamlananlar: list[TamamlananOzet] = []
 

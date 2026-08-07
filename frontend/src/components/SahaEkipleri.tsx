@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { ekibeAta, ekipGorevleri, gorevGeriAl, havuz as havuzGetir } from "../api/saha";
+import { YEDEK_YOKLAMA_MS } from "../hooks/useCanliGuncelleme";
 import {
   useDepartmanlar,
   useTurDepartmanEslemesi,
@@ -19,12 +20,21 @@ import {
   MAKS_ATAMA_MESAFE_KM,
   YAKA_KISA,
   yakaEtiketi,
+  type BolgeGorevOzet,
   type EkipGorevleri,
   type GorevOzet,
   type HavuzVarlik,
   type Yaka,
 } from "../types/saha";
-import { IconInbox, IconRefresh, IconUsers, IconWarning, tipIkonu } from "./icons";
+import {
+  IconInbox,
+  IconLasso,
+  IconRefresh,
+  IconRoute,
+  IconUsers,
+  IconWarning,
+  tipIkonu,
+} from "./icons";
 
 /** Bir varlik/gorev icin uygulanabilecek islem. */
 type Islem =
@@ -134,11 +144,13 @@ function DepartmanRozet({
   );
 }
 
-/** Ekip secim etiketi: yuk + karsi yaka + BASKA DEPARTMAN uyarisi.
+/** Ekip secim etiketi: dolu kuyruk + karsi yaka + BASKA DEPARTMAN uyarisi.
  *
- *  Elle atama her iki kisittan da muaftir (yetki personeldedir), ama personel
- *  ne yaptigini gormeli: otomatik dagitimin asla yapmayacagi bir atamayi elle
- *  yaptigini bilerek yapsin. */
+ *  Elle atama UC KISITTAN DA muaftir (yetki personeldedir), ama personel ne
+ *  yaptigini gormeli: otomatik dagitimin asla yapmayacagi bir atamayi elle
+ *  yaptigini bilerek yapsin. Bu yuzden dolu ekip `disabled` DEGILDIR -
+ *  engellemek arayuzun backend'in izin verdigi bir isi yasaklamasi olurdu
+ *  (bkz. EkipSecici, ayni karar). */
 function ekipSecenegi(
   e: EkipGorevleri,
   hedefYaka: string | null,
@@ -179,6 +191,53 @@ export interface DepBaglami {
  *  Islem acilirI SATIR ACILINCA gorunur. Eskiden her gorevin altinda kalici
  *  bir <select> duruyordu; uc ekip x uc gorev = dokuz acilir, pano "ne var"
  *  yerine "ne yapabilirim" gibi okunuyordu. Islem nadir, okuma sik. */
+/** Bir ekibin uzerindeki gorev bolgesi / guzergah satiri. Tekil bakim isiyle
+ *  ayni listede durur (ayni kota), ama islemi burada YOK: bolge atamasi
+ *  "Bölgeler"/"Güzergâhlar" panelinden ya da harita uzerinden yapilir - iki
+ *  ayri yerde ayni islemi sunmak, hangisinin gecerli oldugunu belirsizlestirir.
+ *  Rozet "alan"/"güzergâh" der ki yuk cubugundaki sayinin nereden geldigi
+ *  okunabilsin. */
+function BolgeGorevSatiri({ gorev }: { gorev: BolgeGorevOzet }) {
+  const alan = gorev.tip === "alan";
+  return (
+    <li className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+      <div className="flex items-start gap-2.5">
+        <span
+          className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white"
+          style={{ background: gorev.renk }}
+          title={alan ? "Görev bölgesi" : "Güzergâh"}
+        >
+          {alan ? (
+            <IconLasso className="h-3.5 w-3.5" />
+          ) : (
+            <IconRoute className="h-3.5 w-3.5" />
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="break-words text-sm font-medium leading-snug text-slate-800">
+            {gorev.ad}
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="text-slate-500">
+              {alan ? "Görev bölgesi" : "Güzergâh"}
+            </span>
+            <YakaRozet yaka={gorev.yaka} />
+            <span
+              className={`rounded-full px-1.5 py-px font-medium ${
+                gorev.otomatik
+                  ? "bg-slate-100 text-slate-500"
+                  : "bg-indigo-100 text-indigo-600"
+              }`}
+            >
+              {gorev.otomatik ? "otomatik" : "elle"}
+            </span>
+          </p>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 function GorevSatiri({
   gorev,
   digerEkipler,
@@ -247,11 +306,7 @@ function GorevSatiri({
           <option value="">{calisiyor ? "İşleniyor…" : "Taşı / işlem…"}</option>
           <optgroup label="Başka ekibe taşı">
             {digerEkipler.map((e) => (
-              <option
-                key={e.id}
-                value={e.id}
-                disabled={e.aktif_gorev >= MAKS_AKTIF_GOREV}
-              >
+              <option key={e.id} value={e.id}>
                 {ekipSecenegi(e, gorev.yaka, dep.esleme[gorev.type], dep.adlar)}
               </option>
             ))}
@@ -340,7 +395,10 @@ function EkipKarti({
         </span>
       </div>
 
-      {ekip.gorevler.length === 0 ? (
+      {/* Tekil bakim isleri ve bolge/guzergahlar AYNI listede: ucu de ayni
+          kotayi paylasan gorevlerdir, yuk cubugundaki sayi ikisini birden
+          sayiyor - ayri kutularda gostermek o sayiyi acıklanamaz kilardi. */}
+      {ekip.gorevler.length === 0 && (ekip.bolge_gorevleri?.length ?? 0) === 0 ? (
         <p className="px-3 py-3 text-center text-xs text-slate-400">
           Aktif görev yok.
         </p>
@@ -355,6 +413,9 @@ function EkipKarti({
               calisiyor={islenenAsset === g.asset_id}
               dep={dep}
             />
+          ))}
+          {(ekip.bolge_gorevleri ?? []).map((b) => (
+            <BolgeGorevSatiri key={b.bolge_id} gorev={b} />
           ))}
         </ul>
       )}
@@ -470,7 +531,7 @@ function HavuzSatiri({
       >
         <option value="">{calisiyor ? "İşleniyor…" : "Ekibe ata…"}</option>
         {ekipler.map((e) => (
-          <option key={e.id} value={e.id} disabled={e.aktif_gorev >= MAKS_AKTIF_GOREV}>
+          <option key={e.id} value={e.id}>
             {ekipSecenegi(e, varlik.yaka, dep.esleme[varlik.type], dep.adlar)}
           </option>
         ))}
@@ -554,15 +615,17 @@ export default function SahaEkipleri() {
     [esleme, departmanlar]
   );
 
+  // Tazeleme ana yolu canli kanal (SSE, bkz. useCanliGuncelleme); asagidaki
+  // periyot yalnizca kanal olurse devreye giren yedektir.
   const ekipSorgu = useQuery({
     queryKey: ["saha", "ekip-gorevleri"],
     queryFn: ekipGorevleri,
-    refetchInterval: 20000,
+    refetchInterval: YEDEK_YOKLAMA_MS,
   });
   const havuzSorgu = useQuery({
     queryKey: ["saha", "havuz"],
     queryFn: havuzGetir,
-    refetchInterval: 20000,
+    refetchInterval: YEDEK_YOKLAMA_MS,
   });
 
   const islem = useMutation({

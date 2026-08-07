@@ -5,13 +5,15 @@ import uuid
 from datetime import datetime, timezone
 
 from geoalchemy2 import Geography
-from sqlalchemy import cast, func, or_, select
+from sqlalchemy import case, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..models.bolge import Bolge, BolgeTipi
 from ..models.log import LogAction
 from ..models.user import User
 from ..schemas.bolge import BolgeCikti, BolgeGirdi, BolgeGuncelle
+from . import assignment as assignment_crud
+from . import yaka as yaka_crud
 from .geo import cizgi_geojson, halkalar_geojson
 from .log import add_log
 
@@ -35,9 +37,23 @@ def _geometri(tip: BolgeTipi, noktalar: list[list[tuple[float, float]]]):
     )
 
 
+def _temsil_noktasi():
+    """Kaydin tek temsil noktasi: alan -> icinde garanti bir nokta, cizgi ->
+    hattin ortasi. Mesafe/yaka hesabi (otomatik atama) ve arayuzdeki "bu is
+    hangi yakada" rozeti ayni noktayi okur."""
+    return case(
+        (
+            Bolge.tip == BolgeTipi.alan,
+            func.ST_PointOnSurface(Bolge.geom),
+        ),
+        else_=func.ST_LineInterpolatePoint(Bolge.geom, 0.5),
+    )
+
+
 def _select_with_geo():
     """Bolge satirini GeoJSON metni + jeodezik olcusu + atanan ekibin adiyla
-    birlikte secer (tek sorgu, N+1 yok)."""
+    birlikte secer (tek sorgu, N+1 yok). Isin yakasi da burada cozulur: elle
+    atamada "karsi yaka" uyarisi varliklardakiyle ayni bilgiye dayanmali."""
     ekip = User.__table__.alias("ekip")
     return (
         select(
@@ -46,6 +62,7 @@ def _select_with_geo():
             func.ST_Area(cast(Bolge.geom, Geography)).label("alan_m2"),
             func.ST_Length(cast(Bolge.geom, Geography)).label("uzunluk_m"),
             func.coalesce(ekip.c.full_name, ekip.c.email).label("worker_ad"),
+            yaka_crud.nokta_yakasi_ifadesi(_temsil_noktasi()).label("yaka"),
         )
         .outerjoin(ekip, ekip.c.id == Bolge.worker_id)
         .order_by(Bolge.created_at.desc())
@@ -68,9 +85,10 @@ def _noktalar(gj: str, tip: BolgeTipi) -> list[list[tuple[float, float]]]:
 
 
 def _cikti(row) -> BolgeCikti:
-    bolge, gj, alan_m2, uzunluk_m, worker_ad = row
+    bolge, gj, alan_m2, uzunluk_m, worker_ad, yaka = row
     alan = bolge.tip is BolgeTipi.alan
     return BolgeCikti(
+        yaka=yaka,
         id=bolge.id,
         ad=bolge.ad,
         aciklama=bolge.aciklama,
@@ -145,6 +163,10 @@ def create_bolge(db: Session, data: BolgeGirdi, actor: User | None) -> BolgeCikt
         detail="Alan" if data.tip is BolgeTipi.alan else "Çizgi",
         departman=bolge.departman,
     )
+    # Bir bolge de tekil bakim isi gibi bir gorevdir: kaydedilir kaydedilmez
+    # en yakin uygun ekibe gitmeyi dener (mesafe + yaka + mudurluk + kapasite).
+    # Uygun ekip yoksa atanmadan bekler ve sonraki dagitimda yeniden denenir.
+    assignment_crud.bolge_otomatik_ata(db, bolge)
     db.commit()
     return get_bolge(db, bolge.id)
 
@@ -202,9 +224,14 @@ def ata(
     worker: User | None,
     actor: User | None,
 ) -> BolgeCikti | None:
-    """Bolgeyi/guzergahi bir ekibe atar; worker None ise atamayi kaldirir. Bir
-    ekibin ayni anda birden fazla kaydi olabilir (kapasite kisiti yalnizca
-    tekil bakim gorevlerinde vardir, bkz. crud/assignment.py)."""
+    """Bolgeyi/guzergahi bir ekibe atar; worker None ise atamayi kaldirir.
+
+    ELLE atama kapasiteyi de yaka/mudurluk kisitlarini da ASMAYA IZIN VERIR:
+    yetki personeldedir, arayuz yalnizca uyarir (varlik atamasindaki desenle
+    ayni - bkz. routers/saha.py::ata). Kota yalnizca OTOMATIK dagitimda sert
+    kisittir. Atama kaldirilirsa kayit havuza doner ama hemen yeniden
+    dagitilmaz: amac onu beklemeye almaktir (crud/assignment.py::geri_al ile
+    ayni bilincli tercih)."""
     bolge = db.get(Bolge, bolge_id)
     if bolge is None:
         return None
@@ -256,5 +283,9 @@ def tamamla(
         detail="Tamamlandı" if tamamlandi else "Tamamlama geri alındı",
         departman=bolge.departman,
     )
+    # Tamamlanan is kapasite acar: bekleyen varlik/bolge kuyruklari yeniden
+    # dagitilir (tekil gorevlerin tamamlanmasindaki desenle ayni).
+    if tamamlandi:
+        assignment_crud.bekleyen_gorevleri_dagit(db)
     db.commit()
     return get_bolge(db, bolge_id)

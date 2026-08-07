@@ -11,6 +11,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from .. import olaylar
 from ..crud import bolge as crud
 from ..crud import departman as departman_crud
 from ..crud.session import OturumBaglami
@@ -27,6 +28,18 @@ from ..schemas.bolge import (
 from ..security import Kapsam, get_context, kapsam, personel, require_role, saha_dahil
 
 router = APIRouter(prefix="/api/bolgeler", tags=["bolgeler"])
+
+
+def _bolge_degisti() -> None:
+    """Bolge/guzergah degisti; `saha` da yayinlanir cunku kayit ayni kotayi
+    paylasir - atanmasi ekibin yukunu ve panolardaki sayaci degistirir.
+
+    Hedef daraltilmaz: kaydin mudurlugu degistirilmis (admin devri) ya da
+    otomatik dagitimla baska bir mudurlugun kuyrugu etkilenmis olabilir.
+    Sinyal veri tasimadigi icin genis yayin bir sizinti degil; herkes yine
+    KENDI kapsamindaki ucu cagirir."""
+    olaylar.yayinla("bolgeler")
+    olaylar.yayinla("saha")
 
 
 def _kapsamda(mevcut: BolgeCikti, alan: Kapsam) -> bool:
@@ -87,7 +100,11 @@ def bolge_olustur(
         raise HTTPException(
             status_code=422, detail=f"Bilinmeyen departman: {data.departman}"
         )
-    return crud.create_bolge(db, data, actor=user)
+    sonuc = crud.create_bolge(db, data, actor=user)
+    # Yeni kayit dogar dogmaz otomatik atanmis olabilir (create_bolge icinde
+    # bolge_otomatik_ata): ekip ekraninda is o an belirmeli.
+    _bolge_degisti()
+    return sonuc
 
 
 @router.patch("/{bolge_id}", response_model=BolgeCikti)
@@ -132,6 +149,7 @@ def bolge_guncelle(
     sonuc = crud.update_bolge(db, bolge_id, data, actor=user)
     if sonuc is None:
         raise HTTPException(status_code=404, detail="Bolge bulunamadi")
+    _bolge_degisti()
     return sonuc
 
 
@@ -145,6 +163,7 @@ def bolge_sil(
     _getir(db, bolge_id, alan)
     if not crud.delete_bolge(db, bolge_id, actor=user):
         raise HTTPException(status_code=404, detail="Bolge bulunamadi")
+    _bolge_degisti()
 
 
 @router.post("/{bolge_id}/ata", response_model=BolgeCikti)
@@ -175,7 +194,9 @@ def bolge_ata(
                     detail="Bu ekip kaydın müdürlüğüne bağlı değil",
                 )
 
-    return crud.ata(db, bolge_id, worker, actor=user)
+    sonuc = crud.ata(db, bolge_id, worker, actor=user)
+    _bolge_degisti()
+    return sonuc
 
 
 @router.post("/{bolge_id}/tamamla", response_model=BolgeCikti)
@@ -202,4 +223,8 @@ def bolge_tamamla(
     else:
         _getir(db, bolge_id, alan)
 
-    return crud.tamamla(db, bolge_id, data.tamamlandi, actor=user)
+    sonuc = crud.tamamla(db, bolge_id, data.tamamlandi, actor=user)
+    # Tamamlama kapasite acar ve havuzu yeniden dagitir (crud/bolge.py::tamamla):
+    # baska bir ekibe o an yeni is dusmus olabilir.
+    _bolge_degisti()
+    return sonuc

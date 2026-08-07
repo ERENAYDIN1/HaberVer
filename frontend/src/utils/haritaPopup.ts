@@ -304,9 +304,36 @@ export function ekipPopupHtml(
       doluSegment ? vurgu : "#e2e8f0"
     }"></span>`;
   }).join("");
-  // `data-gorev-asset`, MapView'in popup'a bagladigi delege dinleyici
-  // tarafindan yakalanir ve varligin detay modalini acar; bu yuzden <button>.
-  const satirlar = e.gorevler.length
+  // `data-gorev-asset` ve `data-gorev-bolge`, MapView'in popup'a bagladigi
+  // delege dinleyici tarafindan yakalanir ve ilgili detay modalini acar; bu
+  // yuzden ikisi de <button>.
+  // Bolge/guzergah gorevleri tekil islerle AYNI listede: ucu de ayni kotayi
+  // paylasiyor, yuk cubugundaki sayi hepsini sayiyor. Gorev tek bir kavramsa
+  // satirin davranisi da ayrismamali - tekil is nasil kendi detayini aciyorsa
+  // bolge/guzergah da kendi detayini acar (kesik kenarlik gorsel ayrimi tasir).
+  const bolgeSatirlari = (e.bolge_gorevleri ?? [])
+    .map(
+      (b) =>
+        `<button type="button" class="ekip-gorev-satiri" data-gorev-bolge="${kacis(
+          b.bolge_id
+        )}" title="${kacis(b.ad)} - detay için tıklayın" ` +
+        `style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;` +
+        `background:#f8fafc;border:1px dashed #cbd5e1;width:100%;text-align:left;cursor:pointer">` +
+        `<span style="width:6px;height:6px;border-radius:2px;background:${kacis(
+          b.renk
+        )};flex:none"></span>` +
+        `<span style="flex:1;min-width:0;font-size:11px;color:#0f172a;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${kacis(
+          b.ad
+        )}</span>` +
+        `<span style="font-size:10px;color:#94a3b8;flex:none">${
+          b.tip === "alan" ? "bölge" : "güzergâh"
+        }</span>` +
+        `<span style="font-size:11px;color:#cbd5e1;flex:none">›</span>` +
+        `</button>`
+    )
+    .join("");
+
+  const satirlar = e.gorevler.length || bolgeSatirlari
     ? e.gorevler
         .map((g) => {
           const renk = turRengi(g.type);
@@ -327,7 +354,7 @@ export function ekipPopupHtml(
             `</button>`
           );
         })
-        .join("")
+        .join("") + bolgeSatirlari
     : `<div style="padding:6px;border-radius:6px;background:#f8fafc;font-size:11px;color:#94a3b8;text-align:center">Şu an aktif görev yok</div>`;
 
   // Kisa gecmis; satirlar aktif gorevlerle ayni sekilde tiklanabilir.

@@ -55,6 +55,25 @@ if (!URL.createObjectURL) {
   URL.revokeObjectURL = vi.fn();
 }
 
+// jsdom `EventSource` uygulamiyor; canli guncelleme kanali (SSE) onu kuruyor.
+// Testler kanali OLCMEZ - baglanti kurulmasin diye degil, bileseni monte
+// ederken patlamasin diye yerine konur. Kanalin kendi davranisi
+// useCanliGuncelleme testinde sahte bir ornekle ayrica olculur.
+class SahteEventSource {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+  readyState = SahteEventSource.CONNECTING;
+  onopen: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  addEventListener() {}
+  removeEventListener() {}
+  close() {
+    this.readyState = SahteEventSource.CLOSED;
+  }
+}
+vi.stubGlobal("EventSource", SahteEventSource);
+
 // --- MapLibre ---
 // Harita jsdom'da CIZILEMEZ (WebGL yok). Testlerin ilgilendigi sey zaten
 // haritanin pikselleri degil, PANEL/LISTE davranisi; bu yuzden MapLibre

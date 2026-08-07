@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .. import olaylar
 from ..crud import asset as asset_crud
 from ..crud import assignment as crud
 from ..crud import yaka as yaka_crud
@@ -14,6 +15,7 @@ from ..models.user import User, UserRole
 from ..schemas.saha import (
     AktifGorevBilgi,
     AtamaGirdi,
+    BolgeGorevOzet,
     EkipGorevleri,
     EkipOzet,
     GorevDurumu,
@@ -36,6 +38,22 @@ router = APIRouter(prefix="/api/saha", tags=["saha"])
 # altindaki hareket, kilometrelerle olculen menzil kademelerinde sonucu
 # degistiremez.
 KONUM_DAGITIM_ESIGI_M = 250
+
+
+def _atama_degisti() -> None:
+    """Gorev dagilimi degisti: hem panolar hem saha ekranlari tazelensin.
+
+    HEDEF DARALTILMAZ (tum personel + tum saha ekipleri): bir atama en az iki
+    ekibi birden ilgilendirir (isi alan ve - devirse - isi kaybeden), ustelik
+    otomatik dagitim tek islemde birden fazla ekibin kuyrugunu degistirebilir
+    (bkz. bekleyen_gorevleri_dagit). Kimin etkilendigini burada tek tek
+    hesaplamak, sinyalin kendisi veri tasimadigi icin kazanci olmayan bir
+    karmasiklik olurdu - istemci zaten KENDI kapsamindaki ucu cagiriyor.
+
+    `bolgeler` de yayinlanir: bolge/guzergah ayni kotayi paylasir, bir tekil
+    isin atanmasi bekleyen bir bolgenin dagitilmasini tetikleyebilir."""
+    olaylar.yayinla("saha")
+    olaylar.yayinla("bolgeler")
 
 
 @router.post("/konum", status_code=status.HTTP_204_NO_CONTENT)
@@ -68,6 +86,13 @@ def konum_guncelle(
     if dagit:
         crud.bekleyen_gorevleri_dagit(db)
     db.commit()
+    # Sinyal YALNIZCA dagitim yapildiginda: konum ping'i ekip basina 30 sn'de
+    # bir geliyor, her birinde yayin yapmak yoklamanin yerine ondan daha
+    # gurultulu bir sey koymak olurdu. Ekip pininin haritada birkac saniye
+    # gecikmeli kaymasi kabul edilir; is dagilimi degistiginde ise gecikme
+    # kabul edilmez.
+    if dagit:
+        _atama_degisti()
 
 
 @router.get("/gorevlerim", response_model=GorevFeatureCollection)
@@ -104,6 +129,7 @@ def tamamlanan_geri_al(
             detail="Geri alinabilecek tamamlanmis gorev bulunamadi",
         )
     db.commit()
+    _atama_degisti()
 
 
 @router.get("/ekipler", response_model=list[EkipOzet])
@@ -140,6 +166,13 @@ def ekip_gorevleri(
     tamamlanan: dict[uuid.UUID, list[TamamlananOzet]] = {}
     for row in crud.son_tamamlananlar(db):
         tamamlanan.setdefault(row[0].worker_id, []).append(TamamlananOzet.from_row(row))
+    # Bolge/guzergahlar da ayni kotayi paylasan gorevlerdir; ekip basina
+    # gruplanip tekil gorevlerle birlikte dondurulur.
+    bolge_grup: dict[uuid.UUID, list[BolgeGorevOzet]] = {}
+    for row in crud.aktif_bolge_gorevleri(
+        db, departman=None if alan.sinirsiz else alan.departman
+    ):
+        bolge_grup.setdefault(row[0].worker_id, []).append(BolgeGorevOzet.from_row(row))
     return [
         EkipGorevleri(
             id=o.id,
@@ -152,6 +185,7 @@ def ekip_gorevleri(
             yaka=o.yaka,
             departman=o.departman,
             gorevler=grup.get(o.id, []),
+            bolge_gorevleri=bolge_grup.get(o.id, []),
             son_tamamlananlar=tamamlanan.get(o.id, []),
         )
         for o in ozetler
@@ -178,9 +212,11 @@ def ata(
 ):
     """Personel bir bakim varligini elle bir ekibe (yeniden) yonlendirir.
 
-    Elle atama otomatik atamanin YAKA ve DEPARTMAN kisitlarindan muaftir -
-    yetki personeldedir, arayuz yalnizca uyarir. Ama ISIN KENDISI kapsamda
-    olmali: baska mudurlugun talebini yonlendirmek o mudurlugun isidir."""
+    Elle atama otomatik atamanin KAPASITE, YAKA ve DEPARTMAN kisitlarindan
+    muaftir - yetki personeldedir, arayuz yalnizca uyarir (bkz.
+    components/EkipSecici.tsx; gorev bolgesi/guzergah atamasi da ayni). Ama
+    ISIN KENDISI kapsamda olmali: baska mudurlugun talebini yonlendirmek o
+    mudurlugun isidir."""
     row = asset_crud.get_asset(db, data.asset_id)
     if row is None or not alan.izinli(row[0].type):
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")
@@ -194,12 +230,9 @@ def ata(
     if worker is None or worker.role != UserRole.saha_calisani:
         raise HTTPException(status_code=404, detail="Saha ekibi bulunamadi")
 
-    try:
-        crud.ata(db, asset, worker, assigned_by=user)
-    except ValueError as e:
-        db.rollback()
-        raise HTTPException(status_code=409, detail=str(e))
+    crud.ata(db, asset, worker, assigned_by=user, kota_zorla=False)
     db.commit()
+    _atama_degisti()
 
 
 @router.get("/gorev/{asset_id}", response_model=GorevDurumu)
@@ -238,3 +271,4 @@ def geri_al(
     if not crud.geri_al(db, data.asset_id, actor=user):
         raise HTTPException(status_code=409, detail="Bu varligin aktif bir gorevi yok")
     db.commit()
+    _atama_degisti()

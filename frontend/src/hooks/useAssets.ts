@@ -28,11 +28,18 @@ function useAssetsInvalidator() {
   return () => queryClient.invalidateQueries({ queryKey: ASSETS_KEY });
 }
 
-/** Varligin durumunu degistiren islemler (tamir/silme) ayni zamanda GOREV
- *  tablosunu da degistirir: tamir aktif gorevi kapatir, kapasite acilinca havuz
- *  yeniden dagitilir. Bu yuzden "saha" sorgulari (ekip yukleri, ekip gorev
- *  listeleri, havuz) da tazelenir - yoksa haritadaki ekip rozeti/popup'i bir
- *  sonraki periyodik cekime kadar bitmis isi gostermeye devam ediyordu. */
+/** Varligin durumunu degistiren islemler (tamir/DUZENLEME/silme) ayni zamanda
+ *  GOREV tablosunu da degistirir: durum `iyi`ye cekilince aktif gorev kapanir,
+ *  kapasite acilinca havuz yeniden dagitilir. Bu yuzden "saha" sorgulari (ekip
+ *  yukleri, ekip gorev listeleri, havuz) da tazelenir - yoksa haritadaki ekip
+ *  rozeti/popup'i bir sonraki periyodik cekime kadar bitmis isi gostermeye
+ *  devam ediyordu.
+ *
+ *  DUZENLEME de buraya dahildir: backend'de `/onar` ile personelin PUT'u TEK
+ *  yerden gecer (`crud/asset.py::update_asset`), yani "Duzenle -> durum: iyi"
+ *  de gorevi kapatir. Bu hook'ta atlanmasi, tamir dugmesi sayiyi aninda
+ *  dusururken duzenleme yoluyla yapilan ayni degisikligin dusurmemesine yol
+ *  aciyordu. */
 function useSahaInvalidator() {
   const queryClient = useQueryClient();
   return () => queryClient.invalidateQueries({ queryKey: ["saha"] });
@@ -48,10 +55,14 @@ export function useCreateAsset() {
 
 export function useUpdateAsset() {
   const invalidate = useAssetsInvalidator();
+  const sahaTazele = useSahaInvalidator();
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: AssetUpdateInput }) =>
       updateAsset(id, data),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      sahaTazele();
+    },
   });
 }
 

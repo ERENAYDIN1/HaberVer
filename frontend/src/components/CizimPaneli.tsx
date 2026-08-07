@@ -304,7 +304,7 @@ export default function CizimPaneli({
                 disabled={olcumNoktalari.length < 2}
                 className="flex-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                Bitir
+                Tamamla
               </button>
             </div>
           </div>

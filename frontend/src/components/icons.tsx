@@ -88,6 +88,18 @@ export function IconPin({ className }: IconProps) {
   );
 }
 
+/** Katlanmis harita paftasi. `IconPin`'den bilincli olarak ayridir: pin
+ *  "su nokta", bu ise "haritanin kendisi" demektir - konum secme akisinda
+ *  "haritayi ac, kendin isaretle" ile "GPS'imi kullan" ayni ikonu tasimamali. */
+export function IconHarita({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} className={className}>
+      <path d="M9 4 3 6.5v13L9 17l6 3 6-2.5v-13L15 7 9 4z" />
+      <path d="M9 4v13M15 7v13" />
+    </svg>
+  );
+}
+
 export function IconLayers({ className }: IconProps) {
   return (
     <svg {...temelOzellikler} className={className}>
@@ -124,6 +136,15 @@ export function IconRuler({ className }: IconProps) {
     <svg {...temelOzellikler} className={className}>
       <path d="M4 15 15 4l5 5-11 11-5-5z" />
       <path d="M8 11l1.5 1.5M11 8l1.5 1.5M14 5l1.5 1.5" />
+    </svg>
+  );
+}
+
+export function IconPencil({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} className={className}>
+      <path d="m14.5 3.5 6 6L8 22H2v-6z" />
+      <path d="m12.5 5.5 6 6" />
     </svg>
   );
 }
@@ -213,6 +234,17 @@ export function IconPlus({ className }: IconProps) {
   return (
     <svg {...temelOzellikler} strokeWidth={2} className={className}>
       <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+/** "Konumumu goster" - artinin ustundeki yuvarlak dugme. */
+export function IconKonum({ className }: IconProps) {
+  return (
+    <svg {...temelOzellikler} className={className}>
+      <circle cx="12" cy="12" r="3.5" />
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 1.5v3M12 19.5v3M22.5 12h-3M4.5 12h-3" />
     </svg>
   );
 }

@@ -32,6 +32,7 @@ function bolge(ozel: Partial<Bolge> = {}): Bolge {
     worker_id: null,
     worker_ad: null,
     assigned_at: null,
+    yaka: null,
     tamamlandi_at: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",

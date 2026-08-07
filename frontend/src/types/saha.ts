@@ -106,9 +106,29 @@ export interface TamamlananOzet {
   completed_at: string | null;
 }
 
+/** Bir ekibin uzerindeki gorev bolgesi / guzergah. Tekil bakim gorevleriyle
+ *  AYNI kotayi (MAKS_AKTIF_GOREV) paylasir - "gorev" tek bir kavramdir - bu
+ *  yuzden panoda ve ekip popup'inda onlarla birlikte listelenir. */
+export interface BolgeGorevOzet {
+  bolge_id: string;
+  ad: string;
+  tip: "alan" | "cizgi";
+  renk: string;
+  /** true: sistemin otomatik atadigi, false: bir personelin elle atadigi. */
+  otomatik: boolean;
+  assigned_at: string | null;
+  /** Kaydin temsil noktasi (alan -> icindeki bir nokta, cizgi -> hattin
+   *  ortasi); mesafe ve haritada gosterme bunu okur. */
+  longitude: number | null;
+  latitude: number | null;
+  yaka: string | null;
+}
+
 /** Bir ekip + kendine dusen aktif gorevler (GET /api/saha/ekip-gorevleri). */
 export interface EkipGorevleri extends EkipOzet {
   gorevler: GorevOzet[];
+  /** Bolge/guzergah gorevleri; `aktif_gorev` sayaci ikisini birden kapsar. */
+  bolge_gorevleri: BolgeGorevOzet[];
   son_tamamlananlar: TamamlananOzet[];
 }
 

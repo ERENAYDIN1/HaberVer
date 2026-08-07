@@ -8,9 +8,9 @@ import { inputClass, labelClass } from "../utils/formSiniflari";
 import {
   IconCamera,
   IconChevronRight,
+  IconKonum,
   IconLogout,
   IconMenu,
-  IconPin,
   IconPlus,
   IconTree,
 } from "../components/icons";
@@ -86,6 +86,9 @@ export default function VatandasEkran() {
   const [foto, setFoto] = useState<File | null>(null);
   const [fotoOnizleme, setFotoOnizleme] = useState<string | null>(null);
   const fotoInputRef = useRef<HTMLInputElement>(null);
+  /** Haritanin gizli konum kontrolunu tetikler (mobilde arti'nin ustundeki
+   *  dugme buna baglidir). */
+  const konumTetikleRef = useRef<(() => void) | null>(null);
 
   const [hata, setHata] = useState<string | null>(null);
   const [basari, setBasari] = useState(false);
@@ -108,6 +111,11 @@ export default function VatandasEkran() {
   // haritanin ayni anda kullanilabilir olmasi mumkun degil - kullanici
   // haritaya dokunacaksa panelin cekilmesi gerekiyor.
   const [konumKipi, setKonumKipi] = useState(false);
+  /** Vatandasin kendi konumu - SECIM DEGIL, yalnizca haritada referans olsun
+   *  diye gosterilen mavi nokta ("Neredeyim?" dugmesi doldurur). */
+  const [benimKonumum, setBenimKonumum] = useState<[number, number] | null>(
+    null
+  );
 
   const talepleriYukle = () => {
     myReports()
@@ -174,15 +182,12 @@ export default function VatandasEkran() {
     setNoktalar([]);
     setCizimTamam(false);
     setKonumHatasi(null);
-  };
-
-  /** Mobilde formu cekip haritayi tam ekrana alir. Cizim kipinde daha once
-   *  "Tamamla" denmisse yeniden acilir: kullanici duzeltmeye geldi demektir. */
-  const konumKipiniAc = () => {
-    setFormAcik(false);
-    setKonumHatasi(null);
-    if (sekil !== "Point") setCizimTamam(false);
-    setKonumKipi(true);
+    // Sekil secmek zaten "haritada isaretleyecegim" demektir; mobilde ayrica
+    // bir "Haritadan Isaretle" dugmesine basmak gereksiz bir adimdi.
+    if (mobil) {
+      setFormAcik(false);
+      setKonumKipi(true);
+    }
   };
 
   const konumKipiniKapat = () => {
@@ -212,6 +217,35 @@ export default function VatandasEkran() {
         setKonumHatasi(
           "Konum alınamadı. Lütfen izin verin veya haritadan işaretleyin."
         );
+        setKonumAraniyor(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  /** "Neredeyim?": konumu YALNIZCA referans olarak gosterir - mavi nokta koyar
+   *  ve oraya ucar, ama secime/cizime hic dokunmaz. `konumumuKullan`'dan farki
+   *  budur: orada konum secimin KENDISI olur, burada kullanicinin nereye
+   *  isaret koyacagini kestirmesi icin bir dayanak noktasidir. */
+  const neredeyim = () => {
+    setKonumHatasi(null);
+    if (!navigator.geolocation) {
+      setKonumHatasi("Tarayıcınız konum servisini desteklemiyor");
+      return;
+    }
+    setKonumAraniyor(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const nokta: [number, number] = [
+          Number(pos.coords.longitude.toFixed(6)),
+          Number(pos.coords.latitude.toFixed(6)),
+        ];
+        setBenimKonumum(nokta);
+        setUcus({ anahtar: crypto.randomUUID(), merkez: nokta, zoom: 16 });
+        setKonumAraniyor(false);
+      },
+      () => {
+        setKonumHatasi("Konum alınamadı. Lütfen konum izni verin.");
         setKonumAraniyor(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -451,39 +485,29 @@ export default function VatandasEkran() {
                 ))}
               </div>
 
+              {/* Sekil secimi haritayi kendisi acar (mobilde konum kipi),
+                  dolayisiyla ayri bir "Haritadan Isaretle" dugmesi yok.
+                  Geriye iki yolu ayiran ince bir "ya da" kalir. */}
+              <div className="my-2 flex items-center gap-2">
+                <span className="h-px flex-1 bg-slate-200" />
+                <span className="text-xs text-slate-400">ya da</span>
+                <span className="h-px flex-1 bg-slate-200" />
+              </div>
+
               <button
                 type="button"
                 onClick={konumumuKullan}
                 disabled={konumAraniyor}
                 className="flex w-full items-center justify-center gap-2 border border-emerald-600 bg-emerald-50 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <IconPin className="h-4 w-4" />
-                {konumAraniyor
-                  ? "Konum alınıyor…"
-                  : sekil === "Point"
-                    ? "Konumumu Kullan"
-                    : "Konumumu Ekle"}
+                {/* GPS artisi: haritadaki "konumumu goster" kontroluyle ayni
+                    ikon, cunku ayni sey. */}
+                <IconKonum className="h-4 w-4" />
+                {konumAraniyor ? "Konum alınıyor…" : "Konumumu Kullan"}
               </button>
 
               {sekil === "Point" ? (
                 <>
-                  {/* Mobilde harita panelin ALTINDA kaldigi icin "isaretle"
-                      bir ipucu degil bir dugme olmali: panel cekilip harita
-                      tam ekrana gecer (konum kipi). */}
-                  {mobil ? (
-                    <button
-                      type="button"
-                      onClick={konumKipiniAc}
-                      className="mt-2 flex w-full items-center justify-center gap-2 border border-slate-300 bg-white py-2.5 text-sm font-medium text-slate-700"
-                    >
-                      <IconPin className="h-4 w-4 text-slate-400" />
-                      Haritadan İşaretle
-                    </button>
-                  ) : (
-                    <p className="mt-1.5 text-xs text-slate-400">
-                      veya sağdaki haritaya tıklayarak işaretleyin.
-                    </p>
-                  )}
                   {konum && (
                     <p className="mt-1 font-mono text-xs text-slate-600">
                       Seçilen: {konum[1].toFixed(5)}, {konum[0].toFixed(5)}
@@ -492,33 +516,6 @@ export default function VatandasEkran() {
                 </>
               ) : (
                 <>
-                  {/* Cizim ARACLARI haritanin altindaki panelde durur (personel
-                      konsolundaki `CizimPaneli` ile ayni yer): kullanicinin
-                      gozu cizerken haritada, dugmeler de orada olmali. Burada
-                      yalnizca durum ozeti kalir. */}
-                  {mobil ? (
-                    <button
-                      type="button"
-                      onClick={konumKipiniAc}
-                      className="mt-2 flex w-full items-center justify-center gap-2 border border-slate-300 bg-white py-2.5 text-sm font-medium text-slate-700"
-                    >
-                      <IconPin className="h-4 w-4 text-slate-400" />
-                      {noktalar.length
-                        ? "Çizimi Sürdür"
-                        : sekil === "LineString"
-                          ? "Haritada Hat Çiz"
-                          : "Haritada Alan Çiz"}
-                    </button>
-                  ) : (
-                    <p className="mt-1.5 text-xs text-slate-400">
-                      Haritaya tıkladıkça
-                      {sekil === "LineString"
-                        ? " hat uzar"
-                        : " alanın köşeleri eklenir"}
-                      . En az {EN_AZ_NOKTA[sekil]} nokta gerekir; bitince
-                      haritanın altındaki “Tamamla” düğmesine basın.
-                    </p>
-                  )}
                   <p className="mt-1 text-xs text-slate-600">
                     {noktalar.length} nokta
                     {olcu && (
@@ -610,51 +607,54 @@ export default function VatandasEkran() {
             : `Haritaya ${gomulu ? "dokunarak" : "tıklayarak"} köşe ekleyin (en az ${EN_AZ_NOKTA[sekil]}).`}
         </p>
 
+        {/* Uc dugme personel konsolundaki `CizimPaneli` ile ayni: cizim
+            bitmis olsa bile ayni yerde ayni uc secenek durur. Tamamlanmis
+            cizimde dugmelerin tek bir "Duzenle"ye dusmesi, kullanicinin
+            ogrendigi yerlesimi her tamamlamada degistiriyordu. */}
         <div className="mt-2.5 flex gap-2">
-          {cizimTamam ? (
-            <button
-              type="button"
-              onClick={() => setCizimTamam(false)}
-              className={`flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 ${
-                gomulu ? "py-2.5" : "py-1.5"
-              }`}
-            >
-              Düzenle
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setNoktalar([])}
-                disabled={!noktalar.length}
-                className={`flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${
-                  gomulu ? "py-2.5" : "py-1.5"
-                }`}
-              >
-                İptal
-              </button>
-              <button
-                type="button"
-                onClick={() => setNoktalar((n) => n.slice(0, -1))}
-                disabled={!noktalar.length}
-                className={`flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${
-                  gomulu ? "py-2.5" : "py-1.5"
-                }`}
-              >
-                Geri al
-              </button>
-              <button
-                type="button"
-                onClick={() => setCizimTamam(true)}
-                disabled={!cizimYeterli}
-                className={`flex-1 rounded-lg bg-emerald-600 px-3 text-xs font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 ${
-                  gomulu ? "py-2.5" : "py-1.5"
-                }`}
-              >
-                Tamamla
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              setNoktalar([]);
+              setCizimTamam(false);
+            }}
+            disabled={!noktalar.length}
+            className={`flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+              gomulu ? "py-2.5" : "py-1.5"
+            }`}
+          >
+            İptal
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              // Tamamlanmis bir cizimde "Geri al" once cizimi yeniden acar:
+              // kose atmak zaten duzenlemektir, ayrica "Duzenle" demek
+              // gerekmesin.
+              setCizimTamam(false);
+              setNoktalar((n) => n.slice(0, -1));
+            }}
+            disabled={!noktalar.length}
+            className={`flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+              gomulu ? "py-2.5" : "py-1.5"
+            }`}
+          >
+            Geri al
+          </button>
+          <button
+            type="button"
+            onClick={() => setCizimTamam((v) => !v)}
+            disabled={!cizimYeterli}
+            className={`flex-1 rounded-lg px-3 text-xs font-medium transition disabled:cursor-not-allowed ${
+              gomulu ? "py-2.5" : "py-1.5"
+            } ${
+              cizimTamam
+                ? "border border-emerald-600 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-slate-300"
+            }`}
+          >
+            {cizimTamam ? "Düzenle" : "Tamamla"}
+          </button>
         </div>
       </>
     );
@@ -669,8 +669,19 @@ export default function VatandasEkran() {
     );
   };
 
+  // Mobilde konum dugmesi haritanin kosesinde degil, arti'nin hemen ustunde
+  // duruyor; ikisi tek bir dikey yigin olsun diye kontrol gizlenip
+  // `konumTetikle` ile disaridan tetikleniyor.
   const harita = (
-    <KonumSecMap secili={konum} onSec={setKonum} cizim={cizim} ucus={ucus} />
+    <KonumSecMap
+      secili={konum}
+      onSec={setKonum}
+      cizim={cizim}
+      ucus={ucus}
+      benimKonumum={benimKonumum}
+      konumDugmesi={mobil ? "gizli" : "harita"}
+      konumRef={konumTetikleRef}
+    />
   );
 
   // --- Mobil kabuk ---
@@ -708,6 +719,24 @@ export default function VatandasEkran() {
                isaretlemeye ait kontroller. Form bu sirada kapalidir -
                kucuk ekranda ikisi ayni anda kullanilamaz. */
             <div className="guvenli-alt pointer-events-none absolute inset-x-0 bottom-0 z-40 px-3 pb-3">
+              {/* "Neredeyim?" haritanin uzerinde, panelin hemen ustunde durur:
+                  isaretleme sirasinda sorulan soru "ben neredeyim" oldugu icin
+                  cevap da haritanin uzerinde olmali. Salt ikon bir dugme (arti
+                  yigininda oldugu gibi) burada fark edilmiyordu - metin
+                  tasiyor. Sectigi/cizdigi seye DOKUNMAZ, yalnizca mavi bir
+                  referans noktasi koyar; bu yuzden "Konumumu Kullan"dan ayri
+                  bir dugmedir. */}
+              <div className="mb-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={neredeyim}
+                  disabled={konumAraniyor}
+                  className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/95 py-2 pl-3 pr-3.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur-sm transition active:scale-95 disabled:opacity-60"
+                >
+                  <IconKonum className="h-4 w-4 text-blue-600" />
+                  {konumAraniyor ? "Alınıyor…" : "Neredeyim?"}
+                </button>
+              </div>
               <div className="pointer-events-auto rounded-xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur-sm">
                 {sekil === "Point" ? (
                   <>
@@ -720,38 +749,33 @@ export default function VatandasEkran() {
                         "Haritaya dokunarak konumu işaretleyin."
                       )}
                     </p>
-                    <div className="mt-2.5 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={konumumuKullan}
-                        disabled={konumAraniyor}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-2.5 text-xs font-medium text-emerald-700 disabled:opacity-60"
-                      >
-                        <IconPin className="h-3.5 w-3.5" />
-                        {konumAraniyor ? "Alınıyor…" : "Konumum"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={konumKipiniKapat}
-                        disabled={!konum}
-                        className="flex-1 rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-medium text-white disabled:bg-slate-300"
-                      >
-                        Bitti
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {cizimKontrolu(true)}
+                    {/* Isaretlenen yeri ONAYLAYAN dugme. Cizimdeki "Tamamla"
+                        ile ayni yerde ve ayni dilde: isaretleme kipinden
+                        cikmanin olumlu yolu budur, "Forma Dön" ise vazgecmek.
+                        Isaret konmadan onaylanacak bir sey yok - kilitli. */}
                     <button
                       type="button"
                       onClick={konumKipiniKapat}
-                      className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-medium text-slate-700"
+                      disabled={!konum}
+                      className="mt-2.5 w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-medium text-white transition disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
-                      Forma Dön
+                      Bu Konumu Onayla
                     </button>
                   </>
+                ) : (
+                  cizimKontrolu(true)
                 )}
+
+                {/* "Forma Dön" ucu sekilde de aynidir ve HICBIR ZAMAN kilitli
+                    degildir: kip degistiren bir dugmenin cikisi, isaretleme
+                    yapilmadi diye kapanirsa kullanici kipte sikisir. */}
+                <button
+                  type="button"
+                  onClick={konumKipiniKapat}
+                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-medium text-slate-700"
+                >
+                  Forma Dön
+                </button>
                 {konumHatasi && (
                   <p className="mt-2 text-xs text-red-600">{konumHatasi}</p>
                 )}
@@ -759,34 +783,56 @@ export default function VatandasEkran() {
             </div>
           ) : (
             <>
-              {/* Yeni talep: ekranin sag altinda, basparmak menzilinde. */}
-              <button
-                type="button"
-                onClick={() => {
-                  setFormAcik(true);
-                  setListeSheetAcik(false);
-                }}
-                aria-label="Yeni talep oluştur"
-                className="absolute bottom-20 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-900/30 transition active:scale-95"
-              >
-                <IconPlus className="h-6 w-6" />
-              </button>
+              {/* Sag alt dikey yigin: konum (ikincil, beyaz) ve onun altinda
+                  yeni talep (birincil, yesil) - basparmak menzilinde. */}
+              <div className="absolute bottom-24 right-4 z-30 flex flex-col items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => konumTetikleRef.current?.()}
+                  aria-label="Konumumu göster"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md transition active:scale-95"
+                >
+                  <IconKonum className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormAcik(true);
+                    setListeSheetAcik(false);
+                  }}
+                  aria-label="Yeni talep oluştur"
+                  className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-900/30 transition active:scale-95"
+                >
+                  <IconPlus className="h-6 w-6" />
+                </button>
+              </div>
 
-              {/* Taleplerim seridi: vatandasin tekrar gelme sebebi
-                  gonderdigi talebin durumu, o yuzden acilista gorunur. */}
+              {/* Taleplerim: ekranin dibine yapisik ince bir serit yerine
+                  haritanin uzerinde yuzen bir kart - actigi sheet'le ayni
+                  dili konussun ve tutamagiyla "yukari cekilir" desin. */}
               <button
                 type="button"
                 onClick={() => setListeSheetAcik(true)}
                 aria-label="Taleplerimi aç"
-                className="guvenli-alt absolute inset-x-0 bottom-0 z-30 flex items-center gap-2 border-t border-slate-200 bg-white px-4 py-3 text-left"
+                className="guvenli-alt-bosluk absolute inset-x-3 bottom-3 z-20 rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-2 text-left shadow-lg shadow-slate-900/10 transition active:scale-[0.99]"
               >
-                <span className="text-sm font-semibold text-slate-800">
-                  Taleplerim
+                <span className="mx-auto mb-2 block h-1 w-9 rounded-full bg-slate-300" />
+                <span className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
+                    <IconTree className="h-4 w-4 text-emerald-600" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold leading-tight text-slate-900">
+                      Taleplerim
+                    </span>
+                    <span className="block text-xs leading-tight text-slate-500">
+                      {taleplerim.length > 0
+                        ? `${taleplerim.length} talep · durumunu gör`
+                        : "Henüz talebiniz yok"}
+                    </span>
+                  </span>
+                  <IconChevronRight className="ml-auto h-5 w-5 shrink-0 -rotate-90 text-slate-400" />
                 </span>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                  {taleplerim.length}
-                </span>
-                <IconChevronRight className="ml-auto h-4 w-4 -rotate-90 text-slate-400" />
               </button>
             </>
           )}
@@ -906,6 +952,21 @@ export default function VatandasEkran() {
         {/* Harita: konum secme / cizim */}
         <div className="absolute inset-0">
           {harita}
+
+          {/* Mobildeki ile ayni "Neredeyim?": isaret koymadan yalnizca mavi
+              referans noktasi. Haritanin kendi kose kontrolu konumu SECIME
+              cevirdigi icin ayri durur. */}
+          <div className="pointer-events-none absolute right-3 top-3 z-10 flex justify-end">
+            <button
+              type="button"
+              onClick={neredeyim}
+              disabled={konumAraniyor}
+              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/95 py-2 pl-3 pr-3.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur-sm transition hover:bg-white disabled:opacity-60"
+            >
+              <IconKonum className="h-4 w-4 text-blue-600" />
+              {konumAraniyor ? "Alınıyor…" : "Neredeyim?"}
+            </button>
+          </div>
 
           {/* Cizim araci: personel konsolundaki `CizimPaneli` ile ayni yerde
               (ekranin alt-ortasi; sol panel acilip kapaninca yeri degismez)

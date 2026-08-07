@@ -110,6 +110,10 @@ class BolgeCikti(BaseModel):
     worker_id: uuid.UUID | None = None
     worker_ad: str | None = None
     assigned_at: datetime | None = None
+    # Isin dustugu yaka (kaydin temsil noktasindan cozulur: alan ->
+    # ST_PointOnSurface, cizgi -> hattin ortasi). Elle atamada "karsi yaka"
+    # uyarisi varliklardakiyle ayni bilgiye dayansin diye burada doner.
+    yaka: str | None = None
     # Saha ekibi isi bitirdiginde dolar; None ise is devam ediyor demektir.
     tamamlandi_at: datetime | None = None
     created_at: datetime

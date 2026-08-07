@@ -1,14 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { forwardRef, useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 
 import { bolgeAta, bolgeGuncelle, bolgeSil, bolgeler as bolgeleriGetir } from "../api/bolgeler";
 import { useDepartmanlar } from "../hooks/useDepartmanlar";
 import { departmanBul } from "../types/departman";
 import type { Bolge } from "../types/bolge";
 import type { EkipOzet } from "../types/saha";
-import { YAKA_KISA, type Yaka } from "../types/saha";
-import { alanEtiketi, mesafeEtiketi } from "../utils/geo";
+import {
+  alanEtiketi,
+  cizgiOrtaNoktasi,
+  enBuyukHalkaMerkezi,
+  mesafeEtiketi,
+} from "../utils/geo";
 import { RENK_PALETI } from "./CizimPaneli";
+import EkipSecici from "./EkipSecici";
 import { IconCheck, IconLasso, IconRoute, IconUsers, IconX } from "./icons";
 
 /** Panelin listeledigi kayit turu: gorev bolgesi (alan) ya da guzergah
@@ -112,14 +117,26 @@ export default function BolgePaneli({
     seciliRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [seciliId]);
 
-  const tazele = () => queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
+  /** Bolge artik tekil bakim isiyle AYNI kotayi paylasiyor: bir bolgeyi atamak
+   *  ekibin yukunu degistirir, yani harita isaretcisi ve saha panosu da
+   *  tazelenmeli.
+   *
+   *  SOZ DONDURULUR ve `onSuccess`ten geri verilir: react-query boyle yapinca
+   *  mutasyonu tazeleme bitene kadar "pending" sayar. Aksi halde `isPending`
+   *  yeni veriden once duser ve `EkipSecici` o pencerede hala ESKI atamayi
+   *  gorur - havuza yeni alinmis kayit "Zaten atalı" gorunurdu. */
+  const tazele = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["bolgeler"] }),
+      queryClient.invalidateQueries({ queryKey: ["saha"] }),
+    ]);
 
   const atamaMutasyonu = useMutation({
     mutationFn: ({ id, workerId }: { id: string; workerId: string | null }) =>
       bolgeAta(id, workerId),
     onSuccess: () => {
       setHata(null);
-      tazele();
+      return tazele();
     },
     onError: (e: Error) => setHata(e.message),
   });
@@ -355,6 +372,17 @@ const BolgeKarti = forwardRef<HTMLLIElement, KartProps>(function BolgeKarti(
       : null;
   const { data: departmanlar } = useDepartmanlar();
   const kaydinDepartmani = departmanBul(departmanlar, bolge.departman);
+  const [atamaAcik, setAtamaAcik] = useState(false);
+  // Ekip mesafesi kaydin temsil noktasindan olculur: cizgide hattin ortasi
+  // (nokta ortalamasi L seklinde bir rotada hattin disina duser), alanda en
+  // buyuk parcanin merkezi - haritadaki etiketle ayni nokta.
+  const merkez = useMemo<[number, number]>(
+    () =>
+      alan
+        ? enBuyukHalkaMerkezi(bolge.noktalar)
+        : cizgiOrtaNoktasi(bolge.noktalar[0] ?? []),
+    [alan, bolge.noktalar]
+  );
 
   return (
     <li
@@ -464,35 +492,42 @@ const BolgeKarti = forwardRef<HTMLLIElement, KartProps>(function BolgeKarti(
         </span>
       </div>
 
+      {/* Ekip secimi karti buyuttugu icin katlanmis durur: kart listesinin asil
+          isi "ne var"i okutmak, atama nadir bir islemdir (SahaEkipleri
+          panosundaki "Taşı" dugmesiyle ayni tercih). Acilinca varlik detayiyla
+          AYNI secici gelir - alan/guzergah da bir gorevdir. */}
       {onAta && (
-        <div className="flex items-center gap-2 border-t border-slate-100 px-2.5 py-2">
-          <label className="text-[11px] text-slate-500">
-            {alan ? "Görev ekibi" : "Güzergâh ekibi"}
-          </label>
-          <select
-            value={bolge.worker_id ?? ""}
-            disabled={atamaBekliyor}
-            onChange={(e) => onAta(e.target.value || null)}
-            className="min-w-0 flex-1 border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-emerald-500 disabled:opacity-50"
+        <div className="border-t border-slate-100 px-2.5 py-2">
+          <button
+            type="button"
+            onClick={() => setAtamaAcik((a) => !a)}
+            aria-expanded={atamaAcik}
+            className="flex w-full items-center justify-between gap-2 text-[11px] font-medium text-slate-500 transition hover:text-slate-800"
           >
-            <option value="">Atanmamış</option>
-            {/* Kaydin mudurlugu disindaki ekipler ISARETLENIR ama gizlenmez -
-                yaka uyarisiyla ayni desen: yetki personeldedir, bilgi eksik
-                degil. (Admin disi personel zaten yalnizca kendi mudurlugunun
-                ekiplerini gorur, backend de digerini reddeder.) */}
-            {(ekipler ?? []).map((ekip) => {
-              const baskaMudurluk =
-                bolge.departman !== null && ekip.departman !== bolge.departman;
-              return (
-                <option key={ekip.id} value={ekip.id}>
-                  {ekip.full_name || ekip.email}
-                  {ekip.yaka ? ` · ${YAKA_KISA[ekip.yaka as Yaka] ?? ekip.yaka}` : ""}
-                  {baskaMudurluk ? " · ⚠ başka müdürlük" : ""}
-                </option>
-              );
-            })}
-          </select>
-          {atamaBekliyor && <span className="text-[11px] text-slate-400">…</span>}
+            <span>
+              {bolge.worker_ad
+                ? `${alan ? "Görev" : "Güzergâh"} ekibi: ${bolge.worker_ad}`
+                : `${alan ? "Görev" : "Güzergâh"} ekibi seç`}
+            </span>
+            <span aria-hidden>{atamaAcik ? "▴" : "▾"}</span>
+          </button>
+          {atamaAcik && (
+            <div className="mt-2">
+              <EkipSecici
+                ekipler={ekipler}
+                is={{
+                  konum: merkez,
+                  yaka: bolge.yaka,
+                  departman: bolge.departman,
+                }}
+                mevcutWorkerId={bolge.worker_id}
+                departmanlar={departmanlar}
+                onAta={(id) => onAta(id)}
+                islemde={atamaBekliyor}
+                kaldirilabilir
+              />
+            </div>
+          )}
         </div>
       )}
 

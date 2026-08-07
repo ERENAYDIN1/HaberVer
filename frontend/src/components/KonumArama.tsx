@@ -17,6 +17,14 @@ interface KonumAramaProps {
   /** Verilirse arama yalnizca bu alanla sinirlanir (bounded=1); gorunen
    *  alandan onceliklidir. */
   zorunluAlan?: [[number, number], [number, number]] | null;
+  /** Mobilde header'a sigmasi icin kisaltilir ("Ara"). */
+  yerTutucu?: string;
+  /** Genislik sinifi; mobilde kabin dar kalmasi icin ezilir. */
+  genislikSinifi?: string;
+  /** Dar (mobil) yerlesim: ic bosluklar kisilir ve bos durumda sag taraftaki
+   *  yer tutucu bosluk cizilmez - dar kutuda "Ara" metnine yer birakmiyordu.
+   *  Sonuc listesi de kutudan tasarak okunabilir genislige acilir. */
+  dar?: boolean;
 }
 
 /** Nominatim uzerinden Turkiye'ye odakli konum arama kutusu. */
@@ -24,6 +32,9 @@ export default function KonumArama({
   onSecildi,
   gorunenAlan,
   zorunluAlan,
+  yerTutucu = "Haritada ara (örn. Ayasofya)",
+  genislikSinifi = "w-72",
+  dar = false,
 }: KonumAramaProps) {
   const [sorgu, setSorgu] = useState("");
   const [sonuclar, setSonuclar] = useState<NominatimSonuc[]>([]);
@@ -108,9 +119,11 @@ export default function KonumArama({
   };
 
   return (
-    <div ref={kutuRef} className="relative w-72">
+    <div ref={kutuRef} className={`relative ${genislikSinifi}`}>
       <div
-        className={`flex items-center gap-2 rounded-full border bg-white/95 pl-4 pr-2 shadow-sm backdrop-blur transition-all ${
+        className={`flex items-center rounded-full border bg-white/95 shadow-sm backdrop-blur transition-all ${
+          dar ? "gap-1.5 pl-3 pr-1.5" : "gap-2 pl-4 pr-2"
+        } ${
           aciklarKutu && (sonuclar.length > 0 || yukleniyor)
             ? "rounded-b-none border-slate-200 shadow-md"
             : "border-slate-200 hover:shadow-md focus-within:border-emerald-400 focus-within:shadow-md focus-within:ring-2 focus-within:ring-emerald-100"
@@ -121,8 +134,10 @@ export default function KonumArama({
           value={sorgu}
           onChange={(e) => setSorgu(e.target.value)}
           onFocus={() => sonuclar.length > 0 && setAciklarKutu(true)}
-          placeholder="Haritada ara (örn. Ayasofya)"
-          className="w-full border-none bg-transparent py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+          placeholder={yerTutucu}
+          className={`w-full min-w-0 border-none bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none ${
+            dar ? "py-2" : "py-2.5"
+          }`}
         />
         {sorgu ? (
           <button
@@ -136,12 +151,20 @@ export default function KonumArama({
             <IconX className="h-3.5 w-3.5" />
           </button>
         ) : (
-          <span className="h-7 w-7 shrink-0" aria-hidden />
+          !dar && <span className="h-7 w-7 shrink-0" aria-hidden />
         )}
       </div>
 
       {aciklarKutu && (sonuclar.length > 0 || yukleniyor) && (
-        <ul className="absolute left-0 right-0 top-full z-30 max-h-80 overflow-y-auto rounded-b-2xl border border-t-0 border-slate-200 bg-white py-1 shadow-xl">
+        <ul
+          className={`absolute right-0 top-full z-30 max-h-80 overflow-y-auto border border-slate-200 bg-white py-1 shadow-xl ${
+            // Dar kutuda liste kutu genisligine sigmaz; sagda hizali kalip
+            // sola dogru okunabilir genislige acilir.
+            dar
+              ? "w-[76vw] max-w-xs rounded-2xl rounded-tr-none"
+              : "left-0 rounded-b-2xl border-t-0"
+          }`}
+        >
           {yukleniyor && (
             <li className="flex items-center gap-2 px-4 py-3 text-xs text-slate-400">
               <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-500" />

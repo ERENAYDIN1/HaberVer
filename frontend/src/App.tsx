@@ -8,6 +8,10 @@ import { bolgeler as bolgeleriGetir } from "./api/bolgeler";
 import { bolgeGuncelle } from "./api/bolgeler";
 import { ekipGorevleri as ekipGorevleriGetir } from "./api/saha";
 import { useAuth } from "./auth/AuthContext";
+import {
+  useCanliGuncelleme,
+  YEDEK_YOKLAMA_MS,
+} from "./hooks/useCanliGuncelleme";
 import AssetDetayModal from "./components/AssetDetayModal";
 import AssetForm from "./components/AssetForm";
 import AssetList from "./components/AssetList";
@@ -28,12 +32,12 @@ import {
   IconLayers,
   IconLogout,
   IconMenu,
+  IconPencil,
   IconPin,
   IconPlus,
   IconRefresh,
   IconRoute,
   IconRuler,
-  IconSearch,
   IconUsers,
   IconX,
 } from "./components/icons";
@@ -201,8 +205,11 @@ export default function App() {
   const [mobilMenu, setMobilMenu] = useState(false);
   /** Lejant + tur/durum filtresi + harita stili tek sheet'te. */
   const [mobilKatman, setMobilKatman] = useState(false);
-  /** Konum arama alani header'da yer kaplamasin diye acilir. */
-  const [mobilArama, setMobilArama] = useState(false);
+  /** Cizim araclari kumesi (kalem dugmesinden sola acilir). */
+  const [mobilCizimKumesi, setMobilCizimKumesi] = useState(false);
+  /** Sifirlamanin ikinci adimi: uygulamada window.confirm yok (bkz.
+   *  Aksiyonlar/SilOnayi), geri alinamayan islem onay ister. */
+  const [mobilSifirlaOnayi, setMobilSifirlaOnayi] = useState(false);
   // Katman gorunurlugu + tur/durum alt-filtreleri. Sag-ustteki lejant ile sol
   // paneldeki acilirlar ayni state'i yazar (bkz. useKatmanlar).
   const {
@@ -325,7 +332,7 @@ export default function App() {
     katmanlariSifirla();
     alanSeciminiSifirla();
     setBolgeTaslagi(null);
-    setDetayBolge(null);
+    setDetayBolgeId(null);
     setSeciliBolgeId(null);
     // Yarim kalan sekil duzenlemesi birakilir (kaydedilmemis taslak gider).
     sekilDuzenlemeKapat();
@@ -345,15 +352,30 @@ export default function App() {
   const [gizliBolgeler, setGizliBolgeler] = useState<Set<string>>(new Set());
   // Kaydedilmek uzere olan cizim; kaydetme modali bunun uzerinden acilir.
   const [bolgeTaslagi, setBolgeTaslagi] = useState<BolgeTaslagi | null>(null);
-  const [detayBolge, setDetayBolge] = useState<Bolge | null>(null);
+  /** Detay modalinde acik olan kaydin ID'si - KAYDIN KENDISI DEGIL.
+   *
+   *  Kaydi state'e kopyalamak onu donduruyordu: atama/tamamlama sonrasi
+   *  `["bolgeler"]` tazelense bile modal, acildigi andaki anlik goruntuyu
+   *  gostermeye devam ediyordu. Sonuc: ekibe atama sunucuda oluyor ama modalde
+   *  "havuza geri al" hic cikmiyor, dugme "Ata" olarak kaliyordu. ID tutulup
+   *  kayit sorgudan TURETILINCE modal her tazelemede kendiliginden guncellenir. */
+  const [detayBolgeId, setDetayBolgeId] = useState<string | null>(null);
   const [seciliBolgeId, setSeciliBolgeId] = useState<string | null>(null);
 
   const sorgu = useAssets(filters);
-  // Alan secimi varsa liste/ozet birlestirilmis sonucu gosterir.
+  // Alan secimi varsa LISTE/OZET birlestirilmis sonucu gosterir. Harita
+  // bilincli olarak bunu okumaz (bkz. `varlikKatmanTaban`): alan secmek bir
+  // SORGU aracidir, haritanin geri kalanini silmek degil.
   const gosterilen = birlesikAlanSonucu ?? sorgu.data;
 
   // Yalniz admin/calisan talepleri yonetir.
   const personel = user?.role === "admin" || user?.role === "calisan";
+
+  /* Canli guncelleme: sunucu degisiklikleri SSE ile bildirir, sorgular o an
+     tazelenir. Yoklama periyotlari yedege cekildi (bkz. YEDEK_YOKLAMA_MS) -
+     kanal calisirken bosa giden istek kalmiyor, kanal olurse ekran yine de
+     bayat kalmiyor. */
+  useCanliGuncelleme(Boolean(user));
 
   /** Talepler + gorunum turetmesi (onaylanmis talep, varligi tamir edilince
    *  "Tamir Edildi"ye duser). Secim callback'leri `onayliEsleme`yi okudugu
@@ -469,10 +491,16 @@ export default function App() {
   // Canli ekip konumlari + aktif gorevleri. Haritadaki marker'lari, ekip
   // popup'ini ve varlik detayindaki elle atama listesini besler.
   const ekipSorgu = useQuery({
-    queryKey: ["saha", "ekipler"],
+    // ANAHTAR SahaEkipleri panosuyla AYNI: ikisi de ayni ucu (ekip-gorevleri)
+    // cagiriyordu ama farkli anahtarlar altinda, yani her tazelemede iki
+    // istek gidiyor ve biri invalidate edilirken digeri bayat kaliyordu -
+    // atama sonrasi haritadaki ekip isaretcisinin ancak sayfa yenilenince
+    // guncellenmesinin sebebi buydu. Tek anahtar = tek istek, tek gercek.
+    queryKey: ["saha", "ekip-gorevleri"],
     queryFn: ekipGorevleriGetir,
     enabled: personel,
-    refetchInterval: 20000,
+    // Canli kanal (SSE) ana yol; bu yalnizca yedek (bkz. useCanliGuncelleme).
+    refetchInterval: YEDEK_YOKLAMA_MS,
   });
 
   // Departman sozlugu: ekip isaretcilerinin rengi ve lejanttaki ekip
@@ -494,14 +522,23 @@ export default function App() {
     queryFn: bolgeleriGetir,
     enabled: personel,
   });
+  /** Detay modalinin gosterecegi CANLI kayit: id state'te, veri sorguda.
+   *  Kayit silinince (ya da kapsamdan cikinca) listeden duser ve modal
+   *  kendiliginde kapanir. */
+  const detayBolge = useMemo(
+    () => bolgeSorgu.data?.find((b) => b.id === detayBolgeId) ?? null,
+    [bolgeSorgu.data, detayBolgeId]
+  );
+
   // Alanlar ve guzergahlar ayri katmanlar oldugu icin gorunur listeleri de
   // ayri hesaplanir; MapView'a yalnizca acik olanlarin birlesimi gider.
   // Departman alt-filtresi de burada uygulanir (ekip katmanindaki desen):
   // admin butun mudurluklerin calisma alanlarini ayni anda goruyor.
+  //     Alan secimi burada da uygulanmaz (varlik/talep/ekip katmanlarindaki
+  //     gerekce): secili alan bir SORGU sinirridir, haritadan kayit silmez.
+  //     Panel tarafi `alanda` propuyla daralmaya devam eder.
   const [gorunurAlanlar, gorunurGuzergahlar] = useMemo(() => {
-    const gorunur = (bolgeSorgu.data ?? [])
-      .filter((b) => !gizliBolgeler.has(b.id))
-      .filter((b) => bolgeAlanda(b));
+    const gorunur = (bolgeSorgu.data ?? []).filter((b) => !gizliBolgeler.has(b.id));
     return [
       gorunur.filter(
         (b) => b.tip === "alan" && bolgeDepartmani.bolgeler.secili(b.departman)
@@ -510,7 +547,7 @@ export default function App() {
         (b) => b.tip === "cizgi" && bolgeDepartmani.guzergahlar.secili(b.departman)
       ),
     ];
-  }, [bolgeSorgu.data, gizliBolgeler, bolgeAlanda, bolgeDepartmani]);
+  }, [bolgeSorgu.data, gizliBolgeler, bolgeDepartmani]);
   const haritaBolgeleri = useMemo(() => {
     const liste = [
       ...(katmanlar.bolgeler ? gorunurAlanlar : []),
@@ -641,7 +678,14 @@ export default function App() {
 
   // --- Harita katman verileri (sag-ustteki KatmanKontrolu'ne bagli) --------
   // Sekmelerden bagimsiz: kullanici katmanlari istedigi kombinasyonda gorebilir.
-  const varlikKatmanTaban = gosterilen;
+  //
+  // HARITA ALAN SECIMINDEN ETKILENMEZ: taban her zaman ham sorgudur, secili
+  // alanin disinda kalan isaretciler haritada durmaya devam eder. Alan secmek
+  // "sunlari say/listele" demektir, "gerisini haritadan sil" demek degil -
+  // kullanici bir ilce sectiginde sehrin geri kalaninin yok olmasi haritayi
+  // okunmaz hale getiriyordu (cizim aracinda bu sorun yoktu cunku o sorgu
+  // yapmiyor). Panel/ozet tarafi `gosterilen` uzerinden daralmaya devam eder.
+  const varlikKatmanTaban = sorgu.data;
   // Alt-filtre sayaclari her kirilim icin, DIGER kirilimin secimi uygulanmis
   // taban uzerinden sayilir; boylece rakamlar haritadakiyle tutarli kalir.
   const { varlikTurSayilari, varlikDurumSayilari } = useMemo(() => {
@@ -669,9 +713,28 @@ export default function App() {
     };
   }, [varlikKatmanTaban, katmanTurleri, katmanVarlikDurumlari]);
 
-  /** Talep gruplarinin secili alanla sinirlanmis hali; hem harita katmani hem
-   *  lejant sayaclari bunu okur. Bildirim zilinin sayaci bilincli olarak ham
-   *  sorgudan gelir: zil sistemin tamamini anlatir, haritanin secimini degil. */
+  /** PANEL/liste tarafinin varlik koleksiyonu: haritanin aksine alan secimiyle
+   *  daralir (`gosterilen` = secili alanlarin `assetsWithin` sonucu). Tur/durum
+   *  filtresi ikisinde de ayni; ayrilan tek sey alan sinirridir. */
+  const varlikPanelVeri = useMemo<AssetFeatureCollection | undefined>(() => {
+    if (!gosterilen) return undefined;
+    const tumTurler = turKodlari().every((t) => katmanTurleri[t]);
+    const tumDurumlar = ASSET_STATUSES.every((s) => katmanVarlikDurumlari[s]);
+    if (tumTurler && tumDurumlar) return gosterilen;
+    return {
+      type: "FeatureCollection",
+      features: gosterilen.features.filter(
+        (f) =>
+          katmanTurleri[f.properties.type] &&
+          katmanVarlikDurumlari[f.properties.status]
+      ),
+    };
+  }, [gosterilen, katmanTurleri, katmanVarlikDurumlari]);
+
+  /** Talep gruplarinin secili alanla sinirlanmis hali; lejant sayaclari ve
+   *  panel listeleri bunu okur (harita ham gruplari cizer). Bildirim zilinin
+   *  sayaci bilincli olarak ham sorgudan gelir: zil sistemin tamamini anlatir,
+   *  haritanin secimini degil. */
   const talepGorunumleriAlanda = useMemo(() => {
     if (!alandaMi) return talepGorunumleri;
     return Object.fromEntries(
@@ -686,14 +749,18 @@ export default function App() {
   }, [talepGorunumleri, alandaMi]);
 
   // Talep katmani: secili gorunumlerin talepleri id'ye gore tekillestirilir.
+  // Varlik katmaniyla ayni gerekce: alan secimi HARITAYI daraltmaz, yalnizca
+  // lejant sayaclarini ve panel listelerini besleyen `talepGorunumleriAlanda`
+  // daralir. Aksi halde bir ilce secmek sehrin geri kalanindaki pinleri de
+  // silerdi.
   const talepKatmanVeri = useMemo<ReportFeatureCollection>(() => {
     const gorulen = new Map<string, ReportFeature>();
     for (const gorunum of TALEP_GORUNUMLERI) {
       if (!katmanDurumlari[gorunum]) continue;
-      for (const f of talepGorunumleriAlanda[gorunum]) gorulen.set(f.properties.id, f);
+      for (const f of talepGorunumleri[gorunum]) gorulen.set(f.properties.id, f);
     }
     return { type: "FeatureCollection", features: [...gorulen.values()] };
-  }, [katmanDurumlari, talepGorunumleriAlanda]);
+  }, [katmanDurumlari, talepGorunumleri]);
 
   // Secilen talebin gorunumu panelin alt sekmesini de belirler, yoksa secili
   // kayit acilan listede gorunmezdi. Ham durum degil gorunum kullanilir:
@@ -708,23 +775,18 @@ export default function App() {
 
   /** Haritada gosterilen ekipler. Yalnizca KATMAN suzulur: atama acilirlari
    *  (AssetDetayModal, SahaEkipleri, BolgePaneli) tam listeyi gormeye devam
-   *  eder - secili ilcenin disindaki bir ekibe elle is verilebilmeli. Konumu
-   *  bilinmeyen ekip zaten haritada cizilmiyor, alan testinden de gecmez.
+   *  eder - secili ilcenin disindaki bir ekibe elle is verilebilmeli.
    *
-   *  Departman alt-filtresi de burada uygulanir: butun mudurluklerin ekipleri
-   *  ayni anda cizilince harita okunmaz hale geliyordu. */
+   *  Departman alt-filtresi burada uygulanir: butun mudurluklerin ekipleri
+   *  ayni anda cizilince harita okunmaz hale geliyordu. ALAN SECIMI burada da
+   *  uygulanmaz (varlik/talep katmanlariyla ayni gerekce): bir ilce secmek
+   *  ekibin haritadan silinmesi demek degil - ustelik cogu zaman ise en yakin
+   *  ekip tam da secili alanin disindadir. */
   const haritaEkipleri = useMemo(() => {
     const ekipler = ekipSorgu.data;
     if (!ekipler) return ekipler;
-    return ekipler.filter(
-      (e) =>
-        ekipDepartmaniSecili(e.departman) &&
-        (!alandaMi ||
-          (e.longitude != null &&
-            e.latitude != null &&
-            alandaMi([e.longitude, e.latitude])))
-    );
-  }, [ekipSorgu.data, alandaMi, ekipDepartmaniSecili]);
+    return ekipler.filter((e) => ekipDepartmaniSecili(e.departman));
+  }, [ekipSorgu.data, ekipDepartmaniSecili]);
 
   /** Departman kodu -> ad + rozet rengi. Ekip pinleri, ekip popup'i ve
    *  lejanttaki ekip alt-filtresi ayni sozlukten beslenir; renk backend'deki
@@ -1114,7 +1176,7 @@ export default function App() {
   }
 
   const kenarAltOgeler: KenarOgesi[] = [
-    { id: "temizle", etiket: "Temizle", ikon: IconRefresh, onClick: sifirla },
+    { id: "temizle", etiket: "Sıfırla", ikon: IconRefresh, onClick: sifirla },
   ];
 
   // Secili varlik: o an haritada gosterilen koleksiyondan aranir.
@@ -1172,12 +1234,30 @@ export default function App() {
     try {
       const varlik = await getAsset(assetId);
       setDetayRapor(null);
-      setDetayBolge(null);
+      setDetayBolgeId(null);
       setDetayAsset(varlik);
     } catch (e) {
       window.alert(`Varlık açılamadı: ${(e as Error).message}`);
     }
   }, []);
+
+  /** Ekip popup'indaki bir bolge/guzergah satirina tiklaninca kaydin detay
+   *  modalini acar - tekil isteki `ekipGoreviAcildi`'nin karsiligi. Varliktan
+   *  farkli olarak API'den cekilmez: `["bolgeler"]` sorgusu kullanicinin
+   *  gorebildigi TUM kayitlari tasir (kapsam backend'de uygulanir), tekil bir
+   *  uc de yok. Lejant filtresiyle gizlenmis bir kayit da acilabilir: popup'ta
+   *  gorunen bir satirin tiklanamamasi anlasilmaz olurdu. */
+  const ekipBolgesiAcildi = useCallback(
+    (bolgeId: string) => {
+      // Kaydin listede olup olmadigi yine kontrol edilir (silinmis bir satira
+      // tiklanabilir), ama modale ID verilir - veriyi sorgu tasir.
+      if (!bolgeSorgu.data?.some((b) => b.id === bolgeId)) return;
+      setDetayAsset(null);
+      setDetayRapor(null);
+      setDetayBolgeId(bolgeId);
+    },
+    [bolgeSorgu.data]
+  );
 
   /** Aktif sekmenin govdesi. Masaustunde yuzen panelin, mobilde sheet'in
    *  icine girer - iki kabuk da AYNI paneli gosterir, mobil icin ayri bir
@@ -1186,9 +1266,9 @@ export default function App() {
     <div className="flex min-h-0 flex-1 flex-col">
       {sekme === "liste" && (
         <AssetList
-          // Haritayla ayni koleksiyon: liste, sayaclar ve isaretciler
-          // tek filtre state'inden turer.
-          data={varlikKatmanVeri}
+          // Haritayla ayni filtre state'i, tek fark alan sinirri: liste secili
+          // alanla daralir, harita tam kalir (bkz. `varlikKatmanTaban`).
+          data={varlikPanelVeri}
           isLoading={sorgu.isLoading}
           isError={sorgu.isError}
           error={sorgu.error as Error | null}
@@ -1239,8 +1319,8 @@ export default function App() {
           onVarlikSec={varlikSecildi}
           ekipler={ekipSorgu.data}
           onVarligaGit={varligaGit}
-          // Lejant/harita ile ayni sinir: secili ilce-mahalle disindaki
-          // talepler listede de gorunmez.
+          // Panel secili alanla daralir (varlik listesindeki desen); harita
+          // katmani bilincli olarak tam kalir.
           alandaMi={alandaMi}
         />
       )}
@@ -1260,7 +1340,7 @@ export default function App() {
           onSekilDuzenle={sekilDuzenlemeBaslat}
           sekilDuzenlenenId={sekilDuzenleme?.id ?? null}
           seciliId={seciliBolgeId}
-          onDetay={setDetayBolge}
+          onDetay={(b) => setDetayBolgeId(b.id)}
         />
       )}
     </div>
@@ -1296,12 +1376,11 @@ export default function App() {
       ekipler={katmanlar.ekipler ? haritaEkipleri : undefined}
       ekipDepartmanlari={ekipDepartmanlari}
       onEkipGorevSec={personel ? ekipGoreviAcildi : undefined}
+      onEkipBolgeSec={personel ? ekipBolgesiAcildi : undefined}
       bolgeler={haritaBolgeleri}
       seciliBolgeId={seciliBolgeId}
       onBolgeSec={bolgeSecildi}
-      onBolgeDetay={(id) =>
-        setDetayBolge(bolgeSorgu.data?.find((b) => b.id === id) ?? null)
-      }
+      onBolgeDetay={setDetayBolgeId}
       // Ad haritadaki etiket uzerinden de degistirilebilir (yalniz personel).
       onBolgeAdDegis={personel ? bolgeAdiDegistir : undefined}
       sekilDuzenleme={sekilDuzenleme}
@@ -1571,17 +1650,25 @@ export default function App() {
     </>
   );
 
+  const alanAracıAktif = cizimModu || tamamlananAlanlar.length > 0;
+  const cizgiAracıAktif = olcumModu || olcumNoktalari.length >= 2;
+
   /** Haritanin sag ustundeki dikey arac yigini: katman sheet'i + cizim
-   *  araclari. Masaustunde bu isler header ve yuzen kartlara dagilmis
-   *  durumda; kucuk ekranda hepsi tek bir sutunda toplanir. */
+   *  kumesi. Masaustunde bu isler header ve yuzen kartlara dagilmis
+   *  durumda; kucuk ekranda hepsi tek bir sutunda toplanir.
+   *
+   *  Cizim araclari TEK dugmenin arkasinda: uc ayri hedef yigini
+   *  uzatiyordu. Kume sola acilir, cunku asagisi alt sekme cubugu. */
   const mobilAracYigini = (
-    <div className="absolute right-3 top-3 z-20 flex flex-col gap-2">
+    <div className="absolute right-3 top-3 z-20 flex flex-col items-end gap-2">
       <MobilAracDugmesi
         etiket="Katmanlar ve lejant"
         aktif={mobilKatman}
         rozet={Object.values(katmanlar).filter(Boolean).length}
         onClick={() => {
           setMobilMenu(false);
+          setMobilCizimKumesi(false);
+          setMobilSifirlaOnayi(false);
           setMobilKatman(true);
         }}
       >
@@ -1589,109 +1676,169 @@ export default function App() {
       </MobilAracDugmesi>
 
       {personel && (
-        <>
-          <MobilAracDugmesi
-            etiket="Alan seç"
-            aktif={cizimModu || tamamlananAlanlar.length > 0}
-            onClick={() => {
-              // Cizim baslarken panel cekilir: kucuk ekranda kullanici
-              // haritaya dokunacak, panel onun yarisini kapatiyor.
-              if (cizimModu) alanSecimiIptal();
-              else {
-                setPanelAcik(false);
-                alanSecimiBaslat();
-              }
-            }}
-          >
-            <IconLasso className="h-5 w-5" />
-          </MobilAracDugmesi>
+        <div className="flex items-center gap-1.5">
+          {mobilCizimKumesi && (
+            <div className="flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/95 p-1 shadow-lg backdrop-blur-md">
+              <MobilKumeDugmesi
+                etiket="Alan seç"
+                aktif={alanAracıAktif}
+                onClick={() => {
+                  // Kume kendiliginden kapanir: cizim haritaya dokunarak
+                  // yapiliyor, acik kume sag ustteki dokunuslari yutuyor.
+                  setMobilCizimKumesi(false);
+                  if (cizimModu) alanSecimiIptal();
+                  else {
+                    // Cizim baslarken panel de cekilir: kucuk ekranda
+                    // panel haritanin yarisini kapatiyor.
+                    setPanelAcik(false);
+                    alanSecimiBaslat();
+                  }
+                }}
+              >
+                <IconLasso className="h-[18px] w-[18px]" />
+              </MobilKumeDugmesi>
+
+              <MobilKumeDugmesi
+                etiket="Çizgi çiz"
+                aktif={cizgiAracıAktif}
+                onClick={() => {
+                  setMobilCizimKumesi(false);
+                  if (olcumModu) olcumIptal();
+                  else {
+                    setPanelAcik(false);
+                    olcumBaslat();
+                  }
+                }}
+              >
+                <IconRuler className="h-[18px] w-[18px]" />
+              </MobilKumeDugmesi>
+            </div>
+          )}
 
           <MobilAracDugmesi
-            etiket="Çizgi çiz"
-            aktif={olcumModu || olcumNoktalari.length >= 2}
+            etiket="Çizim araçları"
+            // Kume kapaliyken bile "cizim acik" okunabilmeli.
+            aktif={mobilCizimKumesi || alanAracıAktif || cizgiAracıAktif}
             onClick={() => {
-              if (olcumModu) olcumIptal();
-              else {
-                setPanelAcik(false);
-                olcumBaslat();
-              }
+              setMobilMenu(false);
+              setMobilKatman(false);
+              setMobilSifirlaOnayi(false);
+              setMobilCizimKumesi((a) => !a);
             }}
           >
-            <IconRuler className="h-5 w-5" />
+            <IconPencil className="h-5 w-5" />
           </MobilAracDugmesi>
-        </>
+        </div>
+      )}
+
+      {/* Sifirla kumenin ICINDE degil, cizim dugmesinin ALTINDA duruyor:
+          yalnizca cizimi degil tum calisma durumunu (secim, filtre,
+          ilce/mahalle) basa dondurur - bir cizim araci degil. Cizim ici
+          temizlik zaten CizimPaneli'nde.
+
+          Onay, SilOnayi desenindedir: ayri bir seride acilmaz, DUGMENIN
+          KENDISI iki secenege doner. Soru cumlesi yazilmaz - kirmizi
+          "Sıfırla" zaten neyin onaylandigini soyluyor. */}
+      {mobilSifirlaOnayi ? (
+        <div className="flex items-center gap-1 rounded-xl border border-red-200 bg-white/95 p-1 shadow-lg backdrop-blur-md">
+          <button
+            onClick={() => setMobilSifirlaOnayi(false)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500"
+            aria-label="Vazgeç"
+          >
+            <IconX className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => {
+              setMobilSifirlaOnayi(false);
+              sifirla();
+            }}
+            className="h-9 shrink-0 rounded-full bg-red-600 px-3 text-[13px] font-semibold text-white"
+          >
+            Sıfırla
+          </button>
+        </div>
+      ) : (
+        <MobilAracDugmesi
+          etiket="Sıfırla"
+          tehlike
+          onClick={() => {
+            setMobilCizimKumesi(false);
+            setMobilSifirlaOnayi(true);
+          }}
+        >
+          <IconRefresh className="h-5 w-5" />
+        </MobilAracDugmesi>
       )}
     </div>
   );
 
   const mobilKabuk = (
     <>
+      {/* Arama kalici olarak header'da durur, ama yalnizca buyutec + "Ara"
+          kadar yer kaplar: bir dugmenin arkasina saklanmasi gereksizdi,
+          satirin tamamini yemesi de. Odaklaninca alan kalan bosluga dogru
+          genisler. */}
       <header className="z-20 flex h-14 shrink-0 items-center gap-1 border-b border-slate-200 bg-white px-2">
-        {mobilArama ? (
-          /* Arama acikken header'in tamamini alir: dar ekranda hem logo hem
-             kullanilabilir genislikte bir arama alani sigmiyor. */
-          <>
-            <div className="min-w-0 flex-1">
-              <KonumArama
-                gorunenAlan={haritaGorunumu}
-                zorunluAlan={idariSinirKutusu}
-                onSecildi={(konum) => {
-                  setUcusHedefi({
-                    anahtar: crypto.randomUUID(),
-                    tip: "nokta",
-                    merkez: konum,
-                    zoom: 16,
-                  });
-                  setMobilArama(false);
-                }}
-              />
-            </div>
-            <button
-              onClick={() => setMobilArama(false)}
-              aria-label="Aramayı kapat"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-500"
-            >
-              <IconX className="h-5 w-5" />
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              onClick={() => {
-                setMobilKatman(false);
-                setMobilMenu(true);
-              }}
-              aria-label="Menüyü aç"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-500"
-            >
-              <IconMenu className="h-5 w-5" />
-            </button>
+        <button
+          onClick={() => {
+            setMobilKatman(false);
+            setMobilMenu(true);
+          }}
+          aria-label="Menüyü aç"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-500"
+        >
+          <IconMenu className="h-5 w-5" />
+        </button>
 
-            <div className="flex min-w-0 select-none items-center gap-1.5">
-              <LogoAmblem className="h-8 w-8 shrink-0" />
-              <h1 className="truncate text-[15px] font-bold tracking-tight text-slate-900">
-                Green<span className="text-emerald-600">Asset</span>
-              </h1>
-            </div>
+        <div className="flex min-w-0 select-none items-center gap-1.5">
+          <LogoAmblem className="h-8 w-8 shrink-0" />
+          <h1 className="truncate text-[15px] font-bold tracking-tight text-slate-900">
+            Green<span className="text-emerald-600">Asset</span>
+          </h1>
+        </div>
 
-            <div className="ml-auto flex shrink-0 items-center gap-0.5">
-              <button
-                onClick={() => setMobilArama(true)}
-                aria-label="Konum ara"
-                className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500"
-              >
-                <IconSearch className="h-5 w-5" />
-              </button>
-              <BildirimZili bildirimler={bildirimler} />
-            </div>
-          </>
-        )}
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          <KonumArama
+            gorunenAlan={haritaGorunumu}
+            zorunluAlan={idariSinirKutusu}
+            yerTutucu="Ara"
+            dar
+            genislikSinifi="w-[104px] focus-within:w-44 transition-[width]"
+            onSecildi={(konum) =>
+              setUcusHedefi({
+                anahtar: crypto.randomUUID(),
+                tip: "nokta",
+                merkez: konum,
+                zoom: 16,
+              })
+            }
+          />
+          <BildirimZili bildirimler={bildirimler} />
+        </div>
       </header>
 
       {aracPaneli}
 
       <div className="relative min-h-0 flex-1">
         <div className="absolute inset-0">{haritaBlogu}</div>
+
+        {/* Disariya dokunmak KAPATIR ama secili araci birakmaz: kullanici
+            cizmeye devam eder, kume yoldan cekilir. Sifirlama onayi da
+            aynı dokunusla vazgecilir - onay acik kalip yanlislikla
+            basilmasindansa kapansin. */}
+        {(mobilCizimKumesi || mobilSifirlaOnayi) && (
+          <button
+            aria-label={
+              mobilSifirlaOnayi ? "Sıfırlamadan vazgeç" : "Çizim araçlarını kapat"
+            }
+            onClick={() => {
+              setMobilCizimKumesi(false);
+              setMobilSifirlaOnayi(false);
+            }}
+            className="absolute inset-0 z-10 cursor-default"
+          />
+        )}
 
         {mobilAracYigini}
 
@@ -1846,9 +1993,9 @@ export default function App() {
         onKapat={() => setDetayAsset(null)}
         atayabilir={personel}
         ekipler={ekipSorgu.data}
-        onAtandi={() =>
-          queryClient.invalidateQueries({ queryKey: ["saha", "ekipler"] })
-        }
+        // Atama ekip yuklerini, gorev listelerini ve havuzu birlikte degistirir:
+        // tumu tek prefix'ten tazelenir (dar bir anahtar panoyu bayat birakirdi).
+        onAtandi={() => queryClient.invalidateQueries({ queryKey: ["saha"] })}
         // Iki modal ust uste binmesin diye duzenlemeye gecerken detay kapanir.
         onDuzenle={
           personel
@@ -1881,17 +2028,27 @@ export default function App() {
       {/* Haritadaki bir alana/cizgiye tiklandiginda acilan detay karti. */}
       <BolgeDetayModal
         bolge={detayBolge}
-        onKapat={() => setDetayBolge(null)}
+        onKapat={() => setDetayBolgeId(null)}
         onGit={bolgeyeGit}
         onSekilDuzenle={personel ? sekilDuzenlemeBaslat : undefined}
         // Ekibe aktarma/silme paneldeki kartla ayni islemler.
         ekipler={personel ? ekipSorgu.data : undefined}
         yonetebilir={personel}
-        onDegisti={() => queryClient.invalidateQueries({ queryKey: ["bolgeler"] })}
+        // Bolge atamasi ekip yukunu de degistirir (tek kota): harita
+        // isaretcisi ve saha panosu birlikte tazelenir.
+        // Soz DONDURULUR: modal tazelemenin bitmesini bekliyor, yoksa "islem
+        // bitti" yeni veriden once gelir ve secici eski atamayi gosterir.
+        onDegisti={() =>
+          Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["bolgeler"] }),
+            queryClient.invalidateQueries({ queryKey: ["saha"] }),
+          ])
+        }
         onSilindi={() => {
-          setDetayBolge(null);
+          setDetayBolgeId(null);
           setSeciliBolgeId(null);
           queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
+          queryClient.invalidateQueries({ queryKey: ["saha"] });
         }}
       />
 
@@ -1901,6 +2058,9 @@ export default function App() {
         onKapat={() => setBolgeTaslagi(null)}
         onKaydedildi={() => {
           queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
+          // Yeni kayit dogar dogmaz otomatik atanmis olabilir (bkz.
+          // crud/bolge.py::create_bolge): ekip yukleri de degisir.
+          queryClient.invalidateQueries({ queryKey: ["saha"] });
           // Sekil artik "Bölgeler" katmaninda; gecici cizim listesinde de
           // kalirsa iki kez gorunur ve alan ozetinde iki kez sayilirdi.
           const kaynak = bolgeTaslagi?.kaynak;
@@ -1934,9 +2094,11 @@ export default function App() {
         icerikSinifi=""
         onKapat={() => setUstModal(null)}
       >
-        {/* Ozet, liste/harita ile ayni suzulmus kumeyi kullanir. */}
+        {/* Ozet listeyle ayni kumeyi raporlar: alan secimi aktifken sayilar
+            secili alanin icini anlatir ("alanSecimiAktif" bunu yazili olarak
+            da soyler). Harita katmani bilincli olarak tam kalir. */}
         <Dashboard
-          data={varlikKatmanVeri}
+          data={varlikPanelVeri}
           alanSecimiAktif={tamamlananAlanlar.length > 0}
         />
       </Modal>
@@ -2028,12 +2190,15 @@ const SEKME_RENK_SINIFLARI: Record<
 function MobilAracDugmesi({
   etiket,
   aktif,
+  tehlike,
   rozet,
   onClick,
   children,
 }: {
   etiket: string;
   aktif?: boolean;
+  /** Geri alinamayan islem (Sifirla): dolgu yerine kirmizi ikon. */
+  tehlike?: boolean;
   rozet?: number;
   onClick: () => void;
   children: React.ReactNode;
@@ -2042,11 +2207,13 @@ function MobilAracDugmesi({
     <button
       onClick={onClick}
       aria-label={etiket}
-      aria-pressed={aktif}
+      aria-pressed={tehlike ? undefined : aktif}
       className={`relative flex h-11 w-11 items-center justify-center rounded-xl border shadow-lg backdrop-blur-md transition ${
         aktif
           ? "border-emerald-600 bg-emerald-600 text-white"
-          : "border-slate-200/80 bg-white/90 text-slate-600"
+          : tehlike
+            ? "border-red-200 bg-white/90 text-red-600"
+            : "border-slate-200/80 bg-white/90 text-slate-600"
       }`}
     >
       {children}
@@ -2055,6 +2222,40 @@ function MobilAracDugmesi({
           {rozet}
         </span>
       )}
+    </button>
+  );
+}
+
+/** Cizim kumesinin icindeki dugme. `MobilAracDugmesi`'nden kucuktur ve kendi
+ *  cercevesi yoktur: kabin (hap) kendisi zaten dokunmatik hedefi 44px'e
+ *  tasiyan bir yuzey, ic dugmeler onun bolmeleri. */
+function MobilKumeDugmesi({
+  etiket,
+  aktif,
+  tehlike,
+  onClick,
+  children,
+}: {
+  etiket: string;
+  aktif?: boolean;
+  tehlike?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={etiket}
+      aria-pressed={tehlike ? undefined : aktif}
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition ${
+        aktif
+          ? "bg-emerald-600 text-white"
+          : tehlike
+            ? "text-red-600"
+            : "text-slate-600"
+      }`}
+    >
+      {children}
     </button>
   );
 }

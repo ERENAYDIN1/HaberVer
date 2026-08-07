@@ -30,6 +30,10 @@ export interface Bolge {
   worker_id: string | null;
   worker_ad: string | null;
   assigned_at: string | null;
+  /** Isin dustugu yaka; kaydin temsil noktasindan (alan -> icindeki bir nokta,
+   *  cizgi -> hattin ortasi) backend'de cozulur. Elle atamada "karşı yaka"
+   *  uyarisi varliklardakiyle ayni bilgiye dayansin diye tasinir. */
+  yaka: string | null;
   /** Saha ekibi isi bitirdiyse dolu; null ise is devam ediyor. */
   tamamlandi_at: string | null;
   created_at: string;

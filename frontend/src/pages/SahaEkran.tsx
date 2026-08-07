@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { repairAsset } from "../api/assets";
 import { bolgelerim as bolgelerimGetir, bolgeTamamla } from "../api/bolgeler";
@@ -19,6 +19,7 @@ import KonumSecMap, {
 import {
   IconCheck,
   IconChevronRight,
+  IconKonum,
   IconLasso,
   IconLogout,
   IconMenu,
@@ -28,7 +29,15 @@ import {
   tipIkonu,
 } from "../components/icons";
 import Sheet from "../components/mobil/Sheet";
+import {
+  useCanliGuncelleme,
+  YEDEK_YOKLAMA_MS,
+} from "../hooks/useCanliGuncelleme";
 import { useMobil } from "../hooks/useMobil";
+import {
+  useYeniGorevler,
+  type YeniGorevBildirimi,
+} from "../hooks/useYeniGorevler";
 import { turAdi } from "../data/turSozlugu";
 import type { Bolge } from "../types/bolge";
 import { TALEP_SEKIL_ETIKETLERI } from "../types/report";
@@ -51,6 +60,21 @@ function sekilOlcusu(sekil: ReturnType<typeof gorevSekli>): string | null {
   return sekil.tip === "LineString"
     ? mesafeEtiketi(toplamMesafeMetre(sekil.halkalar[0]))
     : alanEtiketi(poligonAlaniM2(sekil.halkalar[0]));
+}
+
+/** Duyuru serididin basligi. Iki yon ayni seritte birikebilir (personel bir isi
+ *  alip yerine baskasini verebilir); baslik o yuzden hangi olaydan kac tane
+ *  oldugunu soyler, tek yon varsa onu adiyla anlatir. */
+function duyuruBasligi(isler: YeniGorevBildirimi[]): string {
+  const alinan = isler.filter((i) => i.yon === "kaldirildi").length;
+  const verilen = isler.length - alinan;
+  if (alinan === 0)
+    return verilen === 1 ? "Size yeni bir iş atandı" : `Size ${verilen} yeni iş atandı`;
+  if (verilen === 0)
+    return alinan === 1
+      ? "Bir işiniz geri alındı"
+      : `${alinan} işiniz geri alındı`;
+  return `${verilen} yeni iş atandı, ${alinan} iş geri alındı`;
 }
 
 /** Google Haritalar'da bu noktaya yol tarifi acar. */
@@ -95,6 +119,13 @@ export default function SahaEkran() {
   // Mobilde gorev listesi bir sheet: acilista yarim kademede durur ki ekip
   // hem isini hem haritadaki yerini ayni anda gorsun - ekranin tek isi bu.
   const [sheetAcik, setSheetAcik] = useState(true);
+  /** Haritanin gizli konum kontrolunu tetikler (mobildeki konum dugmesi). */
+  const konumTetikleRef = useRef<(() => void) | null>(null);
+
+  /** Canli kanal: atama/kaldirma sunucuda olur olmaz listeler tazelenir.
+   *  Durum arayuzde gosterilir - kanal kopmussa ekip listenin bir dakikaya
+   *  kadar bayat olabilecegini bilmeli. */
+  const canliDurum = useCanliGuncelleme(Boolean(user));
 
   // Konum yayini: acilista ve her 30 sn'de bir backend'e gonderilir.
   useEffect(() => {
@@ -130,10 +161,24 @@ export default function SahaEkran() {
     };
   }, []);
 
+  /* Is listeleri: ekip yeni atanan isi SAYFAYI YENILEMEDEN gormeli.
+     ANA YOL ARTIK CANLI KANAL (SSE): atama/kaldirma/tamamlama sunucuda olur
+     olmaz sinyal gelir ve ilgili sorgu tazelenir (bkz. useCanliGuncelleme).
+     Eskiden bunu 10 sn'lik yoklama yapiyordu; ekip basina dakikada ~12 istek
+     gidiyor ve degisiklik yine de yarim periyot gecikiyordu.
+
+     Yoklama KALDIRILMADI, yedege cekildi:
+       * `YEDEK_YOKLAMA_MS` - kanal sessizce olurse (proxy zaman asimi, uzun
+         uyuyan sekme) ekran en fazla 1 dk bayat kalir. "Hic guncellenmiyor"
+         durumu bir saha ekibi icin kabul edilemez.
+       * `refetchOnWindowFocus` - uygulamanin geneli bunu KAPATIR (main.tsx),
+         ama saha ekrani tersini ister: telefon cebe girip cikiyor, ekrana geri
+         donuldugu an liste taze olmali (kanal yeniden baglanirken de). */
   const gorevSorgu = useQuery({
     queryKey: ["saha", "gorevlerim"],
     queryFn: gorevlerim,
-    refetchInterval: 20000,
+    refetchInterval: YEDEK_YOKLAMA_MS,
+    refetchOnWindowFocus: true,
   });
   const gorevler = gorevSorgu.data?.features ?? [];
 
@@ -141,7 +186,8 @@ export default function SahaEkran() {
   const tamamlananSorgu = useQuery({
     queryKey: ["saha", "tamamlananlarim"],
     queryFn: tamamlananlarim,
-    refetchInterval: 20000,
+    refetchInterval: YEDEK_YOKLAMA_MS,
+    refetchOnWindowFocus: true,
   });
   const tamamlananlar = tamamlananSorgu.data?.features ?? [];
 
@@ -150,13 +196,55 @@ export default function SahaEkran() {
   const bolgeSorgu = useQuery({
     queryKey: ["saha", "bolgelerim"],
     queryFn: bolgelerimGetir,
-    refetchInterval: 60000,
+    // Bakim isiyle AYNI periyot: bolge/guzergah da ayni kotayi paylasan bir
+    // "gorev"dir ve ayni sekilde duyurulur, dolayisiyla ayni hizda ogrenilmeli.
+    // Uzun periyot atamanin ekibe ulasmasini 30 sn'ye kadar geciktiriyordu -
+    // bakim isi "az sonra", bolge "biraz sonra" gelmis gibi gorunuyordu.
+    refetchInterval: YEDEK_YOKLAMA_MS,
+    refetchOnWindowFocus: true,
   });
   const bolgeler = bolgeSorgu.data ?? [];
-  const aktifBolgeler = bolgeler.filter((b) => !b.tamamlandi_at);
+  // Memolu: yeni is tespiti bu diziye bakiyor, her render'da yeni bir referans
+  // uretilseydi fark hesabi bosuna her karede calisirdi.
+  const aktifBolgeler = useMemo(
+    () => (bolgeSorgu.data ?? []).filter((b) => !b.tamamlandi_at),
+    [bolgeSorgu.data]
+  );
+
+  /* --- "Size yeni iş atandı" duyurusu ---
+     Liste sessizce uzuyordu: yeni is siranin bir yerine giriyor, ekip fark
+     etmiyordu. Iki cekim arasindaki fark alinip ustte duyurulur.
+     Bakim isi ile bolge/guzergah AYRI DUYURULMAZ: ucu de ayni kotayi paylasan
+     tek bir "gorev" kavrami (bkz. CLAUDE.md), ekip icin hepsi "bugun yapilacak
+     is"tir - ayri seritler ayni olayi iki kez anlatirdi. */
+  const yeniGorevler = useYeniGorevler(gorevSorgu.data?.features, (g) => ({
+    id: g.properties.assignment_id,
+    ad: g.properties.name,
+    tur: "bakım",
+  }));
+  // Yalnizca AKTIF kayitlar: tamamlanmis bir bolge geri alininca listeye
+  // "yeni" gibi girer, o gercekten yeni bir istir ve duyurulmalidir.
+  const yeniBolgeler = useYeniGorevler(aktifBolgeler, (b) => ({
+    id: b.id,
+    ad: b.ad,
+    tur: b.tip === "alan" ? "görev bölgesi" : "güzergâh",
+  }));
+  const yeniIsler = useMemo(
+    () => [...yeniGorevler.yeniler, ...yeniBolgeler.yeniler],
+    [yeniGorevler.yeniler, yeniBolgeler.yeniler]
+  );
+  const geriAlinanSayisi = yeniIsler.filter((i) => i.yon === "kaldirildi").length;
+  const yeniAtananSayisi = yeniIsler.length - geriAlinanSayisi;
+  const yeniIsleriKapat = () => {
+    yeniGorevler.temizle();
+    yeniBolgeler.temizle();
+  };
   const tamamlananBolgeler = bolgeler.filter((b) => b.tamamlandi_at);
   const aktifAlanlar = aktifBolgeler.filter((b) => b.tip === "alan");
   const aktifGuzergahlar = aktifBolgeler.filter((b) => b.tip === "cizgi");
+  // Ekip icin bolge/guzergah ayri bir kategori degil, "bugun yapilacak is";
+  // sayac da bu yuzden tek.
+  const aktifIsSayisi = gorevler.length + aktifBolgeler.length;
 
   // Haritada yalnizca aktif kayitlar cizilir; tamamlananlar listede durur.
   const bolgeAlanlari = useMemo<HaritaAlani[]>(
@@ -265,6 +353,11 @@ export default function SahaEkran() {
   const tamirEt = async (assetId: string, ad: string) => {
     setTamirEdilen(assetId);
     try {
+      // Is aktif listeden DUSER; ekibin kendi tamamlamasi oldugu icin
+      // "isiniz alindi" diye duyurulmaz. Muafiyet assignment_id uzerinden
+      // kurulur - duyuru kumesinin anahtari odur, asset_id degil.
+      const gorev = gorevler.find((g) => g.properties.asset_id === assetId);
+      if (gorev) yeniGorevler.kendiIslemi(gorev.properties.assignment_id);
       await repairAsset(assetId);
       // Is silinmez, "Tamamlanan İşler" listesine taşınır.
       await queryClient.invalidateQueries({ queryKey: ["saha"] });
@@ -281,6 +374,10 @@ export default function SahaEkran() {
   const bolgeDurumDegis = async (id: string, ad: string, tamamlandi: boolean) => {
     setBolgeIslemde(id);
     try {
+      // Iki yon de ekibin KENDI islemi: tamamlama kaydi aktif listeden dusurur,
+      // geri alma listeye dondurur. Ikisi de duyurudan muaftir - sonucu zaten
+      // asagidaki islem seridinde yaziyor (bakim gorevindeki desenin aynisi).
+      yeniBolgeler.kendiIslemi(id);
       await bolgeTamamla(id, tamamlandi);
       await queryClient.invalidateQueries({ queryKey: ["saha"] });
       setDurum({
@@ -300,6 +397,10 @@ export default function SahaEkran() {
   const geriAl = async (assignmentId: string, ad: string) => {
     setGeriAlinan(assignmentId);
     try {
+      // Kayit aktif listeye GERI DONER (ayni assignment_id, bkz.
+      // crud/assignment.py::tamamlanani_geri_al). Duyuru "size is ATANDI"
+      // dediginden ekibin kendi tikladigi bu donusu haber vermemeli.
+      yeniGorevler.kendiIslemi(assignmentId);
       await tamamlananiGeriAl(assignmentId);
       setGeriAlinanlar((prev) => new Set(prev).add(assignmentId));
       await queryClient.invalidateQueries({ queryKey: ["saha"] });
@@ -321,7 +422,12 @@ export default function SahaEkran() {
           <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 p-4 backdrop-blur-sm">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <h2 className="text-sm font-semibold text-slate-900">Görevlerim</h2>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Görevlerim
+                  <span className="ml-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold tabular-nums text-amber-700">
+                    {aktifIsSayisi}
+                  </span>
+                </h2>
                 <p className="mt-0.5 text-xs text-slate-500">
                   Tamamladıkça "Tamir Edildi" ile kapatın.
                 </p>
@@ -347,32 +453,77 @@ export default function SahaEkran() {
               </span>
             </div>
 
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <OzetKutusu
-                etiket="Aktif"
-                deger={gorevler.length}
-                renk="amber"
-                ikon={IconWarning}
-              />
-              <OzetKutusu
-                etiket="Bitti"
-                deger={tamamlananlar.length + tamamlananBolgeler.length}
-                renk="emerald"
-                ikon={IconCheck}
-              />
-              <OzetKutusu
-                etiket="Bölge"
-                deger={aktifBolgeler.length}
-                renk="violet"
-                ikon={IconLasso}
-              />
-            </div>
+            {/* Canli kanal YALNIZCA KOPUKKEN yazilir: saglikli durumda ikinci
+                bir yesil rozet, yanindaki "Konum canlı" ile karisip gurultu
+                olurdu. Kopukluk ise ekibin bilmesi gereken bir sey - liste bir
+                dakikaya kadar bayat kalabilir (yedek yoklama devrede). */}
+            {canliDurum === "kopuk" && (
+              <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-700">
+                <IconWarning className="mt-px h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Canlı bağlantı koptu; liste yine güncelleniyor ama bir dakikaya
+                  kadar gecikebilir.
+                </span>
+              </p>
+            )}
 
             {konumHatasi && (
               <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-700">
                 <IconWarning className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>{konumHatasi}</span>
               </p>
+            )}
+
+            {/* Yeni atanan is duyurusu. Ozet blogunun icinde ve YAPISKAN: liste
+                kaydirilmis olsa bile gorunur kalir, yoksa duyuru ekibin
+                bakmadigi bir yerde acilirdi. `aria-live` ile ekran okuyucuya da
+                bildirilir - is atamasi kullanicinin baslatmadigi bir olaydir. */}
+            {yeniIsler.length > 0 && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="mt-3 rounded-lg border border-sky-300 bg-sky-50 px-2.5 py-2 text-xs text-sky-900"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-semibold">{duyuruBasligi(yeniIsler)}</span>
+                  <button
+                    onClick={yeniIsleriKapat}
+                    className="shrink-0 font-medium opacity-70 hover:opacity-100"
+                    aria-label="Bildirimi kapat"
+                  >
+                    ×
+                  </button>
+                </div>
+                <ul className="mt-1 space-y-0.5">
+                  {yeniIsler.map((is) => {
+                    const alindi = is.yon === "kaldirildi";
+                    return (
+                      <li
+                        key={`${is.yon}-${is.id}`}
+                        className="flex items-baseline gap-1.5"
+                      >
+                        <span className={alindi ? "text-amber-500" : "text-sky-400"}>
+                          {alindi ? "−" : "•"}
+                        </span>
+                        <span
+                          className={`min-w-0 flex-1 truncate font-medium ${
+                            alindi ? "text-amber-900 line-through decoration-amber-400" : ""
+                          }`}
+                        >
+                          {is.ad}
+                        </span>
+                        <span
+                          className={`shrink-0 text-[10px] ${
+                            alindi ? "text-amber-700" : "text-sky-600"
+                          }`}
+                        >
+                          {alindi ? `${is.tur} · geri alındı` : is.tur}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
             {durum && (
               <div
@@ -394,90 +545,22 @@ export default function SahaEkran() {
             )}
           </div>
 
-          {/* Ekibe atanmis calisma alanlari ve hatlar; haritada kesik cizgili.
-              Tamamlananlar asagidaki "Tamamlanan İşler"e duser. */}
-          {aktifBolgeler.length > 0 && (
-            <div className="space-y-4 border-b border-slate-200 bg-white px-4 py-3.5">
-              {aktifAlanlar.length > 0 && (
-                <section>
-                  <BolumBasligi
-                    baslik="Görev Bölgem"
-                    altBaslik="Çalışacağım alan"
-                    ikon={IconLasso}
-                    renk="violet"
-                    sayi={aktifAlanlar.length}
-                  />
-                  <ul className="mt-2 space-y-1.5">
-                    {aktifAlanlar.map((b) => (
-                      <BolgeKarti
-                        key={b.id}
-                        bolge={b}
-                        olcu={b.alan_m2 != null ? alanEtiketi(b.alan_m2) : "Alan"}
-                        vurgu="hover:border-violet-300"
-                        islemde={bolgeIslemde === b.id}
-                        onayBekliyor={bolgeOnayBekleyen === b.id}
-                        onGit={() =>
-                          setUcus({
-                            anahtar: crypto.randomUUID(),
-                            merkez: b.noktalar[0][0],
-                            zoom: 13,
-                          })
-                        }
-                        onOnayIste={() => setBolgeOnayBekleyen(b.id)}
-                        onVazgec={() => setBolgeOnayBekleyen(null)}
-                        onTamamla={() => bolgeDurumDegis(b.id, b.ad, true)}
-                      />
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              {aktifGuzergahlar.length > 0 && (
-                <section>
-                  <BolumBasligi
-                    baslik="Güzergâhlarım"
-                    altBaslik="İzleyeceğim hat"
-                    ikon={IconRoute}
-                    renk="blue"
-                    sayi={aktifGuzergahlar.length}
-                  />
-                  <ul className="mt-2 space-y-1.5">
-                    {aktifGuzergahlar.map((b) => (
-                      <BolgeKarti
-                        key={b.id}
-                        bolge={b}
-                        olcu={
-                          b.uzunluk_m != null ? mesafeEtiketi(b.uzunluk_m) : "Güzergâh"
-                        }
-                        vurgu="hover:border-blue-300"
-                        islemde={bolgeIslemde === b.id}
-                        onayBekliyor={bolgeOnayBekleyen === b.id}
-                        onGit={() =>
-                          setUcus({
-                            anahtar: crypto.randomUUID(),
-                            merkez: b.noktalar[0][0],
-                            zoom: 14,
-                          })
-                        }
-                        onOnayIste={() => setBolgeOnayBekleyen(b.id)}
-                        onVazgec={() => setBolgeOnayBekleyen(null)}
-                        onTamamla={() => bolgeDurumDegis(b.id, b.ad, true)}
-                      />
-                    ))}
-                  </ul>
-                </section>
-              )}
-            </div>
-          )}
-
-          <div className="min-h-0 flex-1 p-4">
+          {/* Uc kategori tek akista, sabit sirayla: once tek tek bakim isleri,
+              sonra calisilacak alan, en sonda izlenecek hat. Sira is gununun
+              sirasidir - ekip once noktasal isleri yapar, bolge/guzergah
+              gun boyu suren kapsayici islerdir.
+              AYRIM DILI: her kategori kendi rengini SOLDAKI dikey seritte
+              tasir (kategori sinirini goz tek bakista bulur), kategori icindeki
+              isler ise beyaz kartlar olarak bosluklarla ayrilir. Boylece iki
+              ayrim farkli gorsel kanal kullanir ve birbirine karismaz. */}
+          <div className="min-h-0 flex-1 space-y-4 p-4">
             {gorevSorgu.isLoading ? (
               <p className="text-xs text-slate-400">Yükleniyor…</p>
             ) : gorevSorgu.isError ? (
               <p className="text-xs text-red-600">
                 Görevler yüklenemedi: {(gorevSorgu.error as Error).message}
               </p>
-            ) : gorevler.length === 0 ? (
+            ) : aktifIsSayisi === 0 ? (
               <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-4 py-8 text-center">
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-500">
                   <IconCheck className="h-5 w-5" />
@@ -490,16 +573,15 @@ export default function SahaEkran() {
                 </p>
               </div>
             ) : (
-              <ul className="space-y-2.5">
-                <li>
-                  <BolumBasligi
-                    baslik="Bakım İşlerim"
-                    altBaslik="En yakından uzağa"
-                    ikon={IconWarning}
-                    renk="amber"
-                    sayi={gorevler.length}
-                  />
-                </li>
+              <>
+              {gorevler.length > 0 && (
+              <Kategori
+                baslik="Bakım İşlerim"
+                altBaslik="En yakından uzağa"
+                ikon={IconWarning}
+                renk="amber"
+                sayi={gorevler.length}
+              >
                 {siraliGorevler.map(({ gorev: g, mesafe }, sira) => {
                   const p = g.properties;
                   const Ikon = tipIkonu(p.type);
@@ -510,7 +592,7 @@ export default function SahaEkran() {
                   return (
                     <li
                       key={p.assignment_id}
-                      className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-emerald-300 hover:shadow"
+                      className="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm transition hover:border-emerald-400 hover:shadow-md"
                     >
                       <button
                         onClick={() =>
@@ -728,13 +810,81 @@ export default function SahaEkran() {
                     </li>
                   );
                 })}
-              </ul>
+              </Kategori>
+              )}
+
+              {aktifAlanlar.length > 0 && (
+                <Kategori
+                  baslik="Görev Bölgelerim"
+                  altBaslik="Çalışacağım alan"
+                  ikon={IconLasso}
+                  renk="violet"
+                  sayi={aktifAlanlar.length}
+                >
+                  {aktifAlanlar.map((b) => (
+                    <BolgeKarti
+                      key={b.id}
+                      bolge={b}
+                      olcu={b.alan_m2 != null ? alanEtiketi(b.alan_m2) : "Alan"}
+                      vurgu="hover:border-violet-300"
+                      islemde={bolgeIslemde === b.id}
+                      onayBekliyor={bolgeOnayBekleyen === b.id}
+                      onGit={() =>
+                        setUcus({
+                          anahtar: crypto.randomUUID(),
+                          merkez: b.noktalar[0][0],
+                          zoom: 13,
+                        })
+                      }
+                      onOnayIste={() => setBolgeOnayBekleyen(b.id)}
+                      onVazgec={() => setBolgeOnayBekleyen(null)}
+                      onTamamla={() => bolgeDurumDegis(b.id, b.ad, true)}
+                    />
+                  ))}
+                </Kategori>
+              )}
+
+              {aktifGuzergahlar.length > 0 && (
+                <Kategori
+                  baslik="Güzergâhlarım"
+                  altBaslik="İzleyeceğim hat"
+                  ikon={IconRoute}
+                  renk="blue"
+                  sayi={aktifGuzergahlar.length}
+                >
+                  {aktifGuzergahlar.map((b) => (
+                    <BolgeKarti
+                      key={b.id}
+                      bolge={b}
+                      olcu={
+                        b.uzunluk_m != null ? mesafeEtiketi(b.uzunluk_m) : "Güzergâh"
+                      }
+                      vurgu="hover:border-blue-300"
+                      islemde={bolgeIslemde === b.id}
+                      onayBekliyor={bolgeOnayBekleyen === b.id}
+                      onGit={() =>
+                        setUcus({
+                          anahtar: crypto.randomUUID(),
+                          merkez: b.noktalar[0][0],
+                          zoom: 14,
+                        })
+                      }
+                      onOnayIste={() => setBolgeOnayBekleyen(b.id)}
+                      onVazgec={() => setBolgeOnayBekleyen(null)}
+                      onTamamla={() => bolgeDurumDegis(b.id, b.ad, true)}
+                    />
+                  ))}
+                </Kategori>
+              )}
+              </>
             )}
 
             {/* Tamamlanan isler silinmez; yanlislikla isaretlenirse buradan
-                geri alinabilir. */}
+                geri alinabilir. Aktif kategorilerden KALIN bir cizgiyle ayrilir:
+                "yapilacaklar" ile "yapilanlar" arasindaki sinir, uc kategori
+                arasindaki sinirdan daha buyuktur. */}
             {tamamlananlar.length + tamamlananBolgeler.length > 0 && (
-              <div className="mt-5 border-t border-slate-200 pt-4">
+              <div className="mt-6 border-t-4 border-slate-200 pt-4">
                 <BolumBasligi
                   baslik="Tamamlanan İşler"
                   altBaslik="Geri alınabilir"
@@ -823,6 +973,8 @@ export default function SahaEkran() {
     </>
   );
 
+  // Mobilde konum dugmesi haritanin kosesinde degil, vatandas ekranindakiyle
+  // ayni gorunumde ayri bir dugme olarak cizilir (bkz. asagidaki yigin).
   const harita = (
     <KonumSecMap
       secili={null}
@@ -832,6 +984,8 @@ export default function SahaEkran() {
       alanlar={haritaAlanlari}
       benimKonumum={benimKonumum}
       ucus={ucus}
+      konumDugmesi={mobil ? "gizli" : "harita"}
+      konumRef={konumTetikleRef}
     />
   );
 
@@ -868,6 +1022,21 @@ export default function SahaEkran() {
         <div className="relative min-h-0 flex-1">
           <div className="absolute inset-0">{harita}</div>
 
+          {/* Konum dugmesi: vatandas ekranindakiyle birebir ayni gorunum.
+              Sheet acikken haritanin alt yarisi zaten panelin altinda kaliyor,
+              dugme de orada gorunmez olurdu; seritle ayni kosulda cizilir ve
+              seridin uzerinde rahat bir bosluga oturur. */}
+          {!sheetAcik && (
+            <button
+              type="button"
+              onClick={() => konumTetikleRef.current?.()}
+              aria-label="Konumumu göster"
+              className="guvenli-alt-bosluk absolute bottom-28 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md transition active:scale-95"
+            >
+              <IconKonum className="h-5 w-5" />
+            </button>
+          )}
+
           {/* Sheet kapaliyken haritayi tam gormek icin; seritteki sayilar
               paneli acmadan da "kac isim var" sorusunu cevaplar. */}
           {!sheetAcik && (
@@ -875,20 +1044,40 @@ export default function SahaEkran() {
               type="button"
               onClick={() => setSheetAcik(true)}
               aria-label="Görevlerimi aç"
-              className="guvenli-alt absolute inset-x-0 bottom-0 z-30 flex items-center gap-2 border-t border-slate-200 bg-white px-4 py-3 text-left"
+              className="guvenli-alt-bosluk absolute inset-x-3 bottom-3 z-20 rounded-2xl border border-slate-200 bg-white px-4 pb-3 pt-2 text-left shadow-lg shadow-slate-900/10 transition active:scale-[0.99]"
             >
-              <span className="text-sm font-semibold text-slate-800">
-                Görevlerim
-              </span>
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                {gorevler.length} aktif
-              </span>
-              {aktifBolgeler.length > 0 && (
-                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
-                  {aktifBolgeler.length} bölge
+              <span className="mx-auto mb-2 block h-1 w-9 rounded-full bg-slate-300" />
+              <span className="flex items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white">
+                  <IconWarning className="h-4 w-4" />
                 </span>
-              )}
-              <IconChevronRight className="ml-auto h-4 w-4 -rotate-90 text-slate-400" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold leading-tight text-slate-900">
+                    Görevlerim
+                  </span>
+                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                      {aktifIsSayisi} aktif iş
+                    </span>
+                    {/* Duyuru serit ustunde de gorunmeli: sheet kapaliyken
+                        paneldeki kutu ekranda hic olmuyor ve degisiklik yine
+                        sessizce gelmis olurdu. Iki yon ayri rozet: "1 yeni"
+                        yazan bir serit, aslinda isi ALINMIS ekibi yanlis
+                        yonlendirirdi. */}
+                    {yeniAtananSayisi > 0 && (
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                        {yeniAtananSayisi} yeni
+                      </span>
+                    )}
+                    {geriAlinanSayisi > 0 && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                        {geriAlinanSayisi} geri alındı
+                      </span>
+                    )}
+                  </span>
+                </span>
+                <IconChevronRight className="ml-auto h-5 w-5 shrink-0 -rotate-90 text-slate-400" />
+              </span>
             </button>
           )}
 
@@ -1003,6 +1192,54 @@ const BOLUM_RENKLERI = {
   },
 };
 
+/** Kategori kabugu: uc is turunu (bakim / bolge / guzergah) birbirinden
+ *  ayiran blok. AYRIM IKI KANALDAN GIDER, boylece kategori siniri ile kart
+ *  siniri birbirine karismaz:
+ *    * KATEGORI: kendi renginde SOLDAKI dikey serit + ayni rengin cok acik
+ *      zemini + baslik. Blok, icindeki kartlari gorsel olarak kucaklar.
+ *    * KART: blogun zemini uzerinde beyaz, kenarlikli, aralarinda bosluk.
+ *  Sadece baslik kullanilsaydi (eski hali) uzun bir listede kaydirinca
+ *  hangi baslibin altinda olundugu kayboluyordu; serit her kaydirma
+ *  konumunda gorunur kalir. */
+const KATEGORI_RENKLERI = {
+  amber: "border-l-amber-500 bg-amber-50/40",
+  violet: "border-l-violet-500 bg-violet-50/40",
+  blue: "border-l-blue-500 bg-blue-50/40",
+};
+
+function Kategori({
+  baslik,
+  altBaslik,
+  ikon,
+  renk,
+  sayi,
+  children,
+}: {
+  baslik: string;
+  altBaslik: string;
+  ikon: (p: { className?: string }) => React.ReactElement;
+  renk: keyof typeof KATEGORI_RENKLERI;
+  sayi: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className={`overflow-hidden rounded-r-xl border border-l-4 border-slate-200 ${KATEGORI_RENKLERI[renk]}`}
+    >
+      <div className="px-2.5 pt-2.5">
+        <BolumBasligi
+          baslik={baslik}
+          altBaslik={altBaslik}
+          ikon={ikon}
+          renk={renk}
+          sayi={sayi}
+        />
+      </div>
+      <ul className="space-y-2 p-2.5">{children}</ul>
+    </section>
+  );
+}
+
 /** Sol paneldeki bolum basligi (BolgePaneli'ndeki ile ayni dil): ekran uc ayri
  *  is turunu yan yana listeledigi icin bilincli olarak belirgin. */
 function BolumBasligi({
@@ -1067,14 +1304,16 @@ function BolgeKarti({
   onTamamla: () => void;
 }) {
   return (
-    <li className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <li className="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm transition hover:shadow-md">
       <button
         onClick={onGit}
-        className={`flex w-full items-stretch gap-2.5 p-2.5 text-left transition hover:shadow ${vurgu}`}
+        className={`flex w-full items-stretch gap-2.5 p-2.5 text-left transition ${vurgu}`}
       >
-        {/* Kaydin rengini tasiyan ince dikey serit. */}
+        {/* Kaydin KENDI rengini tasiyan dikey serit (bolgenin haritadaki
+            rengi). Kategori seridinden farkli bir eksende: soldaki kalin
+            serit "hangi kategori", buradaki "haritada hangi kayit". */}
         <span
-          className="w-px shrink-0 rounded-full"
+          className="w-1 shrink-0 rounded-full"
           style={{ background: bolge.renk }}
         />
         <span className="min-w-0 flex-1">
@@ -1132,38 +1371,6 @@ function DetaySatiri({ etiket, deger }: { etiket: string; deger: string }) {
       <dd className="min-w-0 truncate text-right font-medium text-slate-700">
         {deger}
       </dd>
-    </div>
-  );
-}
-
-/** Ozet kutusu renkleri; Tailwind JIT sablon dizgilerini taramaz. */
-const OZET_RENKLERI: Record<string, string> = {
-  amber: "border-amber-200 bg-amber-50 text-amber-700",
-  emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  violet: "border-violet-200 bg-violet-50 text-violet-700",
-};
-
-/** Ust ozetteki kucuk sayac kutusu (aktif is / biten is / gorev bolgesi). */
-function OzetKutusu({
-  etiket,
-  deger,
-  renk,
-  ikon: Ikon,
-}: {
-  etiket: string;
-  deger: number;
-  renk: keyof typeof OZET_RENKLERI;
-  ikon: (p: { className?: string }) => React.ReactElement;
-}) {
-  return (
-    <div
-      className={`flex flex-col items-center gap-0.5 rounded-lg border px-2 py-1.5 ${OZET_RENKLERI[renk]}`}
-    >
-      <Ikon className="h-3.5 w-3.5" />
-      <span className="text-base font-bold leading-none tabular-nums">{deger}</span>
-      <span className="text-[10px] font-medium uppercase tracking-wide opacity-80">
-        {etiket}
-      </span>
     </div>
   );
 }

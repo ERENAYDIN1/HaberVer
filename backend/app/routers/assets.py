@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from .. import olaylar
 from ..crud import asset as crud
 from ..crud import assignment as assignment_crud
 from ..crud import tur as tur_crud
@@ -32,6 +33,17 @@ def _tur_dogrula(db: Session, tur: AssetType) -> None:
         )
 
 
+def _varlik_degisti() -> None:
+    """Varlik listesi degisti.
+
+    `saha` da yayinlanir: bir varligin durumu `iyi`ye cekilince aktif gorev
+    kapanir ve havuz yeniden dagitilir (crud/asset.py::update_asset ->
+    gorev_tamamla), yani baska bir ekibe o an yeni is dusmus olabilir. Silme de
+    ayni sekilde ekibin listesinden bir isi dusurur."""
+    olaylar.yayinla("assets")
+    olaylar.yayinla("saha")
+
+
 def _kapsamda(row, alan: Kapsam):
     """Kapsam disindaki bir varlik icin 404 - 403 degil. Varligin VARLIGI da
     baska departmanin bilgisidir; "yetkin yok" demek kaydin var oldugunu
@@ -56,6 +68,7 @@ def create_asset(
     _tur_dogrula(db, data.type)
     alan.dogrula(data.type)
     row = crud.create_asset(db, data, actor=user)
+    _varlik_degisti()
     return AssetFeature.from_row(row)
 
 
@@ -130,6 +143,7 @@ def update_asset(
     row = crud.update_asset(db, asset_id, data, actor=user)
     if row is None:
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")
+    _varlik_degisti()
     return AssetFeature.from_row(row)
 
 
@@ -170,6 +184,7 @@ def repair_asset(
     row = crud.update_asset(db, asset_id, AssetUpdate(status=AssetStatus.iyi), actor=user)
     if row is None:
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")
+    _varlik_degisti()
     return AssetFeature.from_row(row)
 
 
@@ -184,3 +199,4 @@ def delete_asset(
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")
     if not crud.delete_asset(db, asset_id, actor=user):
         raise HTTPException(status_code=404, detail="Varlik bulunamadi")
+    _varlik_degisti()

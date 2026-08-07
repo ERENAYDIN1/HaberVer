@@ -1,6 +1,6 @@
 ﻿import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ilSiniri } from "../api/sinirlar";
 import { HARITA_STILLERI, type HaritaStilId } from "../data/mapStyles";
@@ -190,6 +190,10 @@ interface MapViewProps {
   ekipDepartmanlari?: EkipDepartmanBilgisi;
   /** Ekip popup'indaki bir is satirina tiklaninca ilgili varligin id'siyle. */
   onEkipGorevSec?: (assetId: string) => void;
+  /** Ayni popup'taki bolge/guzergah satirina tiklaninca kaydin id'siyle.
+   *  Gorev tek kavram oldugu icin satirlar ayni listede durur, yalnizca
+   *  actiklari detay farklidir. */
+  onEkipBolgeSec?: (bolgeId: string) => void;
   /** Haritada gosterilecek kaydedilmis bolgeler/guzergahlar. */
   bolgeler?: Bolge[];
   onBolgeDetay?: (id: string) => void;
@@ -231,6 +235,7 @@ export default function MapView({
   ekipler,
   ekipDepartmanlari,
   onEkipGorevSec,
+  onEkipBolgeSec,
   bolgeler,
   onBolgeDetay,
   seciliBolgeId,
@@ -263,6 +268,15 @@ export default function MapView({
   const sekilTaslakRef = useRef<[number, number][][]>([]);
   /** Canli ekip konumlari; DOM marker olduklari icin stil degisiminden etkilenmez. */
   const ekipMarkerlariRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  /** Harita ornegi STATE olarak da tutulur (ref'in yaninda): ekip marker'lari
+   *  katman degil DOM marker oldugu icin `kaynaklariHazirla` onlari yeniden
+   *  kurmaz, senkronlari yalnizca kendi effect'inde olur. O effect sadece
+   *  `ekipler` degisince calissaydi, harita yeniden kuruldugunda (StrictMode'un
+   *  cift mount'u, kapsayicinin yeniden monte olmasi) marker'lar yeni haritaya
+   *  hic eklenmez, veri bir sonraki kez DEGISENE kadar eski/eksik kalirdi -
+   *  katmani kapatip acmak da tam olarak bunu, yani prop kimligini
+   *  degistirdigi icin duzeltiyordu. */
+  const [haritaOrnegi, setHaritaOrnegi] = useState<maplibregl.Map | null>(null);
   /** Istanbul il siniri: bir kez getirilir, stil degisiminde maskeye tekrar uygulanir. */
   const istanbulSiniriRef = useRef<[number, number][][] | null>(null);
 
@@ -300,6 +314,7 @@ export default function MapView({
   const onVarlikDetayRef = useRef(onVarlikDetay);
   const onTalepDetayRef = useRef(onTalepDetay);
   const onEkipGorevSecRef = useRef(onEkipGorevSec);
+  const onEkipBolgeSecRef = useRef(onEkipBolgeSec);
   /** Cizim/olcum sirasinda son bilinen fare konumu (elastik cizgi icin). */
   const sonFareRef = useRef<[number, number] | null>(null);
   /** Son secim haritadan mi yapildi: flyTo zoom/suresi buna gore secilir. */
@@ -333,6 +348,7 @@ export default function MapView({
     onVarlikDetayRef.current = onVarlikDetay;
     onTalepDetayRef.current = onTalepDetay;
     onEkipGorevSecRef.current = onEkipGorevSec;
+    onEkipBolgeSecRef.current = onEkipBolgeSec;
   });
 
   // Katman dinleyicileri sabit referansta tutulur ki stil degisiminde
@@ -492,13 +508,15 @@ export default function MapView({
     if (map) dinamikUygula(map);
   });
 
-  /** Alan buyuklugu etiketi icin stillenmis DOM elemani. */
+  /** Alan buyuklugu etiketi icin stillenmis DOM elemani.
+   *
+   *  `harita-etiket` sinifi metin netligini tasir: MapLibre marker'i
+   *  `translate(-50%,-50%)` ile konumlandirdigi icin TEK sayili bir genislik/
+   *  yukseklik yarim piksele duser ve metin bulaniklasir - ekip popup'indaki
+   *  sorunun aynisi (bkz. index.css). */
   function etiketElemaniOlustur(): HTMLDivElement {
     const el = document.createElement("div");
-    el.style.cssText =
-      "pointer-events:none; background:rgba(15,23,42,0.85); color:#fff; " +
-      "font:600 11px system-ui,-apple-system,sans-serif; padding:2px 7px; " +
-      "border-radius:4px; white-space:nowrap;";
+    el.className = "harita-etiket";
     return el;
   }
 
@@ -724,9 +742,12 @@ export default function MapView({
       kalem.textContent = "✎";
       kalem.title = "Adı değiştir";
       kalem.setAttribute("aria-label", "Adı değiştir");
+      // Dolgu ve satir yuksekligi CIFT: flex satirinda ortalanan bir kutu tek
+      // olcude olursa yarim piksele oturup metni bulaniklastirir (bkz. index.css
+      // `.harita-etiket`).
       kalem.style.cssText =
         "pointer-events:auto; cursor:pointer; border:0; background:transparent; " +
-        "color:#fff; opacity:0.6; padding:0 1px; font-size:11px; line-height:1;";
+        "color:#fff; opacity:0.6; padding:0 2px; font-size:11px; line-height:16px;";
       kalem.addEventListener("mouseenter", () => (kalem.style.opacity = "1"));
       kalem.addEventListener("mouseleave", () => (kalem.style.opacity = "0.6"));
       // Kalem altindaki alanin popup'ini acmasin, haritayi kaydirmasin.
@@ -1405,6 +1426,7 @@ export default function MapView({
       attributionControl: false,
     });
     mapRef.current = map;
+    setHaritaOrnegi(map);
     onHaritaHazirRef.current?.(map);
 
     map.addControl(new maplibregl.NavigationControl(), "bottom-right");
@@ -1447,6 +1469,7 @@ export default function MapView({
       ekipMarkerlari.clear();
       map.remove();
       mapRef.current = null;
+      setHaritaOrnegi(null);
       hazirRef.current = false;
       onHaritaHazirRef.current?.(null);
     };
@@ -1589,9 +1612,17 @@ export default function MapView({
   }, [olcumNoktalari]);
 
   // --- Canli saha ekibi konumlarini (DOM marker) senkronla ---
+  // Bagimliliklar arasinda HARITA ORNEGI de var: harita yeniden kurulursa
+  // marker'lar yeni haritaya bu effect disinda eklenmez (bkz. `haritaOrnegi`).
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
+    const map = haritaOrnegi;
+    if (!map) {
+      // Harita gitti: eski marker'lar olu bir haritaya bagli, kayit tutulursa
+      // yeni harita kuruldugunda "zaten var" sayilip hic eklenmezler.
+      for (const marker of ekipMarkerlariRef.current.values()) marker.remove();
+      ekipMarkerlariRef.current.clear();
+      return;
+    }
     const guncel = new Set<string>();
     /** Ekibin mudurlugunun rengi/adi; departmansiz ekip varsayilan renkte. */
     const departmanBilgisi = (e: EkipGorevleri) =>
@@ -1623,13 +1654,18 @@ export default function MapView({
           if (!kapsayici || kapsayici.dataset.gorevBagli) return;
           kapsayici.dataset.gorevBagli = "1";
           kapsayici.addEventListener("click", (ev) => {
+            // Tekil is -> varlik detayi, bolge/guzergah -> bolge detayi. Ikisi
+            // ayni listede oldugu icin tek dinleyici iki oznitelige de bakar.
             const hedef = (ev.target as HTMLElement | null)?.closest<HTMLElement>(
-              "[data-gorev-asset]"
+              "[data-gorev-asset],[data-gorev-bolge]"
             );
-            const assetId = hedef?.dataset.gorevAsset;
-            if (!assetId) return;
+            if (!hedef) return;
+            const assetId = hedef.dataset.gorevAsset;
+            const bolgeId = hedef.dataset.gorevBolge;
+            if (!assetId && !bolgeId) return;
             ev.stopPropagation();
-            onEkipGorevSecRef.current?.(assetId);
+            if (assetId) onEkipGorevSecRef.current?.(assetId);
+            else if (bolgeId) onEkipBolgeSecRef.current?.(bolgeId);
           });
         });
         const yeni = new maplibregl.Marker({ element: el, anchor: "bottom" })
@@ -1658,7 +1694,7 @@ export default function MapView({
         ekipMarkerlariRef.current.delete(id);
       }
     }
-  }, [ekipler, ekipDepartmanlari]);
+  }, [ekipler, ekipDepartmanlari, haritaOrnegi]);
 
   // --- Cizim/olcum modunda imleci artiya cevir, elastik onizlemeyi sifirla ---
   useEffect(() => {

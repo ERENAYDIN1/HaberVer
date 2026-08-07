@@ -19,6 +19,7 @@ from .routers import (
     geo,
     logs,
     media,
+    olaylar,
     reports,
     saha,
     sinirlar,
@@ -122,6 +123,7 @@ app.include_router(bolgeler.router)
 app.include_router(sinirlar.router)
 app.include_router(geo.router)
 app.include_router(logs.router)
+app.include_router(olaylar.router)
 # Talep fotograflari bilincli olarak `StaticFiles` mount'u degil normal bir
 # router: mount security.py'nin disinda kalip dosyalari kimlik dogrulamasiz
 # servis ediyordu.

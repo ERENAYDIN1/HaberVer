@@ -13,6 +13,7 @@ from fastapi import (
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from .. import olaylar
 from ..config import settings
 from ..crud import report as crud
 from ..crud import tur as tur_crud
@@ -37,6 +38,18 @@ UZANTILAR = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 
 # Dosya parca parca okunur (bkz. _fotograf_kaydet); tek seferde belleğe alinmaz.
 OKUMA_PARCASI = 64 * 1024
+
+
+def _talep_degisti(varlik_da: bool = False) -> None:
+    """Talep listesi degisti (yeni talep, onay, ret, reddi geri alma).
+
+    `varlik_da=True` yalnizca ONAYDA verilir: onay bir varlik olusturur ve onu
+    otomatik atamaya sokar (crud/report.py::approve_report), yani envanter ve
+    gorev dagilimi da degisir. Ret/geri-alma yalnizca talebi etkiler."""
+    olaylar.yayinla("reports")
+    if varlik_da:
+        olaylar.yayinla("assets")
+        olaylar.yayinla("saha")
 
 
 def _imza_uyuyor(icerik: bytes, content_type: str | None) -> bool:
@@ -134,6 +147,8 @@ def create_report(
         note=note.strip(),
         photo_url=photo_url,
     )
+    # Yeni talep personelin bekleyenler listesine ve bildirim ziline dusmeli.
+    _talep_degisti()
     return ReportFeature.from_row(row)
 
 
@@ -202,9 +217,11 @@ def approve(
         raise HTTPException(
             status_code=422, detail=f"Gecersiz tur: {data.type}"
         )
-    return ReportFeature.from_row(
+    sonuc = ReportFeature.from_row(
         crud.approve_report(db, report, user, yeni_tip=data.type if data else None)
     )
+    _talep_degisti(varlik_da=True)
+    return sonuc
 
 
 @router.post("/{report_id}/reddet", response_model=ReportFeature)
@@ -219,9 +236,11 @@ def reject(
     report = row[0]
     if report.status != ReportStatus.beklemede:
         raise HTTPException(status_code=409, detail="Talep zaten sonuclandirilmis")
-    return ReportFeature.from_row(
+    sonuc = ReportFeature.from_row(
         crud.reject_report(db, report, user, data.review_note)
     )
+    _talep_degisti()
+    return sonuc
 
 
 @router.post("/{report_id}/geri-al", response_model=ReportFeature)
@@ -238,4 +257,6 @@ def reopen(
         raise HTTPException(
             status_code=409, detail="Yalnizca reddedilmis taleplerin reddi geri alinabilir"
         )
-    return ReportFeature.from_row(crud.reopen_report(db, report, user))
+    sonuc = ReportFeature.from_row(crud.reopen_report(db, report, user))
+    _talep_degisti()
+    return sonuc

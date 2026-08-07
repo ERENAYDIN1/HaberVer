@@ -14,7 +14,6 @@ import {
   toplamMesafeMetre,
 } from "../utils/geo";
 import { BOS_GEOJSON } from "../utils/geojson";
-import { haritayaKapaliAttributionEkle } from "../utils/haritaAttribution";
 import {
   ISTANBUL_IL_KODU,
   ISTANBUL_MERKEZI,
@@ -96,6 +95,12 @@ interface KonumSecMapProps {
   benimKonumum?: [number, number] | null;
   /** false ise haritaya tiklayarak konum secme kapatilir (salt goruntuleme). */
   tiklanabilir?: boolean;
+  /** "Konumumu goster" dugmesi haritanin kendi kosesinde mi dursun, yoksa
+   *  gizlenip ebeveyn kendi dugmesini mi cizsin (vatandas: arti'nin ustunde).
+   *  Gizli kipte tetikleme `konumRef` ile yapilir. */
+  konumDugmesi?: "harita" | "gizli";
+  /** Gizli kipte dugmeyi disaridan tetiklemek icin: `.current()` cagrilir. */
+  konumRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 /** Basit harita: tiklanan noktaya tek bir isaretci koyup koordinati bildirir.
@@ -109,6 +114,8 @@ export default function KonumSecMap({
   alanlar,
   benimKonumum,
   tiklanabilir = true,
+  konumDugmesi = "harita",
+  konumRef,
 }: KonumSecMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -125,6 +132,7 @@ export default function KonumSecMap({
   const onSecRef = useRef(onSec);
   const cizimRef = useRef(cizim);
   const tiklanabilirRef = useRef(tiklanabilir);
+  const konumDugmesiRef = useRef(konumDugmesi);
   useEffect(() => {
     onSecRef.current = onSec;
     tiklanabilirRef.current = tiklanabilir;
@@ -260,10 +268,9 @@ export default function KonumSecMap({
       olcuEtiketiRef.current?.remove();
       const el = document.createElement("div");
       el.dataset.kip = kip;
-      el.style.cssText =
-        "pointer-events:none; background:rgba(15,23,42,0.85); color:#fff; " +
-        "font:600 11px system-ui,-apple-system,sans-serif; padding:2px 7px; " +
-        "border-radius:4px; white-space:nowrap;";
+      // Ana haritadaki etiketlerle AYNI sinif: metin netligi kurallari orada
+      // (bkz. index.css `.harita-etiket`).
+      el.className = "harita-etiket";
       olcuEtiketiRef.current = new maplibregl.Marker({
         element: el,
         // Imleci izlerken etiket imlecin sag-altinda durur: artı imlecin
@@ -316,10 +323,7 @@ export default function KonumSecMap({
       let marker = alanEtiketleriRef.current.get(a.id);
       if (!marker) {
         const el = document.createElement("div");
-        el.style.cssText =
-          "pointer-events:none; background:rgba(15,23,42,0.85); color:#fff; " +
-          "font:600 11px system-ui,-apple-system,sans-serif; padding:2px 7px; " +
-          "border-radius:4px; white-space:nowrap;";
+        el.className = "harita-etiket";
         marker = new maplibregl.Marker({
           element: el,
           anchor: a.cizgi ? "bottom" : "center",
@@ -354,8 +358,6 @@ export default function KonumSecMap({
       attributionControl: false,
     });
     mapRef.current = map;
-    map.addControl(new maplibregl.NavigationControl(), "bottom-right");
-    haritayaKapaliAttributionEkle(map);
 
     // Il sinirini getirip maskeyi doldurur. Harita yuklenmesi ile sinir istegi
     // yarisabildigi icin iki taraf da hazir olunca ayni fonksiyon cagrilir.
@@ -485,13 +487,24 @@ export default function KonumSecMap({
         // Sinir gelmezse maske bos kalir, harita yine calisir.
       });
 
-    // Haritadaki konum butonu: bulunan konuma isaretci koyar.
+    // Haritadaki konum butonu: bulunan konuma isaretci koyar. Gizli kipte
+    // kontrol yine kurulur (konum mantigi tek yerde kalsin) ama haritanin
+    // kosesine eklenmez; ebeveyn `konumRef` ile tetikler.
     const geolocate = new maplibregl.GeolocateControl({
       positionOptions: { enableHighAccuracy: true },
       trackUserLocation: false,
       showAccuracyCircle: false,
     });
     map.addControl(geolocate, "bottom-right");
+    // Gizli kipte kontrol haritada durur (trigger() eklenmis olmasini
+    // gerektirir) ama gorunmez; dugmeyi ebeveyn cizer.
+    if (konumDugmesiRef.current === "gizli") {
+      map.getContainer()
+        .querySelector(".maplibregl-ctrl-geolocate")
+        ?.closest(".maplibregl-ctrl-group")
+        ?.classList.add("hidden");
+    }
+    if (konumRef) konumRef.current = () => geolocate.trigger();
 
     // Etiketler ALAN_ETIKET_MINZOOM esiginde gorunur/gizlenir olmali.
     map.on("zoomend", () => alanlariUygula(map));
@@ -509,6 +522,9 @@ export default function KonumSecMap({
         c.onDegis([...c.noktalar, nokta]);
         return;
       }
+      // Salt-okunur haritada (saha ekrani) dugme yalnizca konuma ucar,
+      // isaretci koymaz: orada secilecek bir yer yok.
+      if (!tiklanabilirRef.current) return;
       onSecRef.current(nokta);
     });
 
@@ -569,6 +585,7 @@ export default function KonumSecMap({
       alanEtiketleri.clear();
       map.remove();
       mapRef.current = null;
+      if (konumRef) konumRef.current = null;
     };
     // Harita bir kez kurulur; degisen degerler ref'lerle yonetilir.
   }, []);
@@ -676,5 +693,5 @@ export default function KonumSecMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ucus?.anahtar]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return <div ref={containerRef} className="konum-sec-harita h-full w-full" />;
 }

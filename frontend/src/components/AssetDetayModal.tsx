@@ -10,7 +10,6 @@ import {
   useDepartmanlar,
   useTurDepartmanEslemesi,
 } from "../hooks/useDepartmanlar";
-import { departmanAdi } from "../types/departman";
 import { turAdi } from "../data/turSozlugu";
 import {
   ASSET_SOURCE_LABELS,
@@ -19,14 +18,12 @@ import {
   type AssetFeature,
 } from "../types/asset";
 import {
-  MAKS_AKTIF_GOREV,
   MAKS_ATAMA_MESAFE_KM,
-  YAKA_KISA,
   yakaEtiketi,
   type EkipOzet,
-  type Yaka,
 } from "../types/saha";
 import { AksiyonAyraci, AksiyonButonu, AksiyonSeridi, SilOnayi } from "./Aksiyonlar";
+import EkipSecici from "./EkipSecici";
 import { IconCheck, IconPin } from "./icons";
 import Modal from "./Modal";
 
@@ -37,8 +34,9 @@ interface AssetDetayModalProps {
   atayabilir?: boolean;
   /** Elle atama icin secilebilecek ekipler (canli yuk bilgisiyle). */
   ekipler?: EkipOzet[];
-  /** Basarili atama sonrasi liste/ekip ozetini tazelemek icin. */
-  onAtandi?: () => void;
+  /** Basarili atama sonrasi liste/ekip ozetini tazelemek icin. Bir soz
+   *  donerse BEKLENIR: modal, tazeleme bitmeden "islem bitti" dememeli. */
+  onAtandi?: () => void | Promise<unknown>;
   /** Verilirse "Düzenle" cikar; formu acmak ust bilesenin isi (iki modal ust
    *  uste binmesin diye detay kapatilir). */
   onDuzenle?: (asset: AssetFeature) => void;
@@ -54,7 +52,7 @@ interface AssetDetayModalProps {
 export interface VarlikYonetimProplari {
   atayabilir: boolean;
   ekipler?: EkipOzet[];
-  onAtandi: () => void;
+  onAtandi: () => void | Promise<unknown>;
   onDuzenle?: (asset: AssetFeature) => void;
   onSilindi: () => void;
   onGit?: (asset: AssetFeature) => void;
@@ -80,6 +78,8 @@ export function useVarlikYonetimi({
   return {
     atayabilir: yetkili,
     ekipler,
+    // Soz DONDURULUR: cagiran taraf tazelemenin bitmesini bekliyor (bkz.
+    // AssetDetayModal::tazele), yoksa "islem bitti" yeni veriden once gelir.
     onAtandi: () => queryClient.invalidateQueries({ queryKey: ["saha"] }),
     onDuzenle:
       yetkili && onDuzenle
@@ -115,7 +115,6 @@ export default function AssetDetayModal({
   const islemModu = Boolean(onDuzenle || onSilindi || onGit);
   const tamCrudYetkisi = user?.role !== "saha_calisani";
 
-  const [seciliEkip, setSeciliEkip] = useState("");
   const [atamaHatasi, setAtamaHatasi] = useState<string | null>(null);
   const [atamaBasari, setAtamaBasari] = useState<string | null>(null);
   const [atanıyor, setAtaniyor] = useState(false);
@@ -136,24 +135,13 @@ export default function AssetDetayModal({
   const mevcutGorev = durum?.gorev ?? null;
   const varlikYaka = durum?.varlik_yaka ?? null;
 
-  // Elle atama yaka VE departman kisitlarindan muaftir, ama personel
-  // secerken ikisini de gormeli: otomatik dagitimin asla yapmayacagi bir
-  // atamayi elle yaptigini bilerek yapsin.
-  const seciliEkipNesnesi = ekipler?.find((e) => e.id === seciliEkip);
-  const karsiYaka = Boolean(
-    seciliEkipNesnesi?.yaka && varlikYaka && seciliEkipNesnesi.yaka !== varlikYaka,
-  );
-  // Isin departmani turunden turetilir (ayri bir alan degil).
+  // Isin departmani turunden turetilir (ayri bir alan degil). Yaka/departman
+  // uyarilarini EkipSecici uretir - elle atama ikisinden de muaftir, ama
+  // personel neyi bilerek yaptigini gormeli.
   const varlikDepartman = asset ? esleme?.[asset.properties.type] : undefined;
-  const karsiDepartman = Boolean(
-    seciliEkipNesnesi?.departman &&
-      varlikDepartman &&
-      seciliEkipNesnesi.departman !== varlikDepartman,
-  );
 
   // Varlik degisince atama durumu sifirlanir (silme onayini SilOnayi birakir).
   useEffect(() => {
-    setSeciliEkip("");
     setAtamaHatasi(null);
     setAtamaBasari(null);
   }, [asset?.properties.id]);
@@ -171,23 +159,27 @@ export default function AssetDetayModal({
       ? kalanSilmeGunu(p.repaired_at)
       : null;
 
-  // Atama/geri-alma sonrasi hem gorev durumunu hem ekip yuklerini tazele.
-  const tazele = () => {
-    queryClient.invalidateQueries({ queryKey: ["saha", "gorev", p.id] });
-    onAtandi?.();
-  };
+  /** Atama/geri-alma sonrasi hem gorev durumunu hem ekip yuklerini tazele.
+   *
+   *  DONEN SOZ BEKLENIR: `invalidateQueries` tazelemeyi baslatip hemen doner.
+   *  Beklenmezse "islem bitti" isareti (`atanıyor=false`) yeni veriden ONCE
+   *  verilir ve arada `mevcutGorev` hala ESKI atamayi gosterir - havuza yeni
+   *  alinmis bir kayit o pencerede "Zaten atalı" gorunup atanamiyordu. */
+  const tazele = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["saha", "gorev", p.id] }),
+      onAtandi?.(),
+    ]);
 
-  const atamaYap = async () => {
-    if (!seciliEkip) return;
+  const atamaYap = async (workerId: string) => {
     setAtaniyor(true);
     setAtamaHatasi(null);
     setAtamaBasari(null);
     try {
-      await ekibeAta(p.id, seciliEkip);
-      const ek = ekipler?.find((x) => x.id === seciliEkip);
+      await ekibeAta(p.id, workerId);
+      const ek = ekipler?.find((x) => x.id === workerId);
       setAtamaBasari(`${ek?.full_name || ek?.email || "Ekip"} ekibine yönlendirildi`);
-      setSeciliEkip("");
-      tazele();
+      await tazele();
     } catch (e) {
       setAtamaHatasi((e as Error).message);
     } finally {
@@ -202,8 +194,7 @@ export default function AssetDetayModal({
     try {
       await gorevGeriAl(p.id);
       setAtamaBasari("Görev geri alındı; varlık havuzda bekliyor.");
-      setSeciliEkip("");
-      tazele();
+      await tazele();
     } catch (e) {
       setAtamaHatasi((e as Error).message);
     } finally {
@@ -381,72 +372,22 @@ export default function AssetDetayModal({
               )}
             </div>
 
-            <div className="flex gap-2">
-              <select
-                value={seciliEkip}
-                onChange={(e) => setSeciliEkip(e.target.value)}
-                className="min-w-0 flex-1 border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              >
-                <option value="">Ekip seçin…</option>
-                {(ekipler ?? []).map((e) => {
-                  const dolu = e.aktif_gorev >= MAKS_AKTIF_GOREV;
-                  const suanki = mevcutGorev?.worker_id === e.id;
-                  const uzak = Boolean(e.yaka && varlikYaka && e.yaka !== varlikYaka);
-                  const baskaDep = Boolean(
-                    e.departman && varlikDepartman && e.departman !== varlikDepartman,
-                  );
-                  return (
-                    <option key={e.id} value={e.id} disabled={dolu && !suanki}>
-                      {(e.full_name || e.email) +
-                        ` (${e.aktif_gorev}/${MAKS_AKTIF_GOREV}` +
-                        (dolu ? " · dolu)" : ")") +
-                        (e.last_seen_at ? "" : " · konum yok") +
-                        (uzak ? ` · karşı yaka (${YAKA_KISA[e.yaka as Yaka] ?? e.yaka})` : "") +
-                        (baskaDep
-                          ? ` · başka departman (${departmanAdi(departmanlar, e.departman)})`
-                          : "") +
-                        (suanki ? " · şu an atalı" : "")}
-                    </option>
-                  );
-                })}
-              </select>
-              <button
-                onClick={atamaYap}
-                disabled={!seciliEkip || seciliEkip === mevcutGorev?.worker_id || atanıyor}
-                className="flex shrink-0 items-center gap-1.5 bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-              >
-                <IconCheck className="h-3.5 w-3.5" />
-                {atanıyor ? "…" : "Ata"}
-              </button>
-            </div>
-
-            {karsiYaka && (
-              <p className="mt-2 border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
-                <strong>Karşı yaka:</strong> seçtiğiniz ekip{" "}
-                {yakaEtiketi(seciliEkipNesnesi?.yaka)}'nda, varlık ise{" "}
-                {yakaEtiketi(varlikYaka)}'nda. Ekibin köprüden geçmesi gerekir —
-                otomatik atama bunu yapmaz, elle atarsanız yine de yönlendirilir.
-              </p>
-            )}
-
-            {karsiDepartman && (
-              <p className="mt-2 border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
-                <strong>Başka departman:</strong> seçtiğiniz ekip{" "}
-                {departmanAdi(departmanlar, seciliEkipNesnesi?.departman)}, bu iş
-                ise {departmanAdi(departmanlar, varlikDepartman)} kapsamında.
-                Otomatik atama bunu yapmaz, elle atarsanız yine de yönlendirilir.
-              </p>
-            )}
-
-            {mevcutGorev && (
-              <button
-                onClick={geriAlYap}
-                disabled={atanıyor}
-                className="mt-2 text-xs font-medium text-slate-500 underline-offset-2 transition hover:text-red-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-300"
-              >
-                Görevi geri al (havuza al)
-              </button>
-            )}
+            {/* Bolge/guzergah atamasiyla AYNI secici: uc is turu de tek bir
+                kotayi paylasan "gorev"lerdir, secim ekrani da ayni olmali.
+                Siralama once bu isin mudurlugu, her grupta mesafeye gore. */}
+            <EkipSecici
+              ekipler={ekipler}
+              is={{
+                konum: [lng, lat],
+                yaka: varlikYaka,
+                departman: varlikDepartman ?? null,
+              }}
+              mevcutWorkerId={mevcutGorev?.worker_id ?? null}
+              departmanlar={departmanlar}
+              onAta={(id) => (id ? atamaYap(id) : geriAlYap())}
+              islemde={atanıyor}
+              kaldirilabilir={Boolean(mevcutGorev)}
+            />
 
             {atamaHatasi && (
               <p className="mt-1.5 text-xs text-red-600">{atamaHatasi}</p>

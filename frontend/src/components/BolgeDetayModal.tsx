@@ -4,7 +4,7 @@ import { bolgeAta, bolgeSil } from "../api/bolgeler";
 import { useDepartmanlar } from "../hooks/useDepartmanlar";
 import { departmanBul } from "../types/departman";
 import { BOLGE_TIP_ETIKETLERI, type Bolge } from "../types/bolge";
-import { YAKA_KISA, type EkipOzet, type Yaka } from "../types/saha";
+import { yakaEtiketi, type EkipOzet } from "../types/saha";
 import {
   alanEtiketi,
   cokHalkaliAlanM2,
@@ -13,6 +13,7 @@ import {
   enBuyukHalkaMerkezi,
 } from "../utils/geo";
 import { AksiyonButonu, AksiyonSeridi, SilOnayi } from "./Aksiyonlar";
+import EkipSecici from "./EkipSecici";
 import { IconCheck, IconLasso, IconRoute, IconUsers } from "./icons";
 import Modal from "./Modal";
 
@@ -27,8 +28,10 @@ interface BolgeDetayModalProps {
   yonetebilir?: boolean;
   /** Atama listesini besleyen saha ekipleri. */
   ekipler?: EkipOzet[];
-  /** Atama degisince (ust bilesen ["bolgeler"] sorgusunu tazeler). */
-  onDegisti?: () => void;
+  /** Atama degisince (ust bilesen ["bolgeler"] sorgusunu tazeler). Bir soz
+   *  donerse BEKLENIR: tazeleme bitmeden "islem bitti" denirse secici bir sure
+   *  daha ESKI atamayi gorur (bkz. EkipSecici). */
+  onDegisti?: () => void | Promise<unknown>;
   /** Silme basarili olunca (ust bilesen modali kapatir, secimi birakir). */
   onSilindi?: () => void;
 }
@@ -68,7 +71,7 @@ export default function BolgeDetayModal({
     setHata(null);
     try {
       await bolgeAta(bolge.id, workerId);
-      onDegisti?.();
+      await onDegisti?.();
     } catch (e) {
       setHata((e as Error).message);
     } finally {
@@ -183,35 +186,29 @@ export default function BolgeDetayModal({
             ))}
         </dl>
 
-        {/* Ekibe aktarma: haritadaki alan/cizgi -> popup -> "Detay" yolundan da
-            yonlendirme yapilabilsin (paneldeki kartla ayni islem). */}
+        {/* Ekibe yonlendirme: haritadaki alan/cizgi -> popup -> "Detay"
+            yolundan da yapilabilsin (paneldeki kartla ayni islem). Varlik
+            detayiyla AYNI bilesen: alan/guzergah da tekil bakim isi gibi bir
+            gorevdir, secim ekrani da ayni olmali. */}
         {yonetebilir && (
-          <div className="flex items-center gap-2 border-t border-slate-200 pt-3">
-            <label className="text-xs text-slate-500">
-              {cizgi ? "Güzergâh ekibi" : "Görev ekibi"}
-            </label>
-            <select
-              value={bolge.worker_id ?? ""}
-              disabled={islemde}
-              onChange={(e) => ata(e.target.value || null)}
-              className="min-w-0 flex-1 border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-emerald-500 disabled:opacity-50"
-            >
-              <option value="">Atanmamış</option>
-              {/* Kaydin mudurlugu disindaki ekipler isaretlenir ama gizlenmez -
-                  yaka uyarisiyla ayni desen (bkz. BolgePaneli). */}
-              {(ekipler ?? []).map((ekip) => {
-                const baskaMudurluk =
-                  bolge.departman !== null && ekip.departman !== bolge.departman;
-                return (
-                  <option key={ekip.id} value={ekip.id}>
-                    {ekip.full_name || ekip.email}
-                    {ekip.yaka ? ` · ${YAKA_KISA[ekip.yaka as Yaka] ?? ekip.yaka}` : ""}
-                    {baskaMudurluk ? " · ⚠ başka müdürlük" : ""}
-                  </option>
-                );
-              })}
-            </select>
-            {islemde && <span className="text-[11px] text-slate-400">…</span>}
+          <div className="border-t border-slate-200 pt-3">
+            <p className="mb-1.5 text-xs font-semibold text-slate-700">
+              {cizgi ? "Güzergâhı ekibe ver" : "Görev bölgesini ekibe ver"}
+              {yakaEtiketi(bolge.yaka) && (
+                <span className="ml-1.5 font-normal text-slate-500">
+                  · iş {yakaEtiketi(bolge.yaka)}'nda
+                </span>
+              )}
+            </p>
+            <EkipSecici
+              ekipler={ekipler}
+              is={{ konum: merkez, yaka: bolge.yaka, departman: bolge.departman }}
+              mevcutWorkerId={bolge.worker_id}
+              departmanlar={departmanlar}
+              onAta={ata}
+              islemde={islemde}
+              kaldirilabilir
+            />
           </div>
         )}
 
