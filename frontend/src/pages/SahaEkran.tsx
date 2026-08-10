@@ -23,9 +23,9 @@ import {
   IconLasso,
   IconLogout,
   IconMenu,
-  IconPin,
   IconRoute,
   IconWarning,
+  HaberVerLogo,
   tipIkonu,
 } from "../components/icons";
 import Sheet from "../components/mobil/Sheet";
@@ -1006,19 +1006,12 @@ export default function SahaEkran() {
       <div className="ekran-yuksekligi flex w-screen flex-col overflow-hidden bg-slate-100">
         <header className="z-20 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 shadow-sm shadow-emerald-600/30">
-              <IconPin className="h-4 w-4 text-white" />
-            </div>
-            <div className="min-w-0 leading-tight">
-              <h1 className="truncate text-sm font-semibold tracking-tight text-slate-900">
-                haber ver · Saha
-              </h1>
-              <div className="flex min-w-0 items-center gap-1.5">
-                <span className="truncate text-[11px] text-slate-500">
-                  {user?.full_name || user?.email}
-                </span>
-                <DepartmanEtiketi kod={user?.departman} />
-              </div>
+            <HaberVerLogo className="h-8 w-auto shrink-0" />
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate text-[11px] text-slate-500">
+                {user?.full_name || user?.email}
+              </span>
+              <DepartmanEtiketi kod={user?.departman} />
             </div>
           </div>
           <button
@@ -1126,14 +1119,13 @@ export default function SahaEkran() {
             <IconMenu className="h-5 w-5" />
           </button>
 
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 shadow-sm shadow-emerald-600/30">
-            <IconPin className="h-4 w-4 text-white" />
-          </div>
-          <div className="leading-tight">
-            <h1 className="text-sm font-semibold tracking-tight text-slate-900">
-              haber ver · Saha
-            </h1>
-            <p className="text-[11px] text-slate-500">Görev Ekranı</p>
+          <div className="flex select-none items-center gap-3">
+            <HaberVerLogo className="h-9 w-auto shrink-0" />
+            <p className="hidden text-[9.5px] font-semibold uppercase leading-[1.5] tracking-[0.14em] text-slate-400 lg:block">
+              Saha
+              <br />
+              Görev Ekranı
+            </p>
           </div>
         </div>
 

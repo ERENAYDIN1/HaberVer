@@ -13,6 +13,7 @@ import {
   IconMenu,
   IconPlus,
   IconTree,
+  HaberVerLogo,
 } from "../components/icons";
 import Sheet from "../components/mobil/Sheet";
 import { useMobil } from "../hooks/useMobil";
@@ -690,17 +691,10 @@ export default function VatandasEkran() {
       <div className="ekran-yuksekligi flex w-screen flex-col overflow-hidden bg-slate-100">
         <header className="z-20 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-emerald-700 bg-emerald-600">
-              <IconTree className="h-4 w-4 text-white" />
-            </div>
-            <div className="min-w-0 leading-tight">
-              <h1 className="truncate text-sm font-semibold tracking-tight text-slate-900">
-                haber ver · Talep
-              </h1>
-              <p className="truncate text-[11px] text-slate-500">
-                {user?.full_name || user?.email}
-              </p>
-            </div>
+            <HaberVerLogo className="h-8 w-auto shrink-0" />
+            <p className="truncate text-[11px] text-slate-500">
+              {user?.full_name || user?.email}
+            </p>
           </div>
           <button
             onClick={cikisYap}
@@ -884,14 +878,13 @@ export default function VatandasEkran() {
             <IconMenu className="h-5 w-5" />
           </button>
 
-          <div className="flex h-8 w-8 items-center justify-center border border-emerald-700 bg-emerald-600">
-            <IconTree className="h-4 w-4 text-white" />
-          </div>
-          <div className="leading-tight">
-            <h1 className="text-sm font-semibold tracking-tight text-slate-900">
-              haber ver · Talep
-            </h1>
-            <p className="text-[11px] text-slate-500">Vatandaş Bildirim Ekranı</p>
+          <div className="flex select-none items-center gap-3">
+            <HaberVerLogo className="h-9 w-auto shrink-0" />
+            <p className="hidden text-[9.5px] font-semibold uppercase leading-[1.5] tracking-[0.14em] text-slate-400 lg:block">
+              Vatandaş
+              <br />
+              Bildirim Ekranı
+            </p>
           </div>
         </div>
 

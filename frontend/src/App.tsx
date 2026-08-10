@@ -245,6 +245,18 @@ export default function App() {
   // uzerinden cagrilir.
   const ekleKipiBirakRef = useRef<() => void>(() => {});
 
+  /** Paneli kapatir; kaydedilmemis bir VARLIK ekleme yarim kalmissa kipi de
+   *  birakir, boylece panel bir dahaki acilisinda "ne eklemek istiyorsun?"
+   *  ekranina doner (alan/guzergahtaki "İptal" ile ayni son durum).
+   *
+   *  Yalnizca `varlik` kipi: alan/cizgi kiplerinde panelin kapali olmasi
+   *  ZATEN normal akistir (`ekleKipiSec` cizim baslarken kendisi kapatir,
+   *  cizim haritada surer) - orada kipi birakmak devam eden cizimi yakardi. */
+  const paneliKapat = () => {
+    setPanelAcik(false);
+    if (ekleKipiRef.current === "varlik") ekleKipiBirakRef.current();
+  };
+
   // Aktif kutucuga tekrar tiklamak paneli kapatir.
   const sekmeSec = (id: Sekme) => {
     // Mobilde katman/menu sheet'leri panelin uzerine biniyor; yeni bir sekme
@@ -256,7 +268,7 @@ export default function App() {
     // kullanici baska bir sekmedeyken harita hala cizim modunda kalirdi.
     if (id !== "ekle") ekleKipiBirakRef.current();
     if (panelAcik && sekme === id) {
-      setPanelAcik(false);
+      paneliKapat();
       return;
     }
     setSekme(id);
@@ -397,6 +409,26 @@ export default function App() {
     olcumTemizle();
   };
   ekleKipiBirakRef.current = ekleKipiBirak;
+
+  /** Cizim panelindeki "İptal"/"Temizle" AYNI ZAMANDA ekleme akisini de biter.
+   *
+   *  Kullanici "Ekle > Görev Bölgesi" deyip vazgectiginde yalnizca cizim
+   *  kapaniyordu; `ekleKipi` yerinde kaldigi icin panel bir daha acildiginda
+   *  hala "Görev Bölgesi ekleniyor" seridini gosteriyordu - ortada birakilmis
+   *  bir cizim yokken. Kip disinda (sorgu amacli alan secimi/olcum) davranis
+   *  degismez, o durumda `ekleKipi` zaten null. */
+  const cizimIptalEt = (iptal: () => void) => () => {
+    iptal();
+    if (ekleKipiRef.current !== null) {
+      setEkleKipi(null);
+      setKoordinat(undefined);
+      // Alan kipinde yarim kalan olcum, olcum kipinde yarim kalan alan olamaz
+      // (ikisi birlikte acilmaz); yine de kalan izleri birakmak icin ikisi de
+      // temizlenir - `ekleKipiBirak` ile ayni son durum.
+      cizimVeOlcumuKapat();
+      olcumTemizle();
+    }
+  };
 
   // --- Kaydedilmis bolgeler (gorev bolgeleri / guzergahlar) ---------------
   // Haritada gizlenmis olanlarin id'leri; varsayilan olarak hepsi gorunur.
@@ -1347,7 +1379,17 @@ export default function App() {
           onKipSec={ekleKipiSec}
           onGeri={ekleKipiBirak}
           mobil={mobil}
-          form={<AssetForm koordinat={koordinat} />}
+          form={
+            <AssetForm
+              koordinat={koordinat}
+              // Kayit bitince kip birakilir: bolge/guzergah kaydinda oldugu
+              // gibi ekleme akisi burada biter ve panel "ne eklemek
+              // istiyorsun?" ekranina doner. Aksi halde kaydedilmis bir
+              // varligin ardindan bos form "Varlık ekleniyor" seridiyle acik
+              // kalir, kullanici kaydin gectigini serit uzerinden goremezdi.
+              onDone={ekleKipiBirak}
+            />
+          }
         />
       )}
 
@@ -1468,12 +1510,12 @@ export default function App() {
       alanM2={alanM2}
       alanHatasi={alanHatasi}
       alanYukleniyor={alanYukleniyor}
-      onAlanIptal={alanSecimiIptal}
+      onAlanIptal={cizimIptalEt(alanSecimiIptal)}
       onAlanGeriAl={cizimGeriAl}
       onAlanTamamla={alanSecimiTamamla}
       tamamlananAlanlar={tamamlananAlanlar}
       onAlanKaldir={alanKaldir}
-      onTumAlanlariTemizle={tumAlanlariTemizle}
+      onTumAlanlariTemizle={cizimIptalEt(tumAlanlariTemizle)}
       alanOlculeri={alanOlculeri}
       toplamNetM2={alanOzetiSonuc?.toplam_m2}
       hamToplamM2={alanOzetiSonuc?.ham_toplam_m2}
@@ -1483,10 +1525,10 @@ export default function App() {
       olcumModu={olcumModu}
       olcumNoktalari={olcumNoktalari}
       olcumMesafeM={olcumMesafeM}
-      onOlcumIptal={olcumIptal}
+      onOlcumIptal={cizimIptalEt(olcumIptal)}
       onOlcumGeriAl={olcumGeriAl}
       onOlcumBitir={olcumBitir}
-      onOlcumTemizle={olcumTemizle}
+      onOlcumTemizle={cizimIptalEt(olcumTemizle)}
       altOfset={aracOfseti}
     />
   );
@@ -1649,7 +1691,7 @@ export default function App() {
                 </h2>
               </div>
               <button
-                onClick={() => setPanelAcik(false)}
+                onClick={paneliKapat}
                 aria-label="Paneli kapat"
                 title="Paneli kapat"
                 className="flex h-6 w-6 items-center justify-center rounded-lg opacity-70 transition hover:bg-white/60 hover:opacity-100"
@@ -1793,7 +1835,7 @@ export default function App() {
         <Sheet
           acik={panelAcik}
           baslik={SEKME_TANIMLARI[sekme].etiket}
-          onKapat={() => setPanelAcik(false)}
+          onKapat={paneliKapat}
           altBosluk={ALT_CUBUK_YUKSEKLIGI}
           // "Ekle" dahil her sekme YARIM kademede acilir: bu panellerin hepsi
           // haritayla birlikte kullaniliyor (koordinat icin haritaya dokunmak,
