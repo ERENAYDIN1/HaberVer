@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="frontend/public/logo.svg" alt="GreenAsset" width="110" height="110">
+<img src="frontend/public/logo.svg" alt="haber ver" width="110" height="110">
 
-# GreenAsset
+# haber ver+
 
 **Akıllı Şehir Varlık Yönetimi**
 
@@ -26,7 +26,7 @@ FastAPI + React (Vite) + PostgreSQL/PostGIS + MapLibre; kimlik doğrulama Keyclo
 ```bash
 # 1) Projeyi klonla ve içine gir
 git clone <repo-url>
-cd GreenAsset
+cd haberver
 
 # 2) Ortam dosyasını hazırla
 cp .env.example .env        # Windows PowerShell: copy .env.example .env
@@ -42,7 +42,7 @@ uygulama sessizce zayıf bir parolayla değil, açılışta hatayla durur:
 |----------|---------|
 | `DEFAULT_ADMIN_PASSWORD` | Uygulamanın ilk admin hesabının parolası (min. 8 karakter) |
 | `KEYCLOAK_ADMIN_PASSWORD` | Keycloak **yönetim konsolu** parolası (uygulama admin'i değil) |
-| `KEYCLOAK_CLIENT_SECRET` | Backend ↔ Keycloak istemci sırrı (`keycloak/realm-greenasset.json` ile aynı olmalı) |
+| `KEYCLOAK_CLIENT_SECRET` | Backend ↔ Keycloak istemci sırrı (`keycloak/realm-haberver.json` ile aynı olmalı) |
 
 İlk açılışta otomatik olarak: şema migration'ları uygulanır, İstanbul yaka/sınır verisi
 üretilir, ilk admin Keycloak'ta açılır. Sonuç **üretim şeklinde boş bir sistem**: yalnızca
@@ -57,10 +57,10 @@ geliştirme içindir**, parolalar `seed_demo.py` içinde açıktır:
 
 | Kullanıcı | Şifre | Rol |
 |-----------|-------|-----|
-| `admin@greenasset.com` | `.env` → `DEFAULT_ADMIN_PASSWORD` | admin (tam yetki) |
-| `calisan1@greenasset.com` | `calisan1234` | calisan (varlık + ihbar onayı) |
-| `sahaekibi1..3@greenasset.com` | `saha1234` | saha_calisani (kendi işleri) |
-| `vatandas1@greenasset.com` | `vatandas1234` | vatandas (ihbar gönderir) |
+| `admin@haberver.com` | `.env` → `DEFAULT_ADMIN_PASSWORD` | admin (tam yetki) |
+| `calisan1@haberver.com` | `calisan1234` | calisan (varlık + ihbar onayı) |
+| `sahaekibi1..3@haberver.com` | `saha1234` | saha_calisani (kendi işleri) |
+| `vatandas1@haberver.com` | `vatandas1234` | vatandas (ihbar gönderir) |
 
 Durdurmak için: `docker compose down` (verileri korur) · sıfırlamak için: `docker compose down -v`
 (**DB'yi, yüklenen ihbar fotoğraflarını ve Keycloak kullanıcılarını siler**).
@@ -139,9 +139,9 @@ docker compose exec frontend npm test                              # frontend te
 - **`.env`'i değiştirmek mevcut hesabın parolasını sıfırlamaz.** `DEFAULT_ADMIN_PASSWORD`
   yalnızca sıfırdan kurulumu etkiler; mevcut admin için parolayı Keycloak konsolundan sıfırlayın.
 - **Konsol yöneticisi ≠ uygulama admin'i.** `KEYCLOAK_ADMIN` master realm'dedir ve yalnızca
-  yönetim arayüzü içindir; `admin@greenasset.com` ise `greenasset` realm'indeki uygulama admin'idir.
+  yönetim arayüzü içindir; `admin@haberver.com` ise `haberver` realm'indeki uygulama admin'idir.
 - **Realm ayarları yalnızca realm yokken import edilir.** Değişiklik için ya konsoldan elle
-  uygulayın ya `docker volume rm greenasset_kcdata` (tüm Keycloak kullanıcıları gider, Postgres
+  uygulayın ya `docker volume rm haberver_kcdata` (tüm Keycloak kullanıcıları gider, Postgres
   verisi kalır). Realm JSON'unda yorum satırı olmaz, import'u kırar.
 
 ## Production

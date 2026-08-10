@@ -1,68 +1,50 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" fill="none" role="img" aria-label="GreenAsset">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" role="img" aria-label="haber ver +">
+  <!-- Sekme simgesi: pin + sehir silueti + filiz. Sinyal yaylari bilincli olarak
+       YOK - 16px'te pinin sagindaki yaylar lekeye donusuyor ve simgeyi
+       dengesiz birakiyordu; sekmede tek kapali form daha net okunuyor.
+       Kaynak cizim kendi koordinat sisteminde (160x188) korunur, 64x64'e
+       oturtan is tek bir transform'dadir: olcek 64/188, x ortalanir. -->
   <defs>
-    <linearGradient id="ga-halka" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#7cc242"/>
-      <stop offset="1" stop-color="#1c7d3f"/>
+    <linearGradient id="hv-govde" x1="48.9925" y1="131" x2="48.9925" y2="139" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#865B50"/>
+      <stop offset="1" stop-color="#307E38"/>
     </linearGradient>
-    <linearGradient id="ga-bina" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#66bd4a"/>
-      <stop offset="1" stop-color="#2f8f43"/>
-    </linearGradient>
-    <linearGradient id="ga-yaprak" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#8ed94f"/>
-      <stop offset="1" stop-color="#3aa03d"/>
-    </linearGradient>
-    <linearGradient id="ga-zemin" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#329045"/>
-      <stop offset="1" stop-color="#1c7d3f"/>
+    <linearGradient id="hv-zemin" x1="92.4419" y1="134" x2="92.4419" y2="139" gradientUnits="userSpaceOnUse">
+      <stop stop-color="white"/>
+      <stop offset="0.413462" stop-color="#98BF9C"/>
+      <stop offset="1" stop-color="#307E38"/>
     </linearGradient>
   </defs>
-
-  <!-- Halka: tepe sagda acik birakilir, orada noktalar devam eder -->
-  <path d="M59.8 13.3 A38 38 0 1 0 85.7 37" stroke="url(#ga-halka)" stroke-width="5" stroke-linecap="round"/>
-  <circle cx="78.2" cy="24.6" r="2.6" fill="url(#ga-halka)"/>
-  <circle cx="70.1" cy="17.8" r="1.9" fill="url(#ga-halka)"/>
-  <circle cx="61.7" cy="13.9" r="1.3" fill="url(#ga-halka)"/>
-
-  <!-- Zemin egrisi -->
-  <path d="M20 64 C34 74 66 74 80 64 C79 71 69 79 50 79 C31 79 21 71 20 64 Z" fill="url(#ga-zemin)"/>
-
-  <!-- Sehir silueti -->
-  <g fill="url(#ga-bina)">
-    <rect x="28" y="42" width="8" height="23" rx="1"/>
-    <rect x="37" y="29" width="9" height="36" rx="1"/>
-    <rect x="47.5" y="37" width="7.5" height="28" rx="1"/>
-    <rect x="56" y="46" width="7" height="19" rx="1"/>
+  <g transform="translate(4.77 0) scale(0.3404)">
+    <!-- Pin govdesi -->
+    <path d="M80 188C80 188 160 122 160 80C160 58.7827 151.571 38.4344 136.569 23.4315C121.566 8.42855 101.217 0 80 0C58.7827 0 38.4344 8.42855 23.4315 23.4315C8.42855 38.4344 0 58.7827 0 80C0 122 80 188 80 188Z" fill="#35953F"/>
+    <!-- Sehir silueti: iki bina -->
+    <path d="M101 134.977V49.0233L73 55.5L73 134.977C73 135.542 73.4323 136 73.9655 136H100.034C100.568 136 101 135.542 101 134.977Z" fill="white"/>
+    <path d="M130 135.245V76.5L104 68.5V135.245C104 135.798 104.529 136.245 105.182 136.245H128.818C129.471 136.245 130 135.798 130 135.245Z" fill="white"/>
+    <!-- Pencere izgarasi -->
+    <g fill="#2F7D4F">
+      <path d="M85 62H78V71H85V62Z"/>
+      <path d="M96 62H89V71H96V62Z"/>
+      <path d="M85 79H78V88H85V79Z"/>
+      <path d="M96 79H89V88H96V79Z"/>
+      <path d="M85 96H78V105H85V96Z"/>
+      <path d="M96 96H89V105H96V96Z"/>
+      <path d="M85 113H78V122H85V113Z"/>
+      <path d="M96 113H89V122H96V113Z"/>
+      <path d="M116 82H110V90H116V82Z"/>
+      <path d="M125 82H119V90H125V82Z"/>
+      <path d="M116 98H110V106H116V98Z"/>
+      <path d="M125 98H119V106H125V98Z"/>
+      <path d="M116 114H110V122H116V114Z"/>
+      <path d="M125 114H119V122H125V114Z"/>
+    </g>
+    <!-- Filiz: yapraklar -->
+    <path d="M32 81.1006C32 81.1006 33.2909 77.2225 36.335 74.7894C39.3791 72.3562 67.5991 82.7794 67.5991 82.7794C67.5991 82.7794 72.5291 84.5378 75.4456 89.1969C77.4059 92.3312 78.5003 96.9637 76.4231 102.558C71.4719 115.882 58.6262 114.341 55.2794 113.581C53.7069 113.225 49.8766 112.211 49.8766 112.211C49.8766 112.211 41.1269 119.436 30.5975 113.895C22.5809 109.677 23.5744 103.371 23.5744 103.371C23.5744 103.371 18.1769 97.9731 20.5144 90.4559C23.33 81.4034 32 81.1006 32 81.1006Z" fill="#5B9821"/>
+    <path d="M50.2591 97.224C57.5638 96.0075 59.8428 92.889 61.8244 89.999C64.0078 86.8115 63.4235 84.1394 64.9428 84.065C66.4622 83.9906 67.6735 86.7319 66.0053 91.5184C63.6466 98.2865 58.7963 99.28 58.7006 101.102C58.6263 102.547 63.8644 102.648 68.5925 100.342C75.4403 96.9956 75.4403 89.1597 75.4403 89.1597C75.4403 89.1597 74.2238 86.6469 71.865 84.899C69.5063 83.1512 67.7531 82.2375 67.7531 82.2375C67.7531 82.2375 64.9375 71.6656 52.161 69.9125C39.3844 68.1594 34.1303 77.0684 34.1303 77.0684C34.1303 77.0684 34.5872 79.9584 36.7919 83.3053C38.5503 85.9775 40.3672 85.8925 40.2131 87.4119C40.1122 88.4 36.9406 88.7028 33.5938 87.2578C30.5444 85.9403 29.79 84.1394 28.956 84.1394C28.1219 84.1394 21.205 87.9909 24.0897 96.1562C26.3741 102.622 33.9231 103.833 35.2725 104.067C39.2303 104.752 41.5094 102.165 38.6938 100.109C35.8781 98.0528 32.7597 96.8362 33.445 94.7856C34.1835 92.565 36.8185 94.8812 39.9847 96.2519C43.1138 97.6065 46.9016 97.7872 50.2591 97.224Z" fill="#8BC02B"/>
+    <!-- Filiz: govde ve dallar -->
+    <path d="M35.7347 105.703C35.7347 105.703 37.4878 105.602 38.2103 105.395C38.9328 105.188 39.9103 104.571 39.9103 104.571C39.9103 104.571 46.6837 111.658 47.385 112.253C48.0703 112.832 48.8778 104.003 48.8778 104.003C48.8778 104.003 50.4237 104.242 51.8687 104.013C53.7706 103.711 55.0669 103.105 55.0669 103.105C55.0669 103.105 54.1425 108.54 53.7812 110.601C53.5528 111.924 53.4731 115.6 53.4731 115.6L48.5219 119.723L44.7553 117.194C44.7553 117.194 44.7447 116.2 44.1869 115.526C42.455 113.433 35.7347 105.703 35.7347 105.703ZM53.0056 117.821L56.7722 113.284C56.7722 113.284 58.1109 113.385 59.0937 113.385C60.0712 113.385 61.7766 113.178 61.7766 113.178C61.7766 113.178 58.6847 117.353 57.0325 119.414C55.3803 121.476 53.2181 124.058 53.2181 124.058L51.1569 118.076L53.0056 117.821Z" fill="#6D4B41"/>
+    <path d="M50.3281 114.208C48.7875 114.346 44.7606 117.199 44.7606 117.199C44.7606 117.199 44.9678 122.044 44.8138 124.78C44.6597 127.516 43.5812 131.984 44.5747 133.115C45.4353 134.093 52.6709 134.279 53.7494 133.142C54.8331 132.005 53.7813 127.309 53.7813 124.265C53.7813 121.221 53.4731 115.6 53.4731 115.6C53.4731 115.6 52.0813 114.054 50.3281 114.208Z" fill="#865B50"/>
+    <path d="M48.0329 139.064C49.574 139.008 53.602 137.851 53.602 137.851C53.602 137.851 53.3948 135.887 53.5489 134.777C53.703 133.667 54.5 132.5 53.788 131.397C52.9271 131 45.6894 130.925 44.6106 131.386C44.2004 132.069 44.5787 133.751 44.5787 134.986C44.5787 136.221 44.8869 138.5 44.8869 138.5C44.8869 138.5 46.2792 139.127 48.0329 139.064Z" fill="url(#hv-govde)"/>
+    <path d="M53.7148 134H130V134.528C130 135.837 129.829 137.141 129.49 138.405L129.465 138.5C129.246 138.813 128.889 139 128.507 139H54L53.5 137.5V136.5V135.5V134.5L53.7148 134Z" fill="url(#hv-zemin)"/>
   </g>
-
-  <!-- Pencereler -->
-  <g fill="#eaf7dd" fill-opacity="0.92">
-    <rect x="30" y="46" width="1.6" height="1.6"/>
-    <rect x="33" y="46" width="1.6" height="1.6"/>
-    <rect x="30" y="50" width="1.6" height="1.6"/>
-    <rect x="33" y="50" width="1.6" height="1.6"/>
-    <rect x="39.5" y="33" width="1.8" height="1.8"/>
-    <rect x="42.5" y="33" width="1.8" height="1.8"/>
-    <rect x="39.5" y="38" width="1.8" height="1.8"/>
-    <rect x="42.5" y="38" width="1.8" height="1.8"/>
-    <rect x="39.5" y="43" width="1.8" height="1.8"/>
-    <rect x="42.5" y="43" width="1.8" height="1.8"/>
-    <rect x="49.5" y="41" width="1.6" height="1.6"/>
-    <rect x="52" y="41" width="1.6" height="1.6"/>
-    <rect x="49.5" y="45" width="1.6" height="1.6"/>
-    <rect x="52" y="45" width="1.6" height="1.6"/>
-  </g>
-
-  <!-- Kucuk agaclar -->
-  <g>
-    <rect x="23.2" y="58" width="1.6" height="6" fill="#2f8f43"/>
-    <circle cx="24" cy="56" r="4.2" fill="#4aa845"/>
-    <rect x="29.2" y="60" width="1.4" height="5" fill="#2f8f43"/>
-    <circle cx="29.9" cy="58.5" r="3.4" fill="#5bb64a"/>
-  </g>
-
-  <!-- Buyuk yaprak + damarlar -->
-  <path d="M37 58 C42 49 59 47 71 54 C73 63 60 71 47 68 C41 66 37 63 37 58 Z" fill="url(#ga-yaprak)"/>
-  <path d="M41 61 C51 60 62 58 70 55" stroke="#e7f7d8" stroke-width="1.1" stroke-linecap="round" opacity="0.85"/>
-  <path d="M48 63 C50 61 53 59 55 58 M55 64 C57 62 60 60 62 59" stroke="#e7f7d8" stroke-width="0.8" stroke-linecap="round" opacity="0.6"/>
 </svg>

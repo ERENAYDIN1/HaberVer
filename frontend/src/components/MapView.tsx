@@ -635,6 +635,18 @@ export default function MapView({
       properties: { id: bolge.id, renk: bolge.renk },
     }));
 
+    // Guzergahin BASLANGIC ucu ayri bir nokta olarak isaretlenir. Hat boyunca
+    // dizilen oklar yonu soyler, ama "ekip nereden baslayacak" sorusunun
+    // cevabi dogrudan gorunmeli: yol tarifi tam bu noktaya gider.
+    for (const bolge of liste) {
+      if (bolge.tip !== "cizgi") continue;
+      features.push({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: bolge.noktalar[0][0] },
+        properties: { id: bolge.id, renk: bolge.renk, bas: true },
+      });
+    }
+
     source.setData({ type: "FeatureCollection", features });
     bolgeEtiketleriUygula(map, liste);
   }
@@ -1748,5 +1760,5 @@ export default function MapView({
     }
   }, [seciliId, assets]);
 
-  return <div ref={containerRef} className="greenasset-harita h-full w-full" />;
+  return <div ref={containerRef} className="haberver-harita h-full w-full" />;
 }

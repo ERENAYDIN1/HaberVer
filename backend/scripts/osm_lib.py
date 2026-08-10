@@ -20,7 +20,7 @@ ENDPOINTS = [
     "https://overpass.osm.ch/api/interpreter",
     "https://overpass.openstreetmap.ru/api/interpreter",
 ]
-UA = {"User-Agent": "GreenAsset-boundary-import/1.0 (aydineren1461@gmail.com)"}
+UA = {"User-Agent": "haberver-boundary-import/1.0 (aydineren1461@gmail.com)"}
 
 CACHE = Path(__file__).parent / "_kaynak" / "osm_cache"
 

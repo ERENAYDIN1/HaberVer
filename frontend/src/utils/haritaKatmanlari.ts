@@ -208,7 +208,7 @@ export function bolgeKatmanlari(map: maplibregl.Map): void {
       id: "bolge-fill",
       type: "fill",
       source: BOLGE_SOURCE_ID,
-      filter: ["!=", ["geometry-type"], "LineString"],
+      filter: ["==", ["geometry-type"], "Polygon"],
       paint: { "fill-color": ["get", "renk"], "fill-opacity": 0.12 },
     });
     // Kesik kenarlik: kayitli bolgeyi anlik alan seciminden (duz cizgi) ayirir.
@@ -233,6 +233,42 @@ export function bolgeKatmanlari(map: maplibregl.Map): void {
         "line-color": ["get", "renk"],
         "line-width": 2.5,
         "line-opacity": 1,
+      },
+    });
+    // Guzergah yonu: hat boyunca dizilen oklar cizim yonunu isaret eder.
+    // Yon burada bir suslemedir degil is bilgisidir - kaydin ILK noktasi saha
+    // ekibinin yol tarifi hedefidir, yani hat bastan sona yurunur.
+    map.addLayer({
+      id: "bolge-yon",
+      type: "symbol",
+      source: BOLGE_SOURCE_ID,
+      filter: ["==", ["geometry-type"], "LineString"],
+      layout: {
+        "symbol-placement": "line",
+        "symbol-spacing": 70,
+        "text-field": "▶",
+        "text-size": 11,
+        "text-keep-upright": false,
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+      },
+      paint: {
+        "text-color": ["get", "renk"],
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.5,
+      },
+    });
+    // Guzergahin baslangic ucu: ekibin yol tarifi hedefi tam bu nokta.
+    map.addLayer({
+      id: "bolge-bas",
+      type: "circle",
+      source: BOLGE_SOURCE_ID,
+      filter: ["==", ["get", "bas"], true],
+      paint: {
+        "circle-radius": 5,
+        "circle-color": ["get", "renk"],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2,
       },
     });
     // Gorunmez kalin vurus seridi: ince bir cizgiyi tam uzerinden tutturmak

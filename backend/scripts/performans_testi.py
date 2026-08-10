@@ -165,7 +165,7 @@ def yetki_aynadan_okunmuyor() -> None:
     # Davranis korunmali: saha ekibi kendisine ATANMAMIS bolgeyi kapatamamali.
     admin = admin_girisi()
     bolgeler = admin.get(f"{API}/api/bolgeler").json()
-    saha = giris("sahaekibi1@greenasset.com", "saha1234")
+    saha = giris("sahaekibi1@haberver.com", "saha1234")
     benim = {b["id"] for b in saha.get(f"{API}/api/bolgeler/benim").json()}
     yabanci = [b for b in bolgeler if b["id"] not in benim]
     if not yabanci:

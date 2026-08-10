@@ -8,7 +8,7 @@ import { BASE_URL } from "../api/http";
  *  Keycloak'ta oturum acikken cookie bize ulasmiyorsa `/auth/me` bos doner ve
  *  kullanici iki sunucu arasinda sonsuza kadar gidip gelir. Bu isaret art
  *  arda denemeleri fark edip akisi `/giris` sayfasinda durdurur. */
-const DENEME_ANAHTARI = "greenasset_giris_denemesi";
+const DENEME_ANAHTARI = "haberver_giris_denemesi";
 const DONGU_ESIGI_MS = 15_000;
 
 /** Son yonlendirmenin uzerinden esik kadar sure gecmediyse true. */

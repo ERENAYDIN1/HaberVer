@@ -38,11 +38,11 @@
 /* Mobilde harita kontrolleri (zoom/pusula/olcek) sheet ve alt cubukla yer
    kavgasi ediyor; dokunmatikte zaten cimdik hareketi kullaniliyor. */
 @media (max-width: 767px) {
-  .greenasset-harita .maplibregl-ctrl-bottom-right,
-  .greenasset-harita .maplibregl-ctrl-top-right {
+  .haberver-harita .maplibregl-ctrl-bottom-right,
+  .haberver-harita .maplibregl-ctrl-top-right {
     display: none;
   }
-  .greenasset-harita .maplibregl-ctrl-bottom-left {
+  .haberver-harita .maplibregl-ctrl-bottom-left {
     left: 0;
   }
 }
@@ -51,13 +51,13 @@
    ALTINA kadar uzaniyor (cubuk haritanin uzerine biniyor, bkz. Kenarcubugu),
    bu yuzden olcek cubugun arkasinda kalmasin diye `--kenar` kadar saga alinir.
    Degisken App'teki govde kutusunda tanimli; cubukla ayni surede gecis yapar. */
-.greenasset-harita .maplibregl-ctrl-bottom-left {
+.haberver-harita .maplibregl-ctrl-bottom-left {
   left: var(--kenar, 0px);
   transition: left 200ms ease-out;
 }
 
 /* Ana harita: yakinlastirma/pusula kontrolu sag-alt yerine sagin ortasinda. */
-.greenasset-harita .maplibregl-ctrl-bottom-right {
+.haberver-harita .maplibregl-ctrl-bottom-right {
   top: 50%;
   bottom: auto;
   transform: translateY(-50%);
@@ -68,7 +68,7 @@
    sagina dusuyordu. Butonu tek basina degil, BEYAZ ALTLIGI (container'i) o kadar
    sola alarak altlik + buton birlikte zoom butonlariyla yatayda ortalanir
    (varsayilan margin 10px + 2.5px). */
-.greenasset-harita .maplibregl-ctrl-attrib.maplibregl-compact {
+.haberver-harita .maplibregl-ctrl-attrib.maplibregl-compact {
   margin-right: 12.5px;
 }
 

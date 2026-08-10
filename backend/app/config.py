@@ -26,21 +26,21 @@ class Settings(BaseSettings):
     # internal: backend'in docker agi icinden gittigi adres.
     keycloak_public_url: str = "http://localhost:8081"
     keycloak_internal_url: str = "http://keycloak:8080"
-    keycloak_realm: str = "greenasset"
-    keycloak_client_id: str = "greenasset-bff"
+    keycloak_realm: str = "haberver"
+    keycloak_client_id: str = "haberver-bff"
     # Zorunlu: realm JSON'undaki `secret` ile ayni olmali.
     keycloak_client_secret: str = Field(min_length=8)
 
     # --- Oturum (BFF) ---
     # Tarayici yalnizca bu cookie'yi gorur; Keycloak token'lari sunucuda kalir.
-    session_cookie_name: str = "greenasset_session"
+    session_cookie_name: str = "haberver_session"
     session_cookie_secure: bool = False  # production'da mutlaka True (HTTPS)
     session_max_hours: int = 12
     # Not: rol tazeleme araligi Keycloak'taki access token omruyle belirlenir
     # (crud/session.py suresi dolunca yeniler); burada bir ayari yoktur.
 
     # Yerel satirla eslesecek ilk admin hesabinin e-postasi (parola Keycloak'ta).
-    default_admin_email: str = "admin@greenasset.com"
+    default_admin_email: str = "admin@haberver.com"
     # Zorunlu: bu parolayla Keycloak'ta ilk admin acilir.
     default_admin_password: str = Field(min_length=8)
 

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { LogoAmblem } from "./icons";
+import { HaberVerLogo } from "./icons";
 
 interface AuthKabukProps {
   baslik: string;
@@ -20,14 +20,11 @@ export default function AuthKabuk({
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex flex-col items-center gap-2">
-          <LogoAmblem className="h-16 w-16" />
-          <div className="text-center">
-            <h1 className="text-lg font-semibold tracking-tight text-slate-900">
-              GreenAsset
-            </h1>
-            <p className="text-xs text-slate-500">Akıllı Şehir Varlık Yönetimi</p>
-          </div>
+        <div className="mb-6 flex flex-col items-center gap-4">
+          <HaberVerLogo className="h-14 w-auto" />
+          <p className="text-xs tracking-[0.08em] text-slate-500">
+            Akıllı Şehir · Hızlı Çözüm
+          </p>
         </div>
 
         <div className="border border-slate-300 bg-white p-6 shadow-sm">

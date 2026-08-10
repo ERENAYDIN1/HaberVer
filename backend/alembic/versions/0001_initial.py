@@ -1,4 +1,4 @@
-"""GreenAsset baslangic semasi (tek baseline)
+"""haber ver+ baslangic semasi (tek baseline)
 
 Bu dosya, projenin ilk 12 migration'inin (0001-0012) squash edilmis halidir.
 Proje henuz hicbir ortama deploy edilmemisti, dolayisiyla gecmis adimlari
@@ -432,7 +432,7 @@ def upgrade() -> None:
 
     # Ilk admin (yalnizca hic admin yoksa). Uretimde bu env'ler mutlaka
     # gercek degerlerle verilmelidir - varsayilanlar yalnizca gelistirme icin.
-    email = os.environ.get("DEFAULT_ADMIN_EMAIL", "admin@greenasset.com").lower()
+    email = os.environ.get("DEFAULT_ADMIN_EMAIL", "admin@haberver.com").lower()
     parola = os.environ.get("DEFAULT_ADMIN_PASSWORD", "admin1234")
     hashed = bcrypt.hashpw(parola.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     bind.execute(

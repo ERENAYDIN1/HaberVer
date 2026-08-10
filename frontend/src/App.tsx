@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type maplibregl from "maplibre-gl";
 import type { CSSProperties } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getAsset } from "./api/assets";
 import { bolgeler as bolgeleriGetir } from "./api/bolgeler";
@@ -21,6 +21,7 @@ import BolgeKaydetModal, { type BolgeTaslagi } from "./components/BolgeKaydetMod
 import BolgePaneli from "./components/BolgePaneli";
 import BolgeSekilPaneli from "./components/BolgeSekilPaneli";
 import CizimPaneli from "./components/CizimPaneli";
+import { EklePaneli, type EkleKipi } from "./components/EklePaneli";
 import Dashboard from "./components/Dashboard";
 import DepartmanEtiketi from "./components/DepartmanEtiketi";
 import DepartmanYonetimi from "./components/DepartmanYonetimi";
@@ -32,12 +33,10 @@ import {
   IconLayers,
   IconLogout,
   IconMenu,
-  IconPencil,
   IconPin,
   IconPlus,
   IconRefresh,
   IconRoute,
-  IconRuler,
   IconUsers,
   IconX,
 } from "./components/icons";
@@ -52,7 +51,7 @@ import AltSekmeCubugu, {
 } from "./components/mobil/AltSekmeCubugu";
 import Sheet from "./components/mobil/Sheet";
 import { useMobil } from "./hooks/useMobil";
-import { LogoAmblem } from "./components/icons";
+import { HaberVerLogo } from "./components/icons";
 import KonumArama from "./components/KonumArama";
 import LogPaneli from "./components/LogPaneli";
 import MapStilKontrolu from "./components/MapStilKontrolu";
@@ -110,7 +109,7 @@ import type {
   ReportFeature,
   ReportFeatureCollection,
 } from "./types/report";
-import { mesafeEtiketi, noktaAlandaMi, poligonSinirKutusu } from "./utils/geo";
+import { noktaAlandaMi, poligonSinirKutusu } from "./utils/geo";
 import { EKIP_VARSAYILAN_RENK } from "./utils/haritaPopup";
 import type { EkipDepartmanBilgisi } from "./utils/haritaPopup";
 import { ISTANBUL_MERKEZI } from "./utils/istanbulMaskesi";
@@ -205,8 +204,6 @@ export default function App() {
   const [mobilMenu, setMobilMenu] = useState(false);
   /** Lejant + tur/durum filtresi + harita stili tek sheet'te. */
   const [mobilKatman, setMobilKatman] = useState(false);
-  /** Cizim araclari kumesi (kalem dugmesinden sola acilir). */
-  const [mobilCizimKumesi, setMobilCizimKumesi] = useState(false);
   /** Sifirlamanin ikinci adimi: uygulamada window.confirm yok (bkz.
    *  Aksiyonlar/SilOnayi), geri alinamayan islem onay ister. */
   const [mobilSifirlaOnayi, setMobilSifirlaOnayi] = useState(false);
@@ -237,6 +234,17 @@ export default function App() {
   // Panel kapaliyken hicbir sekme aktif sayilmaz.
   const aktifSekme: Sekme | null = panelAcik ? sekme : null;
 
+  /** "Ekle" sekmesinde secili kip; null ise "ne eklemek istiyorsun?" ekrani
+   *  gosterilir. Alan/cizgi kipleri harita uzerinde cizim baslatir. */
+  const [ekleKipi, setEkleKipi] = useState<EkleKipi | null>(null);
+  // `useAlanSecimi`'nin geri cagrimi kurulusta baglaniyor; guncel kipi
+  // okuyabilmesi icin ref uzerinden verilir.
+  const ekleKipiRef = useRef<EkleKipi | null>(null);
+  ekleKipiRef.current = ekleKipi;
+  // `sekmeSec` asagida tanimlanan `ekleKipiBirak`'tan once geldigi icin ref
+  // uzerinden cagrilir.
+  const ekleKipiBirakRef = useRef<() => void>(() => {});
+
   // Aktif kutucuga tekrar tiklamak paneli kapatir.
   const sekmeSec = (id: Sekme) => {
     // Mobilde katman/menu sheet'leri panelin uzerine biniyor; yeni bir sekme
@@ -244,6 +252,9 @@ export default function App() {
     // (Masaustunde bu iki state kullanilmiyor, cagri etkisizdir.)
     setMobilKatman(false);
     setMobilMenu(false);
+    // "Ekle"den cikmak yarim kalan kip secimini de birakir; aksi halde
+    // kullanici baska bir sekmedeyken harita hala cizim modunda kalirdi.
+    if (id !== "ekle") ekleKipiBirakRef.current();
     if (panelAcik && sekme === id) {
       setPanelAcik(false);
       return;
@@ -305,8 +316,12 @@ export default function App() {
     ucur: setUcusHedefi,
     // Cizim baslarken varlik secimi birakilir, isaretci cizimin altinda kalmasin.
     onCizimBasladi: () => setSeciliId(null),
-    // Alan bitince sonuclarin listelendigi sekmeye gec.
-    onAlanTamamlandi: () => setSekme("liste"),
+    // Alan bitince sonuclarin listelendigi sekmeye gec - AMA "Ekle" akisinda
+    // degil: orada kullanicinin niyeti sorgu degil kayit, panel "Kaydet"i
+    // gosteren cizim akisinda kalmali.
+    onAlanTamamlandi: () => {
+      if (ekleKipiRef.current === null) setSekme("liste");
+    },
   });
 
   // "Temizle": tum calisma durumunu (secimler, filtreler, cizim/olcum,
@@ -327,6 +342,7 @@ export default function App() {
     setTalepDurum(BASLANGIC.talepDurum);
     setDuzenlenen(null);
     setKoordinat(undefined);
+    setEkleKipi(null);
     // Ana katmanlar kapanir, alt filtreler isaretli kalir: katman tekrar
     // acildiginda kullanici elenmis degil tam listeyi gorur.
     katmanlariSifirla();
@@ -346,6 +362,41 @@ export default function App() {
       zoom: BASLANGIC.zoom,
     });
   };
+
+  /** "Ekle" panelinde kip secimi. Alan/cizgi kipleri dogrudan harita uzerinde
+   *  cizimi baslatir: kullanici "Görev Bölgesi"ne bastigi anda haritaya
+   *  tiklamaya hazir olmali, arada ikinci bir "basla" adimi olmamali. */
+  const ekleKipiSec = (kip: EkleKipi) => {
+    setEkleKipi(kip);
+    setKoordinat(undefined);
+    // Cizim kiplerinde panel her iki kabukta da cekilir: cizim haritada
+    // yapiliyor ve gerekli her sey (nokta sayisi, olcu, "Geri al",
+    // "Tamamla") zaten alt-ortadaki cizim panelinde. Panelde yalnizca bir
+    // ipucu cumlesi kalirdi, o cumle icin haritanin 360px'ini kapatmak
+    // zarardi. Varlik kipinde panel acik kalir, form orada.
+    if (kip !== "varlik") setPanelAcik(false);
+    if (kip === "alan") {
+      olcumIptal();
+      alanSecimiBaslat();
+    } else if (kip === "cizgi") {
+      alanSecimiIptal();
+      olcumBaslat();
+    } else {
+      cizimVeOlcumuKapat();
+      olcumTemizle();
+    }
+  };
+
+  /** Kip secimine geri donus: yarim kalan cizim birakilir. `olcumTemizle`
+   *  ayrica cagrilir, `cizimVeOlcumuKapat` yalnizca kipi kapatip noktalari
+   *  biraktigi icin ekranda yarim bir hat kalirdi. */
+  const ekleKipiBirak = () => {
+    setEkleKipi(null);
+    setKoordinat(undefined);
+    cizimVeOlcumuKapat();
+    olcumTemizle();
+  };
+  ekleKipiBirakRef.current = ekleKipiBirak;
 
   // --- Kaydedilmis bolgeler (gorev bolgeleri / guzergahlar) ---------------
   // Haritada gizlenmis olanlarin id'leri; varsayilan olarak hepsi gorunur.
@@ -1291,14 +1342,13 @@ export default function App() {
       )}
 
       {sekme === "ekle" && (
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <p className="mb-3 border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            Harita{mobil ? "da" : "da"} boş bir nokta
-            {mobil ? "ya dokunarak" : "ya tıklayarak"} koordinatı otomatik
-            doldurabilirsin.
-          </p>
-          <AssetForm koordinat={koordinat} />
-        </div>
+        <EklePaneli
+          kip={ekleKipi}
+          onKipSec={ekleKipiSec}
+          onGeri={ekleKipiBirak}
+          mobil={mobil}
+          form={<AssetForm koordinat={koordinat} />}
+        />
       )}
 
       {sekme === "talepler" && (
@@ -1385,7 +1435,10 @@ export default function App() {
       onBolgeAdDegis={personel ? bolgeAdiDegistir : undefined}
       sekilDuzenleme={sekilDuzenleme}
       onSekilDegis={sekilDegisti}
-      bolgeTiklanabilir={!(panelAcik && sekme === "ekle")}
+      // Yalnizca varlik ekleme kipinde kapatilir: buyuk bir bolgenin icine
+      // tiklayarak varlik eklenebilmeli. Cizim kiplerinde harita zaten
+      // cizim modundadir.
+      bolgeTiklanabilir={!(panelAcik && sekme === "ekle" && ekleKipi === "varlik")}
     />
   );
 
@@ -1453,16 +1506,13 @@ export default function App() {
             <IconMenu className="h-5 w-5" />
           </button>
 
-          <div className="flex select-none items-center gap-2">
-            <LogoAmblem className="h-10 w-10 shrink-0" />
-            <div className="leading-none">
-              <h1 className="text-[15px] font-bold tracking-tight text-slate-900">
-                Green<span className="text-emerald-600">Asset</span>
-              </h1>
-              <p className="mt-1 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Akıllı Şehir Varlık Yönetimi
-              </p>
-            </div>
+          <div className="flex select-none items-center gap-4">
+            <HaberVerLogo className="h-9 w-auto shrink-0" />
+            <p className="hidden text-[9.5px] font-semibold uppercase leading-[1.5] tracking-[0.14em] text-slate-400 lg:block">
+              Akıllı Şehir
+              <br />
+              Hızlı Çözüm
+            </p>
           </div>
         </div>
 
@@ -1480,63 +1530,30 @@ export default function App() {
             }
           />
 
-          {/* Cizgi cizme/olcme kontrolu - detaylar alt ortadaki arac panelinde.
-              arac yalnizca mesafe okumak icin
-              degil, kaydedilip ekibe atanabilen bir guzergah cizmek icin de
-              kullaniliyor; mesafe onun sonucu. */}
-          <button
-            onClick={olcumModu ? olcumIptal : olcumBaslat}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium shadow-sm transition-all hover:shadow-md ${
-              olcumModu || olcumNoktalari.length >= 2
-                ? "border-blue-600 bg-blue-600 text-white shadow-blue-600/20 hover:bg-blue-500"
-                : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
-            }`}
-          >
-            <IconRuler
-              className={`h-3.5 w-3.5 ${
-                olcumModu || olcumNoktalari.length >= 2 ? "" : "text-blue-500"
-              }`}
-            />
-            {olcumModu
-              ? "Çiziliyor…"
-              : olcumNoktalari.length >= 2
-                ? mesafeEtiketi(olcumMesafeM)
-                : "Çiz"}
-          </button>
-
-          {/* Alan secim kontrolu. Alan secilmisken yanindaki "cikis" dugmesi
-              secimi bitirir; ana dugme yeni bir alan cizmeye baslar. */}
-          <span className="flex items-center">
-          <button
-            onClick={cizimModu ? alanSecimiIptal : alanSecimiBaslat}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium shadow-sm transition-all hover:shadow-md ${
-              cizimModu || tamamlananAlanlar.length > 0
-                ? "border-emerald-600 bg-emerald-600 text-white shadow-emerald-600/20 hover:bg-emerald-500"
-                : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
-            }`}
-          >
-            <IconLasso
-              className={`h-3.5 w-3.5 ${
-                cizimModu || tamamlananAlanlar.length > 0 ? "" : "text-emerald-500"
-              }`}
-            />
-            {cizimModu
-              ? "Çiziliyor…"
-              : tamamlananAlanlar.length > 0
-                ? `${tamamlananAlanlar.length} alan seçili`
-                : "Alan seç"}
-          </button>
-          {!cizimModu && tamamlananAlanlar.length > 0 && (
-            <button
-              onClick={tumAlanlariTemizle}
-              title="Alan seçiminden çık"
-              aria-label="Alan seçiminden çık"
-              className="ml-1 flex h-8 w-8 items-center justify-center rounded-full border border-emerald-600 bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-500"
-            >
-              <IconX className="h-3.5 w-3.5" />
-            </button>
+          {/* Cizim/olcum artik "Ekle" akisinin icinde baslar; ust barda
+              yalnizca AKTIF bir alan sorgusunun gostergesi durur. Alan secimi
+              listeleri daraltir, o yuzden neyin daralttigini ve nasil
+              cikilacagini ekranda gormek gerekir. */}
+          {tamamlananAlanlar.length > 0 && (
+            <span className="flex items-center">
+              <button
+                onClick={() => sekmeSec("liste")}
+                title="Seçili alanın sonuçlarını göster"
+                className="flex items-center gap-1.5 rounded-full border border-emerald-600 bg-emerald-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm shadow-emerald-600/20 transition-all hover:bg-emerald-500 hover:shadow-md"
+              >
+                <IconLasso className="h-3.5 w-3.5" />
+                {`${tamamlananAlanlar.length} alan seçili`}
+              </button>
+              <button
+                onClick={tumAlanlariTemizle}
+                title="Alan seçiminden çık"
+                aria-label="Alan seçiminden çık"
+                className="ml-1 flex h-8 w-8 items-center justify-center rounded-full border border-emerald-600 bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-500"
+              >
+                <IconX className="h-3.5 w-3.5" />
+              </button>
+            </span>
           )}
-          </span>
 
           <div className="mx-1 h-6 w-px bg-slate-200" />
 
@@ -1650,15 +1667,9 @@ export default function App() {
     </>
   );
 
-  const alanAracıAktif = cizimModu || tamamlananAlanlar.length > 0;
-  const cizgiAracıAktif = olcumModu || olcumNoktalari.length >= 2;
-
-  /** Haritanin sag ustundeki dikey arac yigini: katman sheet'i + cizim
-   *  kumesi. Masaustunde bu isler header ve yuzen kartlara dagilmis
-   *  durumda; kucuk ekranda hepsi tek bir sutunda toplanir.
-   *
-   *  Cizim araclari TEK dugmenin arkasinda: uc ayri hedef yigini
-   *  uzatiyordu. Kume sola acilir, cunku asagisi alt sekme cubugu. */
+  /** Haritanin sag ustundeki dikey arac yigini: katman sheet'i + sifirlama.
+   *  Masaustunde bu isler header ve yuzen kartlara dagilmis durumda; kucuk
+   *  ekranda tek bir sutunda toplanir. */
   const mobilAracYigini = (
     <div className="absolute right-3 top-3 z-20 flex flex-col items-end gap-2">
       <MobilAracDugmesi
@@ -1667,7 +1678,6 @@ export default function App() {
         rozet={Object.values(katmanlar).filter(Boolean).length}
         onClick={() => {
           setMobilMenu(false);
-          setMobilCizimKumesi(false);
           setMobilSifirlaOnayi(false);
           setMobilKatman(true);
         }}
@@ -1675,64 +1685,11 @@ export default function App() {
         <IconLayers className="h-5 w-5" />
       </MobilAracDugmesi>
 
-      {personel && (
-        <div className="flex items-center gap-1.5">
-          {mobilCizimKumesi && (
-            <div className="flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/95 p-1 shadow-lg backdrop-blur-md">
-              <MobilKumeDugmesi
-                etiket="Alan seç"
-                aktif={alanAracıAktif}
-                onClick={() => {
-                  // Kume kendiliginden kapanir: cizim haritaya dokunarak
-                  // yapiliyor, acik kume sag ustteki dokunuslari yutuyor.
-                  setMobilCizimKumesi(false);
-                  if (cizimModu) alanSecimiIptal();
-                  else {
-                    // Cizim baslarken panel de cekilir: kucuk ekranda
-                    // panel haritanin yarisini kapatiyor.
-                    setPanelAcik(false);
-                    alanSecimiBaslat();
-                  }
-                }}
-              >
-                <IconLasso className="h-[18px] w-[18px]" />
-              </MobilKumeDugmesi>
+      {/* Cizim/ekleme icin burada dugme YOK: alt sekme cubugundaki "Ekle"
+          tek giris kapisidir. Ayni isi acan ikinci bir hedef, hangisinin
+          gecerli oldugunu belirsizlestiriyordu. */}
 
-              <MobilKumeDugmesi
-                etiket="Çizgi çiz"
-                aktif={cizgiAracıAktif}
-                onClick={() => {
-                  setMobilCizimKumesi(false);
-                  if (olcumModu) olcumIptal();
-                  else {
-                    setPanelAcik(false);
-                    olcumBaslat();
-                  }
-                }}
-              >
-                <IconRuler className="h-[18px] w-[18px]" />
-              </MobilKumeDugmesi>
-            </div>
-          )}
-
-          <MobilAracDugmesi
-            etiket="Çizim araçları"
-            // Kume kapaliyken bile "cizim acik" okunabilmeli.
-            aktif={mobilCizimKumesi || alanAracıAktif || cizgiAracıAktif}
-            onClick={() => {
-              setMobilMenu(false);
-              setMobilKatman(false);
-              setMobilSifirlaOnayi(false);
-              setMobilCizimKumesi((a) => !a);
-            }}
-          >
-            <IconPencil className="h-5 w-5" />
-          </MobilAracDugmesi>
-        </div>
-      )}
-
-      {/* Sifirla kumenin ICINDE degil, cizim dugmesinin ALTINDA duruyor:
-          yalnizca cizimi degil tum calisma durumunu (secim, filtre,
+      {/* Sifirla yalnizca cizimi degil tum calisma durumunu (secim, filtre,
           ilce/mahalle) basa dondurur - bir cizim araci degil. Cizim ici
           temizlik zaten CizimPaneli'nde.
 
@@ -1762,10 +1719,7 @@ export default function App() {
         <MobilAracDugmesi
           etiket="Sıfırla"
           tehlike
-          onClick={() => {
-            setMobilCizimKumesi(false);
-            setMobilSifirlaOnayi(true);
-          }}
+          onClick={() => setMobilSifirlaOnayi(true)}
         >
           <IconRefresh className="h-5 w-5" />
         </MobilAracDugmesi>
@@ -1791,11 +1745,8 @@ export default function App() {
           <IconMenu className="h-5 w-5" />
         </button>
 
-        <div className="flex min-w-0 select-none items-center gap-1.5">
-          <LogoAmblem className="h-8 w-8 shrink-0" />
-          <h1 className="truncate text-[15px] font-bold tracking-tight text-slate-900">
-            Green<span className="text-emerald-600">Asset</span>
-          </h1>
+        <div className="flex min-w-0 select-none items-center">
+          <HaberVerLogo className="h-8 w-auto shrink-0" />
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
@@ -1823,19 +1774,12 @@ export default function App() {
       <div className="relative min-h-0 flex-1">
         <div className="absolute inset-0">{haritaBlogu}</div>
 
-        {/* Disariya dokunmak KAPATIR ama secili araci birakmaz: kullanici
-            cizmeye devam eder, kume yoldan cekilir. Sifirlama onayi da
-            aynı dokunusla vazgecilir - onay acik kalip yanlislikla
-            basilmasindansa kapansin. */}
-        {(mobilCizimKumesi || mobilSifirlaOnayi) && (
+        {/* Sifirlama onayi disariya dokununca vazgecilir: onay acik kalip
+            yanlislikla basilmasindansa kapansin. */}
+        {mobilSifirlaOnayi && (
           <button
-            aria-label={
-              mobilSifirlaOnayi ? "Sıfırlamadan vazgeç" : "Çizim araçlarını kapat"
-            }
-            onClick={() => {
-              setMobilCizimKumesi(false);
-              setMobilSifirlaOnayi(false);
-            }}
+            aria-label="Sıfırlamadan vazgeç"
+            onClick={() => setMobilSifirlaOnayi(false)}
             className="absolute inset-0 z-10 cursor-default"
           />
         )}
@@ -2066,6 +2010,9 @@ export default function App() {
           const kaynak = bolgeTaslagi?.kaynak;
           if (kaynak?.tip === "alan") alanKaldir(kaynak.id);
           else if (kaynak?.tip === "olcum") olcumTemizle();
+          // Ekleme akisi bitti: kip birakilmazsa "Ekle" paneli bir sonraki
+          // acilisinda hala "… ekleniyor" seridini gosterirdi.
+          ekleKipiBirak();
           // Yeni kaydin turune gore dogru sekme acilir.
           setSekme(bolgeTaslagi?.tip === "cizgi" ? "guzergahlar" : "bolgeler");
           setPanelAcik(true);
@@ -2226,39 +2173,6 @@ function MobilAracDugmesi({
   );
 }
 
-/** Cizim kumesinin icindeki dugme. `MobilAracDugmesi`'nden kucuktur ve kendi
- *  cercevesi yoktur: kabin (hap) kendisi zaten dokunmatik hedefi 44px'e
- *  tasiyan bir yuzey, ic dugmeler onun bolmeleri. */
-function MobilKumeDugmesi({
-  etiket,
-  aktif,
-  tehlike,
-  onClick,
-  children,
-}: {
-  etiket: string;
-  aktif?: boolean;
-  tehlike?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label={etiket}
-      aria-pressed={tehlike ? undefined : aktif}
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition ${
-        aktif
-          ? "bg-emerald-600 text-white"
-          : tehlike
-            ? "text-red-600"
-            : "text-slate-600"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
 
 /** Mobil menu sheet'indeki tek satir. Kenar cubugunun ogesini (`KenarOgesi`)
  *  oldugu gibi alir - mobil ayri bir menu tanimi tasimaz. */

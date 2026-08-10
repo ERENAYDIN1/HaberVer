@@ -43,7 +43,7 @@ import {
 
 /** Talep listesinin acik/kapali tercihi kalicidir: vatandas listeyi bir kez
  *  kapattiysa her girisinde tekrar kapatmak zorunda kalmamali. */
-const LISTE_ANAHTARI = "greenasset.taleplerim.acik";
+const LISTE_ANAHTARI = "haberver.taleplerim.acik";
 
 /** Bir sekil tipinin gecerli olmasi icin gereken en az kose sayisi. */
 const EN_AZ_NOKTA: Record<TalepSekilTipi, number> = {
@@ -695,7 +695,7 @@ export default function VatandasEkran() {
             </div>
             <div className="min-w-0 leading-tight">
               <h1 className="truncate text-sm font-semibold tracking-tight text-slate-900">
-                GreenAsset · Talep
+                haber ver · Talep
               </h1>
               <p className="truncate text-[11px] text-slate-500">
                 {user?.full_name || user?.email}
@@ -889,7 +889,7 @@ export default function VatandasEkran() {
           </div>
           <div className="leading-tight">
             <h1 className="text-sm font-semibold tracking-tight text-slate-900">
-              GreenAsset · Talep
+              haber ver · Talep
             </h1>
             <p className="text-[11px] text-slate-500">Vatandaş Bildirim Ekranı</p>
           </div>

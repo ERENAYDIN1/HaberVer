@@ -1,7 +1,13 @@
+# Proje adi ACIKCA yazilir: verilmezse Compose onu DIZIN adindan turetir
+# (`HaberVer` -> `haberver`, eskiden `GreenAsset` -> `greenasset`) ve volume'ler
+# o onekle olusurdu. Burada sabitlendigi icin dizin adi ne olursa olsun
+# volume'ler `haberver_*` kalir -- klasoru yeniden adlandirmak veriyi terk ettirmez.
+name: haberver
+
 services:
   db:
     image: postgis/postgis:16-3.4
-    container_name: greenasset_db
+    container_name: haberver_db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -20,14 +26,14 @@ services:
   # Kimlik saglayici. Kullanici/parola/rol burada yasar; uygulama yalnizca
   # dogrulanmis kimligi ogrenir (bkz. backend/app/keycloak.py).
   #   - `start-dev`: gomulu H2 veritabani + HTTP (yalnizca gelistirme icindir).
-  #   - `--import-realm`: keycloak/realm-greenasset.json yalnizca ILK acilista
+  #   - `--import-realm`: keycloak/realm-haberver.json yalnizca ILK acilista
   #     (realm henuz yokken) alinir; sonraki degisiklikler konsoldan yapilir.
   #   - KC_HOSTNAME tarayicinin gordugu adrestir ve token'daki `iss` degerini
   #     belirler; backend Keycloak'a ag icinden (keycloak:8080) gider ama
   #     token'i bu ISSUER'a gore dogrular (bkz. KEYCLOAK_PUBLIC_URL/INTERNAL_URL).
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
-    container_name: greenasset_keycloak
+    container_name: haberver_keycloak
     restart: unless-stopped
     command: start-dev --import-realm
     environment:
@@ -49,7 +55,7 @@ services:
 
   backend:
     build: ./backend
-    container_name: greenasset_backend
+    container_name: haberver_backend
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL}
@@ -83,7 +89,7 @@ services:
 
   frontend:
     build: ./frontend
-    container_name: greenasset_frontend
+    container_name: haberver_frontend
     restart: unless-stopped
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL}

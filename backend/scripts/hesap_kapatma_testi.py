@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from auth_akis_testi import API, admin_girisi, giris  # noqa: E402
 
 ORIGIN = {"Origin": "http://localhost:5173"}
-KURBAN = "sahaekibi3@greenasset.com"
+KURBAN = "sahaekibi3@haberver.com"
 KURBAN_PAROLA = "saha1234"
 
 

@@ -34,33 +34,33 @@ from app.database import SessionLocal  # noqa: E402
 # bir mudurlugun karsi yakadaki isi hicbir zaman otomatik atanmaz ve demo
 # "bozuk" gorunurdu.
 KULLANICILAR = [
-    ("sahaekibi1@greenasset.com", "Park Ekibi 1 (Kadıköy)", "saha_calisani",
+    ("sahaekibi1@haberver.com", "Park Ekibi 1 (Kadıköy)", "saha_calisani",
      "saha1234", 29.0275, 40.9902, "park_bahceler"),
-    ("sahaekibi2@greenasset.com", "Park Ekibi 2 (Beşiktaş)", "saha_calisani",
+    ("sahaekibi2@haberver.com", "Park Ekibi 2 (Beşiktaş)", "saha_calisani",
      "saha1234", 29.0067, 41.0430, "park_bahceler"),
-    ("sahaekibi3@greenasset.com", "Fen Ekibi 1 (Bakırköy)", "saha_calisani",
+    ("sahaekibi3@haberver.com", "Fen Ekibi 1 (Bakırköy)", "saha_calisani",
      "saha1234", 28.8720, 40.9805, "fen_isleri"),
-    ("sahaekibi4@greenasset.com", "Fen Ekibi 2 (Ataşehir)", "saha_calisani",
+    ("sahaekibi4@haberver.com", "Fen Ekibi 2 (Ataşehir)", "saha_calisani",
      "saha1234", 29.1280, 40.9920, "fen_isleri"),
-    ("sahaekibi5@greenasset.com", "Aydınlatma Ekibi 1 (Şişli)", "saha_calisani",
+    ("sahaekibi5@haberver.com", "Aydınlatma Ekibi 1 (Şişli)", "saha_calisani",
      "saha1234", 28.9880, 41.0610, "aydinlatma_enerji"),
-    ("sahaekibi6@greenasset.com", "Aydınlatma Ekibi 2 (Üsküdar)", "saha_calisani",
+    ("sahaekibi6@haberver.com", "Aydınlatma Ekibi 2 (Üsküdar)", "saha_calisani",
      "saha1234", 29.0160, 41.0250, "aydinlatma_enerji"),
-    ("sahaekibi7@greenasset.com", "Su Ekibi (Fatih)", "saha_calisani",
+    ("sahaekibi7@haberver.com", "Su Ekibi (Fatih)", "saha_calisani",
      "saha1234", 28.9490, 41.0170, "su_kanalizasyon"),
-    ("sahaekibi8@greenasset.com", "Temizlik Ekibi (Eminönü)", "saha_calisani",
+    ("sahaekibi8@haberver.com", "Temizlik Ekibi (Eminönü)", "saha_calisani",
      "saha1234", 28.9710, 41.0170, "temizlik_isleri"),
-    ("sahaekibi9@greenasset.com", "Ulaşım Ekibi (Levent)", "saha_calisani",
+    ("sahaekibi9@haberver.com", "Ulaşım Ekibi (Levent)", "saha_calisani",
      "saha1234", 29.0135, 41.0785, "ulasim_hizmetleri"),
-    ("sahaekibi10@greenasset.com", "Çözüm Merkezi Ekibi (Zeytinburnu)",
+    ("sahaekibi10@haberver.com", "Çözüm Merkezi Ekibi (Zeytinburnu)",
      "saha_calisani", "saha1234", 28.9050, 40.9925, "cozum_merkezi"),
     # Iki personel AYRI mudurluklerde: departman kapsaminin gercekten
     # ayirdigi (birinin digerinin taleplerini gormedigi) elle gorulebilsin.
-    ("calisan1@greenasset.com", "Fen İşleri Personeli", "calisan",
+    ("calisan1@haberver.com", "Fen İşleri Personeli", "calisan",
      "calisan1234", None, None, "fen_isleri"),
-    ("calisan2@greenasset.com", "Park ve Bahçeler Personeli", "calisan",
+    ("calisan2@haberver.com", "Park ve Bahçeler Personeli", "calisan",
      "calisan1234", None, None, "park_bahceler"),
-    ("vatandas1@greenasset.com", "Örnek Vatandaş", "vatandas",
+    ("vatandas1@haberver.com", "Örnek Vatandaş", "vatandas",
      "vatandas1234", None, None, None),
 ]
 
@@ -182,6 +182,24 @@ SEKILLI_TALEPLER = [
     ),
 ]
 
+# --- Reddedilmis talepler: (ad, tip, lon, lat, aciklama, gerekce) ------------
+#
+# Panelin "Reddedildi" sekmesi bos kalmasin: personelin bir talebi neden
+# reddettigi de demo ortaminda gorulebilmeli. Reddi inceleyen personel
+# calisan1 (Fen Isleri) -- turler bilincli olarak onun kapsaminda secildi,
+# yoksa kendi reddettigi kaydi goremezdi. Ornekler gercek belediye
+# gerekcelerini yansitir: mukerrer bildirim ve yetki disi konu.
+REDDEDILEN_TALEPLER = [
+    ("Mecidiyeköy'de yol çukuru (tekrar bildirim)", "yol", 28.9972, 41.0668,
+     "Yolun ortasındaki çukur hâlâ duruyor, kimse gelmedi.",
+     "Aynı çukur için açık bir talep zaten var; iş o kayıt üzerinden "
+     "yürütülüyor. Mükerrer bildirim olarak kapatıldı."),
+    ("Otoyol bağlantısında bozuk asfalt", "yol", 28.8280, 41.0090,
+     "Çevre yolu bağlantısındaki asfalt tamamen dağılmış durumda.",
+     "Bildirilen kesim belediye sorumluluk alanında değil, Karayolları "
+     "Genel Müdürlüğü'ne aittir. İlgili kuruma yönlendirildi."),
+]
+
 # --- Kaydedilmis bolgeler/guzergahlar ---------------------------------------
 #
 # (ad, aciklama, tip, renk, departman, geojson, atanan_ekip_emaili)
@@ -200,7 +218,7 @@ BOLGELER = [
         "park_bahceler",
         '{"type":"Polygon","coordinates":[[[29.0230,40.9865],[29.0320,40.9872],'
         '[29.0332,40.9832],[29.0242,40.9825],[29.0230,40.9865]]]}',
-        "sahaekibi1@greenasset.com",
+        "sahaekibi1@haberver.com",
     ),
     (
         "Barbaros Bulvarı Asfalt Güzergâhı",
@@ -210,7 +228,7 @@ BOLGELER = [
         "fen_isleri",
         '{"type":"LineString","coordinates":[[29.0043,41.0468],[29.0051,41.0452],'
         '[29.0058,41.0436],[29.0064,41.0421],[29.0071,41.0405]]}',
-        "sahaekibi3@greenasset.com",
+        "sahaekibi3@haberver.com",
     ),
     (
         "Şişli Aydınlatma Denetim Güzergâhı",
@@ -220,7 +238,7 @@ BOLGELER = [
         "aydinlatma_enerji",
         '{"type":"LineString","coordinates":[[28.9855,41.0585],[28.9878,41.0608],'
         '[28.9901,41.0631],[28.9925,41.0650]]}',
-        "sahaekibi5@greenasset.com",
+        "sahaekibi5@haberver.com",
     ),
     (
         "Fatih Su Hattı Kontrol Bölgesi",
@@ -230,7 +248,7 @@ BOLGELER = [
         "su_kanalizasyon",
         '{"type":"Polygon","coordinates":[[[28.9450,41.0140],[28.9540,41.0155],'
         '[28.9555,41.0110],[28.9465,41.0095],[28.9450,41.0140]]]}',
-        "sahaekibi7@greenasset.com",
+        "sahaekibi7@haberver.com",
     ),
     (
         "Kent Merkezi Koordinasyon Alanı",
@@ -248,13 +266,17 @@ BOLGELER = [
 # Ekipler islerin DEPARTMANINA gore secildi: otomatik atama da bunu yapardi.
 ATAMALAR = [
     # direk -> aydinlatma_enerji, Anadolu yakasi
-    ("Kadıköy Moda Aydınlatma D-7", "sahaekibi6@greenasset.com"),
+    ("Kadıköy Moda Aydınlatma D-7", "sahaekibi6@haberver.com"),
     # agac -> park_bahceler, Avrupa yakasi
-    ("Beşiktaş Meydan Çınarı", "sahaekibi2@greenasset.com"),
+    ("Beşiktaş Meydan Çınarı", "sahaekibi2@haberver.com"),
 ]
 
 TUM_VARLIK_ADLARI = [a[0] for a in BAKIM_VARLIKLARI] + [a[0] for a in IYI_VARLIKLAR]
-TUM_TALEP_ADLARI = [r[0] for r in TALEPLER] + [r[0] for r in SEKILLI_TALEPLER]
+TUM_TALEP_ADLARI = (
+    [r[0] for r in TALEPLER]
+    + [r[0] for r in SEKILLI_TALEPLER]
+    + [r[0] for r in REDDEDILEN_TALEPLER]
+)
 TUM_EMAILLER = [k[0] for k in KULLANICILAR]
 
 
@@ -403,13 +425,13 @@ def ekle(db) -> None:
             sa.text(
                 """
                 INSERT INTO reports (reporter_id, name, type, note, geometry, nokta)
-                SELECT (SELECT id FROM users WHERE email = 'vatandas1@greenasset.com'),
+                SELECT (SELECT id FROM users WHERE email = 'vatandas1@haberver.com'),
                        :ad, :tip, :note,
                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)
                 WHERE NOT EXISTS (SELECT 1 FROM reports WHERE name = :ad)
                   AND EXISTS (SELECT 1 FROM users
-                              WHERE email = 'vatandas1@greenasset.com')
+                              WHERE email = 'vatandas1@haberver.com')
                 """
             ).bindparams(
                 sa.bindparam("ad", ad, type_=sa.String),
@@ -428,7 +450,7 @@ def ekle(db) -> None:
             sa.text(
                 """
                 INSERT INTO reports (reporter_id, name, type, note, geometry, nokta)
-                SELECT (SELECT id FROM users WHERE email = 'vatandas1@greenasset.com'),
+                SELECT (SELECT id FROM users WHERE email = 'vatandas1@haberver.com'),
                        :ad, :tip, :note,
                        ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326),
                        CASE ST_GeometryType(ST_GeomFromGeoJSON(:geojson))
@@ -439,13 +461,44 @@ def ekle(db) -> None:
                        END
                 WHERE NOT EXISTS (SELECT 1 FROM reports WHERE name = :ad)
                   AND EXISTS (SELECT 1 FROM users
-                              WHERE email = 'vatandas1@greenasset.com')
+                              WHERE email = 'vatandas1@haberver.com')
                 """
             ).bindparams(
                 sa.bindparam("ad", ad, type_=sa.String),
                 sa.bindparam("tip", tip, type_=sa.String),
                 sa.bindparam("note", note, type_=sa.String),
                 sa.bindparam("geojson", geojson, type_=sa.String),
+            )
+        )
+
+    # Reddedilmis talepler. Inceleyen personel calisan1; kayit dogrudan
+    # 'reddedildi' durumunda yazilir (onay akisi bir varlik uretirdi, red
+    # uretmez -- bu yuzden ek bir temizlik bagi olusmaz).
+    for ad, tip, lon, lat, note, gerekce in REDDEDILEN_TALEPLER:
+        db.execute(
+            sa.text(
+                """
+                INSERT INTO reports (reporter_id, name, type, note, geometry,
+                                     nokta, status, reviewed_by, reviewed_at,
+                                     review_note)
+                SELECT (SELECT id FROM users WHERE email = 'vatandas1@haberver.com'),
+                       :ad, :tip, :note,
+                       ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
+                       ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
+                       CAST('reddedildi' AS report_status),
+                       (SELECT id FROM users WHERE email = 'calisan1@haberver.com'),
+                       now(), :gerekce
+                WHERE NOT EXISTS (SELECT 1 FROM reports WHERE name = :ad)
+                  AND EXISTS (SELECT 1 FROM users
+                              WHERE email = 'vatandas1@haberver.com')
+                """
+            ).bindparams(
+                sa.bindparam("ad", ad, type_=sa.String),
+                sa.bindparam("tip", tip, type_=sa.String),
+                sa.bindparam("note", note, type_=sa.String),
+                sa.bindparam("gerekce", gerekce, type_=sa.String),
+                sa.bindparam("lon", lon, type_=sa.Float),
+                sa.bindparam("lat", lat, type_=sa.Float),
             )
         )
 
@@ -535,7 +588,7 @@ def ekle(db) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="GreenAsset demo verisi")
+    ap = argparse.ArgumentParser(description="haber ver+ demo verisi")
     ap.add_argument("--sil", action="store_true", help="yalnizca demo veriyi sil")
     ap.add_argument("--temizle", action="store_true", help="once sil, sonra ekle")
     args = ap.parse_args()

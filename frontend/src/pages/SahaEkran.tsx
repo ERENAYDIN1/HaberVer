@@ -44,6 +44,7 @@ import { TALEP_SEKIL_ETIKETLERI } from "../types/report";
 import { gorevSekli } from "../types/saha";
 import {
   alanEtiketi,
+  enBuyukHalkaMerkezi,
   mesafeEtiketi,
   mesafeMetre,
   poligonAlaniM2,
@@ -84,6 +85,16 @@ function yolTarifiAc(lng: number, lat: number) {
     "_blank",
     "noopener"
   );
+}
+
+/** Bolge/guzergahin yol tarifi hedefi. Alanda en buyuk halkanin merkezi -
+ *  haritadaki ad etiketinin durdugu nokta, ekip "adin yazdigi yere" yonlensin.
+ *  Guzergahta hattin ORTASI degil BASI: bir hat bastan sona yurunur, ortasina
+ *  birakilan ekip isin yarisini geride birakmis olur. */
+function bolgeHedefi(bolge: Bolge): [number, number] {
+  return bolge.tip === "alan"
+    ? enBuyukHalkaMerkezi(bolge.noktalar)
+    : bolge.noktalar[0][0];
 }
 
 /** Saha ekibi ekrani: konumunu periyodik yayinlar, yalnizca kendisine atanan
@@ -832,7 +843,7 @@ export default function SahaEkran() {
                       onGit={() =>
                         setUcus({
                           anahtar: crypto.randomUUID(),
-                          merkez: b.noktalar[0][0],
+                          merkez: bolgeHedefi(b),
                           zoom: 13,
                         })
                       }
@@ -865,7 +876,7 @@ export default function SahaEkran() {
                       onGit={() =>
                         setUcus({
                           anahtar: crypto.randomUUID(),
-                          merkez: b.noktalar[0][0],
+                          merkez: bolgeHedefi(b),
                           zoom: 14,
                         })
                       }
@@ -1000,7 +1011,7 @@ export default function SahaEkran() {
             </div>
             <div className="min-w-0 leading-tight">
               <h1 className="truncate text-sm font-semibold tracking-tight text-slate-900">
-                GreenAsset · Saha
+                haber ver · Saha
               </h1>
               <div className="flex min-w-0 items-center gap-1.5">
                 <span className="truncate text-[11px] text-slate-500">
@@ -1120,7 +1131,7 @@ export default function SahaEkran() {
           </div>
           <div className="leading-tight">
             <h1 className="text-sm font-semibold tracking-tight text-slate-900">
-              GreenAsset · Saha
+              haber ver · Saha
             </h1>
             <p className="text-[11px] text-slate-500">Görev Ekranı</p>
           </div>
@@ -1330,7 +1341,18 @@ function BolgeKarti({
           )}
         </span>
       </button>
-      <div className="border-t border-slate-100 p-2">
+      <div className="space-y-1.5 border-t border-slate-100 p-2">
+        <button
+          onClick={() => {
+            const [lng, lat] = bolgeHedefi(bolge);
+            yolTarifiAc(lng, lat);
+          }}
+          className="flex w-full items-center justify-center gap-1.5 rounded-md border border-emerald-600 bg-white px-3 py-1.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50"
+        >
+          <IconRoute className="h-3.5 w-3.5" />
+          {bolge.tip === "alan" ? "Yol tarifi al" : "Hattın başına git"}
+        </button>
+
         {onayBekliyor ? (
           <div className="flex gap-1.5">
             <button
@@ -1352,7 +1374,7 @@ function BolgeKarti({
         ) : (
           <button
             onClick={onOnayIste}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md border border-emerald-600 bg-white px-3 py-1.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50"
+            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700"
           >
             <IconCheck className="h-3.5 w-3.5" />
             Tamamlandı olarak işaretle

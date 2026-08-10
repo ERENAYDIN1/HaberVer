@@ -34,7 +34,7 @@ from ..security import get_context, get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-AKIS_COOKIE = "greenasset_flow"
+AKIS_COOKIE = "haberver_flow"
 # Kullanicinin giris ekraninda kalabilecegi azami sure; sonra akis bastan baslar.
 AKIS_OMRU_SN = 10 * 60
 

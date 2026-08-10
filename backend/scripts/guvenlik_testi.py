@@ -29,7 +29,7 @@ def onar_sahipligi() -> None:
     once kural yalnizca arayuzdeydi, API'de karsiligi yoktu."""
     bolum("A3 - /onar sahiplik kontrolu")
     personel = admin_girisi()
-    saha = giris("sahaekibi1@greenasset.com", "saha1234")
+    saha = giris("sahaekibi1@haberver.com", "saha1234")
 
     # Saha ekibi tum varlik listesini gorebilir (tasarim geregi).
     liste = saha.get(f"{API}/api/assets", params={"status": "bakim_lazim"})
@@ -171,7 +171,7 @@ def azp_dogrulamasi() -> None:
 def yukleme_siniri() -> None:
     """A4: buyuk / sahte fotograf reddedilmeli."""
     bolum("A4 - fotograf yukleme")
-    vatandas = giris("vatandas1@greenasset.com", "vatandas1234")
+    vatandas = giris("vatandas1@haberver.com", "vatandas1234")
     alan = {
         "name": "test",
         "type": "diger",
@@ -220,8 +220,8 @@ def departman_kapsami() -> None:
     Kapsam disi kayit 404 doner, 403 degil: talebin VARLIGI da baska
     mudurlugun bilgisidir, "yetkiniz yok" demek kaydin var oldugunu sizdirir."""
     bolum("A7 - departman kapsami")
-    fen = giris("calisan1@greenasset.com", "calisan1234")
-    park = giris("calisan2@greenasset.com", "calisan1234")
+    fen = giris("calisan1@haberver.com", "calisan1234")
+    park = giris("calisan2@haberver.com", "calisan1234")
 
     fen_talepler = fen.get(f"{API}/api/reports", params={"status": "beklemede"}).json()
     park_talepler = park.get(f"{API}/api/reports", params={"status": "beklemede"}).json()
@@ -278,8 +278,8 @@ def bolge_kapsami() -> None:
     etmeli: admin'in departmani yoktur, onun cizdigi kayitlar bu kovaya duser
     ve kapanmalari tum bolgeleri gorunmez yapardi."""
     bolum("A9 - bolge (alan/guzergah) kapsami")
-    fen = giris("calisan1@greenasset.com", "calisan1234")
-    park = giris("calisan2@greenasset.com", "calisan1234")
+    fen = giris("calisan1@haberver.com", "calisan1234")
+    park = giris("calisan2@haberver.com", "calisan1234")
 
     fen_bolgeler = fen.get(f"{API}/api/bolgeler").json()
     park_bolgeler = park.get(f"{API}/api/bolgeler").json()
@@ -348,7 +348,7 @@ def tur_sozlugu_yetkisi() -> None:
     yonlendirmesini degistirmek her personelin ne gorebildigini degistirir.
     Okuma herkese acik (vatandas talep formu tur listesini oradan cizer)."""
     bolum("A10 - tur/mudurluk sozlugu yetkisi")
-    calisan = giris("calisan1@greenasset.com", "calisan1234")
+    calisan = giris("calisan1@haberver.com", "calisan1234")
 
     okuma = calisan.get(f"{API}/api/turler")
     assert okuma.status_code == 200, okuma.status_code

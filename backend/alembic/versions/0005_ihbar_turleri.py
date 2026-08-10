@@ -16,6 +16,7 @@ Create Date: 2026-07-30
 """
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0005"
@@ -49,6 +50,13 @@ def upgrade() -> None:
     # eklenen bir enum degerinin KULLANILMASINA izin vermez.
     for deger in YENI_TURLER:
         op.execute(f"ALTER TYPE asset_type ADD VALUE IF NOT EXISTS '{deger}'")
+
+    # Yeni degerler BURADA commit edilir. Alembic tum zinciri tek transaction'da
+    # kosturdugu icin, aksi halde sonraki migration'lar (0007 `tur_departman`
+    # dolumu) bu degerleri kullanamaz ve sifirdan kurulum
+    # `UnsafeNewEnumValueUsage` ile patlar. Mevcut kurulumlarda zincir zaten
+    # buradan gecmisti, bu yuzden hata yalnizca TEMIZ kurulumda goruluyordu.
+    op.get_bind().execute(sa.text("COMMIT"))
 
 
 def downgrade() -> None:

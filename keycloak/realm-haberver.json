@@ -1,9 +1,9 @@
 {
-  "realm": "greenasset",
+  "realm": "haberver",
   "enabled": true,
-  "displayName": "GreenAsset",
-  "displayNameHtml": "<div class=\"ga-marka\">GreenAsset</div><div class=\"ga-marka-alt\">Akıllı Şehir Varlık Yönetimi</div>",
-  "loginTheme": "greenasset",
+  "displayName": "haber ver+",
+  "displayNameHtml": "<div class=\"ga-marka\">haber ver+</div><div class=\"ga-marka-alt\">Akıllı Şehir · Hızlı Çözüm</div>",
+  "loginTheme": "haberver",
   "internationalizationEnabled": true,
   "supportedLocales": ["tr", "en"],
   "defaultLocale": "tr",
@@ -33,8 +33,8 @@
   "defaultRoles": ["vatandas"],
   "clients": [
     {
-      "clientId": "greenasset-bff",
-      "name": "GreenAsset backend (BFF)",
+      "clientId": "haberver-bff",
+      "name": "haber ver backend (BFF)",
       "description": "Token'lari backend tutar; tarayiciya yalnizca oturum cookie'si gider.",
       "enabled": true,
       "protocol": "openid-connect",
@@ -71,9 +71,9 @@
   ],
   "users": [
     {
-      "username": "service-account-greenasset-bff",
+      "username": "service-account-haberver-bff",
       "enabled": true,
-      "serviceAccountClientId": "greenasset-bff",
+      "serviceAccountClientId": "haberver-bff",
       "clientRoles": {
         "realm-management": [
           "manage-users",

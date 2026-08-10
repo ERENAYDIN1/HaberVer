@@ -14,7 +14,7 @@ const RENK_PALETI = [
   "#475569",
 ];
 
-const OZEL_RENK_ANAHTARI = "greenasset-ozel-renkler";
+const OZEL_RENK_ANAHTARI = "haberver-ozel-renkler";
 
 /** Net alan kendi alanindan bu orandan kucukse "cakisiyor" sayilir. Tam
  *  esitlik aranmaz: jeodezik olcude son hanede kayan nokta gurultusu olur. */
@@ -280,6 +280,13 @@ export default function CizimPaneli({
             </div>
             <p className="mb-1 rounded-lg bg-blue-50/70 px-2.5 py-1.5 text-xs text-slate-600">
               Haritada tıklayarak bir hat çiz; uzunluğu anlık hesaplanır.
+              {/* Guzergah kaydedilirse ilk nokta saha ekibinin baslangic
+                  noktasi olur (yol tarifi oraya gider), yani cizim yonu
+                  isin yonudur. */}
+              <span className="mt-1 block text-slate-500">
+                İlk tıkladığın nokta hattın başıdır: ekip oraya yönlenir. Hattı
+                ekibin ilerleyeceği yönde çiz.
+              </span>
               <span className="mt-1 block text-sm font-medium text-slate-800">
                 {olcumNoktalari.length} nokta
                 {olcumNoktalari.length >= 2 && ` · ${mesafeEtiketi(olcumMesafeM)}`}

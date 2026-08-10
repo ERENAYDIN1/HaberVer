@@ -68,7 +68,7 @@ async def lifespan(app: FastAPI):
         gorev.cancel()
 
 
-app = FastAPI(title="GreenAsset API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="haber ver+ API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

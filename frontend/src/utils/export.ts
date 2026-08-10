@@ -65,13 +65,13 @@ export function csvIndir(data: AssetFeatureCollection) {
   // BOM: Excel'in UTF-8 Turkce karakterleri dogru okumasi icin gerekli.
   const icerik =
     "﻿" + [basliklar.join(AYIRICI), ...satirlar].join("\r\n");
-  indir(icerik, `greenasset-${zamanDamgasi()}.csv`, "text/csv");
+  indir(icerik, `haberver-${zamanDamgasi()}.csv`, "text/csv");
 }
 
 export function jsonIndir(data: AssetFeatureCollection) {
   indir(
     JSON.stringify(data, null, 2),
-    `greenasset-${zamanDamgasi()}.geojson`,
+    `haberver-${zamanDamgasi()}.geojson`,
     "application/geo+json"
   );
 }

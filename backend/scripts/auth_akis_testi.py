@@ -54,7 +54,7 @@ def giris(email: str, parola: str) -> httpx.Client:
     assert yanit.status_code == 302, yanit.status_code
     kc_url = yanit.headers["location"]
     assert "/protocol/openid-connect/auth" in kc_url, kc_url
-    assert "greenasset_flow" in yanit.headers.get("set-cookie", ""), "akis cookie yok"
+    assert "haberver_flow" in yanit.headers.get("set-cookie", ""), "akis cookie yok"
 
     # 2) Keycloak giris formu.
     form_sayfa = istemci.get(ic(kc_url))
@@ -76,7 +76,7 @@ def giris(email: str, parola: str) -> httpx.Client:
     #    (Tarayici burayi 5173 uzerinden cagirir; ayni uc, ayni cookie.)
     cb = istemci.get(f"{API}{donus.split('localhost:5173', 1)[1]}")
     assert cb.status_code == 302, (cb.status_code, cb.text[:400])
-    assert "greenasset_session" in cb.headers.get("set-cookie", ""), "oturum cookie yok"
+    assert "haberver_session" in cb.headers.get("set-cookie", ""), "oturum cookie yok"
     return istemci
 
 
@@ -112,7 +112,7 @@ def main() -> None:
     print("[ok] admin -> vatandas ucu (/reports/mine) 403")
 
     # Ters yon: vatandas hesabi personel ucuna girememeli.
-    vatandas = giris("vatandas1@greenasset.com", "vatandas1234")
+    vatandas = giris("vatandas1@haberver.com", "vatandas1234")
     assert vatandas.get(f"{API}/api/reports/mine").status_code == 200
     assert vatandas.get(f"{API}/api/saha/ekipler").status_code == 403
     print("[ok] vatandas -> kendi ucu 200, personel ucu 403")
