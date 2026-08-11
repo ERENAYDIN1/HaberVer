@@ -203,7 +203,7 @@ export default function AssetDetayModal({
   };
 
   return (
-    <Modal acik={asset !== null} baslik="Varlık Detayı" onKapat={onKapat}>
+    <Modal acik={asset !== null} baslik="Varlık Detayı" onKapat={onKapat} ustte>
       <div className="space-y-3">
         {fotoSrc && (
           <img

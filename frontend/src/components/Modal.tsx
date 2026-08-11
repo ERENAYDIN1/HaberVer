@@ -10,6 +10,10 @@ interface ModalProps {
   /** Govde (icerik) sarmalayicisinin sinifi; kendi flex/yukseklik/padding'ini
    *  yoneten tam panel bilesenleri icin varsayilan "p-5" degistirilebilir. */
   icerikSinifi?: string;
+  /** Baska bir Modal'in (orn. "Saha Ekipleri" yonetim penceresi) icinden acilan
+   *  detay modalleri icin: hepsi ayni z-50'i kullandigindan DOM sirasi kazanir,
+   *  sonradan acilan yonetim penceresi altta kalan detay modalini ortebilirdi. */
+  ustte?: boolean;
 }
 
 export default function Modal({
@@ -19,6 +23,7 @@ export default function Modal({
   children,
   genis,
   icerikSinifi = "p-5",
+  ustte,
 }: ModalProps) {
   // ESC ile kapatma
   useEffect(() => {
@@ -33,7 +38,11 @@ export default function Modal({
   if (!acik) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+    <div
+      className={`fixed inset-0 flex items-center justify-center bg-slate-900/50 p-4 ${
+        ustte ? "z-[60]" : "z-50"
+      }`}
+    >
       {/* Arka plana tiklamak kapatmaz: modallerin cogu kaydedilmemis bir form ya da
        *  taslak tasiyor, yanlislikla disari tiklamak onlari yok ediyordu. */}
       <div

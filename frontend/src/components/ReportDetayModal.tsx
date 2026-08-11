@@ -97,7 +97,7 @@ export default function ReportDetayModal({
     : "";
 
   return (
-    <Modal acik={report !== null} baslik="Talep Detayı" onKapat={onKapat}>
+    <Modal acik={report !== null} baslik="Talep Detayı" onKapat={onKapat} ustte>
       <div className="space-y-3">
         {fotoSrc && (
           <img

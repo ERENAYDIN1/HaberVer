@@ -15,10 +15,20 @@ import {
   useDepartmanlar,
   useTurDepartmanEslemesi,
 } from "../hooks/useDepartmanlar";
-import { turGrubu } from "../data/turSozlugu";
-import { GRUP_RENGI, TIP_GRUPLARI, TIP_GRUP_KISA } from "../types/asset";
-import type { AssetFeature, AssetFeatureCollection } from "../types/asset";
-import { csvIndir, jsonIndir } from "../utils/export";
+import type { AssetFeatureCollection } from "../types/asset";
+import {
+  TALEP_DURUM_RENGI,
+  TALEP_GORUNUMLERI,
+  REPORT_STATUS_LABELS,
+  talepNoktasi,
+} from "../types/report";
+import type { ReportFeature, TalepGorunumu } from "../types/report";
+import {
+  csvIndir,
+  jsonIndir,
+  talepCsvIndir,
+  talepJsonIndir,
+} from "../utils/export";
 
 /* Renk rolleri - uygulamanin mevcut dilini korur.
    Not: yesil/amber cifti renk korlugunde ayirt edilemeyecek kadar yakin
@@ -45,47 +55,446 @@ const SEVIYE_STIL = [
 
 interface DashboardProps {
   data?: AssetFeatureCollection;
+  /** Bekleyen/onaylanan/tamir/reddedilen goruntuye ayrilmis talepler
+   *  (App.tsx'teki `talepGorunumleriAlanda` ile ayni kaynak). Personel
+   *  degilse veya henuz yuklenmediyse "Talepler" sekmesi bos veri gosterir. */
+  talepGorunumleri?: Record<TalepGorunumu, ReportFeature[]>;
   /** Alan secimi aktifse baslikta belirtilir. */
   alanSecimiAktif?: boolean;
 }
 
-/** Gorunen varliklarin koordinatlarini tek istekte ilce/mahalleye cozumler.
- *  Sonuc, varlik id'sine gore bir haritaya donusturulur (sira bagimsiz). */
-function useKonumHaritasi(features: AssetFeature[]) {
-  const idler = useMemo(
-    () => features.map((f) => f.properties.id).sort(),
-    [features]
+interface Konumlu {
+  id: string;
+  koordinat: [number, number] | null;
+}
+
+/** Gorunen kayitlarin koordinatlarini tek istekte ilce/mahalleye cozumler.
+ *  Sonuc, kayit id'sine gore bir haritaya donusturulur (sira bagimsiz).
+ *  Koordinati olmayan kayitlar (nokta cozumlenememis talep) atlanir. */
+function useKonumHaritasi(kayitlar: Konumlu[]) {
+  const konumlular = useMemo(
+    () => kayitlar.filter((k): k is Konumlu & { koordinat: [number, number] } => k.koordinat !== null),
+    [kayitlar]
   );
+  const idler = useMemo(() => konumlular.map((k) => k.id).sort(), [konumlular]);
   return useQuery({
     queryKey: ["konum-toplu", idler],
     queryFn: async () => {
-      const sonuc = await konumCozumleToplu(
-        features.map((f) => f.geometry.coordinates as [number, number])
-      );
+      const sonuc = await konumCozumleToplu(konumlular.map((k) => k.koordinat));
       const harita: Record<string, KonumCozumu> = {};
-      features.forEach((f, i) => {
-        harita[f.properties.id] = sonuc[i];
+      konumlular.forEach((k, i) => {
+        harita[k.id] = sonuc[i];
       });
       return harita;
     },
-    enabled: features.length > 0,
+    enabled: konumlular.length > 0,
     staleTime: Infinity,
   });
 }
 
-export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
+/** İlçe/mahalle secici cifti - iki sekme de ayni gorseli kullanir. */
+function KonumFiltresi({
+  ilceFiltre,
+  mahalleFiltre,
+  ilceSecenekleri,
+  mahalleSecenekleri,
+  konumYukleniyor,
+  onIlceDegis,
+  onMahalleDegis,
+  onTemizle,
+}: {
+  ilceFiltre: string | null;
+  mahalleFiltre: string | null;
+  ilceSecenekleri: { kod: string; ad: string }[];
+  mahalleSecenekleri: { kod: string; ad: string }[];
+  konumYukleniyor: boolean;
+  onIlceDegis: (kod: string | null) => void;
+  onMahalleDegis: (kod: string | null) => void;
+  onTemizle: () => void;
+}) {
+  const filtreAktif = ilceFiltre !== null || mahalleFiltre !== null;
+  return (
+    <div className="mb-5 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-slate-600">Konuma göre filtrele</p>
+        {filtreAktif && (
+          <button
+            onClick={onTemizle}
+            className="text-xs font-medium text-emerald-700 hover:text-emerald-900"
+          >
+            Temizle
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <select
+          value={ilceFiltre ?? ""}
+          onChange={(e) => onIlceDegis(e.target.value || null)}
+          className="w-full border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none"
+        >
+          <option value="">Tüm ilçeler</option>
+          {ilceSecenekleri.map((i) => (
+            <option key={i.kod} value={i.kod}>
+              {i.ad}
+            </option>
+          ))}
+        </select>
+        <select
+          value={mahalleFiltre ?? ""}
+          onChange={(e) => onMahalleDegis(e.target.value || null)}
+          disabled={!ilceFiltre}
+          className="w-full border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400"
+        >
+          <option value="">{ilceFiltre ? "Tüm mahalleler" : "Önce ilçe seçin"}</option>
+          {mahalleSecenekleri.map((m) => (
+            <option key={m.kod} value={m.kod}>
+              {m.ad}
+            </option>
+          ))}
+        </select>
+      </div>
+      {konumYukleniyor && (
+        <p className="text-[11px] text-slate-400">Konumlar çözümleniyor…</p>
+      )}
+    </div>
+  );
+}
+
+/** Yatay bar grafik govdesi - tur grubu/departman/talep durumu dagilimlari
+ *  ayni gorseli kullanir. Baslik disaridan cizilir (bkz. `DagilimBarlari` /
+ *  `TurDepartmanDagilimi`) ki tek grafik hem duz basliga hem toggle'li
+ *  baslika oturabilsin. */
+function DagilimGrafigi({
+  veri,
+  altYazi,
+}: {
+  veri: DagilimVerisi[];
+  altYazi?: string;
+}) {
+  const enBuyuk = Math.max(...veri.map((d) => d.sayi), 1);
+  const genislikEn = Math.max(...veri.map((d) => d.etiket.length), 4) * 6.5 + 20;
+  return (
+    <>
+      {veri.length === 0 ? (
+        <p className="py-4 text-center text-xs text-slate-400">Gösterilecek veri yok.</p>
+      ) : (
+        <ResponsiveContainer width="100%" height={veri.length * 42}>
+          <BarChart
+            data={veri}
+            layout="vertical"
+            margin={{ top: 0, right: 28, bottom: 0, left: 0 }}
+            barCategoryGap="28%"
+          >
+            <XAxis type="number" hide domain={[0, enBuyuk]} />
+            <YAxis
+              type="category"
+              dataKey="etiket"
+              width={Math.min(genislikEn, 140)}
+              axisLine={false}
+              tickLine={false}
+              tick={{ fontSize: 12, fill: RENK.ikincilMetin }}
+            />
+            <Bar
+              dataKey="sayi"
+              barSize={18}
+              radius={[9, 9, 9, 9]}
+              isAnimationActive
+              animationDuration={550}
+              animationEasing="ease-out"
+            >
+              {veri.map((d) => (
+                <Cell key={d.anahtar} fill={d.renk} />
+              ))}
+              <LabelList
+                dataKey="sayi"
+                position="right"
+                offset={8}
+                style={{ fontSize: 12, fill: RENK.ikincilMetin, fontWeight: 500 }}
+              />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+      {altYazi && <p className="mt-1 text-[11px] text-slate-400">{altYazi}</p>}
+    </>
+  );
+}
+
+/** Baslikli tek-kirilim grafik (orn. talep durum dagilimi) - toggle'i olmayan
+ *  yerlerde `TurDepartmanDagilimi`'nin baslik+govde iskeletiyle ayni gorunur. */
+function DagilimBarlari({
+  baslik,
+  veri,
+  altYazi,
+}: {
+  baslik: string;
+  veri: DagilimVerisi[];
+  altYazi?: string;
+}) {
+  return (
+    <div className="mb-6">
+      <p className="mb-2 text-xs font-medium text-slate-600">{baslik}</p>
+      <DagilimGrafigi veri={veri} altYazi={altYazi} />
+    </div>
+  );
+}
+
+interface DagilimVerisi {
+  anahtar: string;
+  etiket: string;
+  renk: string;
+  sayi: number;
+}
+
+interface Kirilim {
+  kod: string;
+  ad: string;
+  toplam: number;
+  vurgu: number;
+}
+
+/** Ilce/mahalle konum kirilimi - satira tiklamak drill-down yapar. Hem
+ *  varlik ("bakim") hem talep ("bekleyen") sekmesinde ayni gorseli kullanir;
+ *  `vurguEtiket` ikincil sayinin ne oldugunu soyler (orn. "bakım"/"bekliyor"). */
+function KonumKirilimi({
+  baslik,
+  kirilim,
+  vurguEtiket,
+  ilceFiltre,
+  mahalleFiltre,
+  konumYukleniyor,
+  onIlceSec,
+  onMahalleSec,
+}: {
+  baslik: string;
+  kirilim: Kirilim[];
+  vurguEtiket: string;
+  ilceFiltre: string | null;
+  mahalleFiltre: string | null;
+  konumYukleniyor: boolean;
+  onIlceSec: (kod: string) => void;
+  onMahalleSec: (kod: string) => void;
+}) {
+  const enBuyukKirilim = Math.max(...kirilim.map((k) => k.toplam), 1);
+  return (
+    <div className="mb-6">
+      <p className="mb-2 text-xs font-medium text-slate-600">{baslik}</p>
+      {kirilim.length === 0 ? (
+        <p className="py-4 text-center text-xs text-slate-400">
+          {konumYukleniyor ? "Çözümleniyor…" : "Gösterilecek veri yok."}
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {kirilim.map((k) => {
+            const tiklanabilir = k.kod !== BILINMIYOR;
+            const secili = ilceFiltre ? mahalleFiltre === k.kod : false;
+            return (
+              <li key={k.kod}>
+                <button
+                  disabled={!tiklanabilir}
+                  onClick={() => (ilceFiltre ? onMahalleSec(k.kod) : onIlceSec(k.kod))}
+                  className={`w-full rounded-lg border px-2.5 py-1.5 text-left transition ${
+                    secili
+                      ? "border-emerald-400 bg-emerald-50"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                  } ${tiklanabilir ? "" : "cursor-default opacity-70"}`}
+                >
+                  <div className="mb-1 flex items-baseline justify-between gap-2">
+                    <span className="truncate text-xs font-medium text-slate-700">{k.ad}</span>
+                    <span className="shrink-0 text-xs text-slate-500">
+                      {k.toplam}
+                      {k.vurgu > 0 && (
+                        <span className="ml-1 text-amber-700">
+                          · {k.vurgu} {vurguEtiket}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full transition-all duration-500 ease-out"
+                      style={{
+                        width: `${(k.toplam / enBuyukKirilim) * 100}%`,
+                        background: RENK.seri,
+                      }}
+                    />
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function DisaAktar({
+  toplam,
+  onCsv,
+  onJson,
+}: {
+  toplam: number;
+  onCsv: () => void;
+  onJson: () => void;
+}) {
+  return (
+    <div className="border-t border-slate-200 pt-4">
+      <p className="mb-2 text-xs font-medium text-slate-600">
+        Dışa aktar
+        <span className="ml-1 font-normal text-slate-400">({toplam} kayıt)</span>
+      </p>
+      <div className="flex gap-2">
+        <button
+          onClick={onCsv}
+          disabled={toplam === 0}
+          className="flex-1 border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+        >
+          CSV indir
+        </button>
+        <button
+          onClick={onJson}
+          disabled={toplam === 0}
+          className="flex-1 border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+        >
+          GeoJSON indir
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Ust breadcrumb seridi - seviyeye gore rengi/etiketi degisir. İki sekme de
+ *  aynisini kullanir; sag ustteki sayi/etiket disaridan verilir. */
+function UstSerit({
+  seviye,
+  ilceFiltre,
+  mahalleFiltre,
+  seciliIlceAd,
+  seciliMahalleAd,
+  onKok,
+  onIlceyeDon,
+  sayi,
+  sayiEtiket,
+}: {
+  seviye: 0 | 1 | 2;
+  ilceFiltre: string | null;
+  mahalleFiltre: string | null;
+  seciliIlceAd?: string;
+  seciliMahalleAd?: string;
+  onKok: () => void;
+  onIlceyeDon: () => void;
+  sayi: number;
+  sayiEtiket: string;
+}) {
+  const stil = SEVIYE_STIL[seviye];
+  return (
+    <div
+      key={seviye}
+      className={`ozet-giris sticky top-10 z-10 flex items-center justify-between gap-2 px-4 py-2.5 text-white ${stil.serit}`}
+    >
+      <div className="min-w-0">
+        <p className={`text-[11px] font-medium uppercase tracking-wide ${stil.vurgu}`}>
+          {stil.ad}
+        </p>
+        <nav className="flex items-center gap-1 text-sm font-semibold">
+          <button onClick={onKok} className="truncate hover:underline">
+            İstanbul
+          </button>
+          {ilceFiltre && (
+            <>
+              <span className={stil.vurgu}>›</span>
+              <button onClick={onIlceyeDon} className="truncate hover:underline">
+                {seciliIlceAd ?? "İlçe"}
+              </button>
+            </>
+          )}
+          {mahalleFiltre && (
+            <>
+              <span className={stil.vurgu}>›</span>
+              <span className="truncate">{seciliMahalleAd ?? "Mahalle"}</span>
+            </>
+          )}
+        </nav>
+      </div>
+      <div className="shrink-0 text-right leading-tight">
+        <p className="text-lg font-semibold">{sayi}</p>
+        <p className={`text-[11px] ${stil.vurgu}`}>{sayiEtiket}</p>
+      </div>
+    </div>
+  );
+}
+
+type OzetSekmesi = "varliklar" | "talepler";
+
+const SEKMELER: { anahtar: OzetSekmesi; etiket: string }[] = [
+  { anahtar: "varliklar", etiket: "Varlıklar" },
+  { anahtar: "talepler", etiket: "Talepler" },
+];
+
+export default function Dashboard({
+  data,
+  talepGorunumleri,
+  alanSecimiAktif,
+}: DashboardProps) {
+  const [sekme, setSekme] = useState<OzetSekmesi>("varliklar");
+
+  // Talepler sekmesi vatandas/saha rolune hic ulasilamaz (Ozet modali zaten
+  // yalnizca personele acilir), ama talep verisi gelmemisse (hook devre disi)
+  // sekmeyi gostermek anlamsizdir.
+  const talepVarMi = talepGorunumleri !== undefined;
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+      {talepVarMi && (
+        <div className="sticky top-0 z-20 flex border-b border-slate-200 bg-white">
+          {SEKMELER.map((s) => (
+            <button
+              key={s.anahtar}
+              onClick={() => setSekme(s.anahtar)}
+              className={`flex-1 px-4 py-2.5 text-sm font-medium transition ${
+                sekme === s.anahtar
+                  ? "border-b-2 border-emerald-600 text-emerald-700"
+                  : "border-b-2 border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {s.etiket}
+            </button>
+          ))}
+        </div>
+      )}
+      {sekme === "varliklar" || !talepVarMi ? (
+        <VarlikOzeti data={data} alanSecimiAktif={alanSecimiAktif} />
+      ) : (
+        <TalepOzeti gorunumler={talepGorunumleri} alanSecimiAktif={alanSecimiAktif} />
+      )}
+    </div>
+  );
+}
+
+function VarlikOzeti({
+  data,
+  alanSecimiAktif,
+}: {
+  data?: AssetFeatureCollection;
+  alanSecimiAktif?: boolean;
+}) {
   const [ilceFiltre, setIlceFiltre] = useState<string | null>(null);
   const [mahalleFiltre, setMahalleFiltre] = useState<string | null>(null);
 
-  // useMemo: her render'da yeni bir dizi uretilirse asagidaki `idler` memo'su
-  // (ve ona bagli her sey) hicbir zaman onbellege alinamaz.
   const features = useMemo(() => data?.features ?? [], [data]);
-  const { data: konumlar, isFetching: konumYukleniyor } =
-    useKonumHaritasi(features);
+  const konumluKayitlar = useMemo(
+    () =>
+      features.map((f) => ({
+        id: f.properties.id,
+        koordinat: f.geometry.coordinates as [number, number],
+      })),
+    [features]
+  );
+  const { data: konumlar, isFetching: konumYukleniyor } = useKonumHaritasi(konumluKayitlar);
   const { data: departmanlar } = useDepartmanlar();
   const { data: esleme } = useTurDepartmanEslemesi();
 
-  // Filtre kutularinin secenekleri: veride gercekten bulunan ilce/mahalleler.
   const ilceSecenekleri = useMemo(() => {
     const m = new Map<string, string>();
     for (const f of features) {
@@ -109,7 +518,6 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
       .sort((a, b) => a.ad.localeCompare(b.ad, "tr"));
   }, [features, konumlar, ilceFiltre]);
 
-  // Secili ilce/mahalleye gore suzulmus varliklar - tum ozet bunlar uzerinden.
   const filtrelenmis = useMemo(() => {
     return features.filter((f) => {
       const k = konumlar?.[f.properties.id];
@@ -119,9 +527,7 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
     });
   }, [features, konumlar, ilceFiltre, mahalleFiltre]);
 
-  // Kirilim: ilce secili degilse ilceye gore, seciliyse (drill-down) o ilcenin
-  // mahallelerine gore. Her satirda toplam + bakim sayisi.
-  const kirilim = useMemo(() => {
+  const kirilim = useMemo<Kirilim[]>(() => {
     const sayac = new Map<string, { ad: string; toplam: number; bakim: number }>();
     for (const f of features) {
       const k = konumlar?.[f.properties.id];
@@ -141,7 +547,7 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
       sayac.set(anahtar, kayit);
     }
     return [...sayac.entries()]
-      .map(([kod, v]) => ({ kod, ...v }))
+      .map(([kod, v]) => ({ kod, ad: v.ad, toplam: v.toplam, vurgu: v.bakim }))
       .sort((a, b) => b.toplam - a.toplam);
   }, [features, konumlar, ilceFiltre]);
 
@@ -150,391 +556,345 @@ export default function Dashboard({ data, alanSecimiAktif }: DashboardProps) {
   }
 
   const toplam = filtrelenmis.length;
-  const bakimGerekli = filtrelenmis.filter(
-    (f) => f.properties.status === "bakim_lazim"
-  ).length;
+  const bakimGerekli = filtrelenmis.filter((f) => f.properties.status === "bakim_lazim").length;
   const bakimOrani = toplam === 0 ? 0 : Math.round((bakimGerekli / toplam) * 100);
 
-  // Onlarca tur duz bir grafikte okunamiyor: dagilim TUR GRUBUNA gore (5 bar)
-  // gosterilir ve her bar grubun HARITADAKI rengini tasir. Bir grubun icindeki
-  // tur dagilimi soldaki listenin tur filtresinden okunur.
-  const tipDagilimi = TIP_GRUPLARI.map((g) => ({
-    tip: TIP_GRUP_KISA[g],
-    renk: GRUP_RENGI[g],
-    sayi: filtrelenmis.filter((f) => turGrubu(f.properties.type) === g).length,
-  }));
-  const enBuyuk = Math.max(...tipDagilimi.map((d) => d.sayi), 1);
-
-  // Departman dagilimi: "hangi mudurlugun ustunde kac is var". Tur grubuyla
-  // AYNI SEY DEGILDIR (orn. cop kutusu yesil grupta ama Temizlik Isleri'nde);
-  // is yuku sorusunun cevabi bu kirilimdir, gorsel gruplama degil.
-  // Bar rengi departmanin kendi rengi - haritadaki grup renkleriyle
-  // karismasin diye departman rengi yalnizca panellerde/grafikte kullanilir.
+  // Departman dagilimi: "hangi mudurlugun ustunde kac is var".
   const departmanDagilimi = (departmanlar ?? [])
     .map((d) => ({
-      kod: d.kod,
-      ad: d.ad.replace(/\s*Müdürlüğü$/, ""),
+      anahtar: d.kod,
+      etiket: d.ad.replace(/\s*Müdürlüğü$/, ""),
       renk: d.renk,
       sayi: filtrelenmis.filter((f) => esleme?.[f.properties.type] === d.kod).length,
       bakim: filtrelenmis.filter(
-        (f) =>
-          esleme?.[f.properties.type] === d.kod &&
-          f.properties.status === "bakim_lazim"
+        (f) => esleme?.[f.properties.type] === d.kod && f.properties.status === "bakim_lazim"
       ).length,
     }))
     .filter((d) => d.sayi > 0)
     .sort((a, b) => b.sayi - a.sayi);
-  const enBuyukDepartman = Math.max(...departmanDagilimi.map((d) => d.sayi), 1);
 
-  // Dışa/aktarma ve tetikleme filtrelenmis alt kumeyi kullanir.
   const filtreliKoleksiyon: AssetFeatureCollection = {
     type: "FeatureCollection",
     features: filtrelenmis,
   };
 
-  const enBuyukKirilim = Math.max(...kirilim.map((k) => k.toplam), 1);
   const filtreAktif = ilceFiltre !== null || mahalleFiltre !== null;
   const seciliIlceAd = ilceSecenekleri.find((i) => i.kod === ilceFiltre)?.ad;
   const seciliMahalleAd = mahalleSecenekleri.find((m) => m.kod === mahalleFiltre)?.ad;
   const seviye = mahalleFiltre ? 2 : ilceFiltre ? 1 : 0;
-  const stil = SEVIYE_STIL[seviye];
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-      {/* Seviyeye gore rengi/etiketi degisen ust breadcrumb seridi - genel
-          ozetten detaya inince gecis buradan net anlasilir. */}
-      <div
-        key={seviye}
-        className={`ozet-giris sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-2.5 text-white ${stil.serit}`}
-      >
-        <div className="min-w-0">
-          <p className={`text-[11px] font-medium uppercase tracking-wide ${stil.vurgu}`}>
-            {stil.ad}
-          </p>
-          <nav className="flex items-center gap-1 text-sm font-semibold">
-            <button
-              onClick={() => {
-                setIlceFiltre(null);
-                setMahalleFiltre(null);
-              }}
-              className="truncate hover:underline"
-            >
-              İstanbul
-            </button>
-            {ilceFiltre && (
-              <>
-                <span className={stil.vurgu}>›</span>
-                <button
-                  onClick={() => setMahalleFiltre(null)}
-                  className="truncate hover:underline"
-                >
-                  {seciliIlceAd ?? "İlçe"}
-                </button>
-              </>
-            )}
-            {mahalleFiltre && (
-              <>
-                <span className={stil.vurgu}>›</span>
-                <span className="truncate">{seciliMahalleAd ?? "Mahalle"}</span>
-              </>
-            )}
-          </nav>
-        </div>
-        <div className="shrink-0 text-right leading-tight">
-          <p className="text-lg font-semibold">{toplam}</p>
-          <p className={`text-[11px] ${stil.vurgu}`}>varlık</p>
-        </div>
-      </div>
+    <>
+      <UstSerit
+        seviye={seviye}
+        ilceFiltre={ilceFiltre}
+        mahalleFiltre={mahalleFiltre}
+        seciliIlceAd={seciliIlceAd}
+        seciliMahalleAd={seciliMahalleAd}
+        onKok={() => {
+          setIlceFiltre(null);
+          setMahalleFiltre(null);
+        }}
+        onIlceyeDon={() => setMahalleFiltre(null)}
+        sayi={toplam}
+        sayiEtiket="varlık"
+      />
 
       <div key={`${ilceFiltre}-${mahalleFiltre}`} className="ozet-giris p-4">
-      {alanSecimiAktif && (
-        <p className="mb-3 border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-          Seçili alandaki varlıklar gösteriliyor.
-        </p>
-      )}
-
-      {/* Ilce / mahalle filtresi */}
-      <div className="mb-5 space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-slate-600">Konuma göre filtrele</p>
-          {filtreAktif && (
-            <button
-              onClick={() => {
-                setIlceFiltre(null);
-                setMahalleFiltre(null);
-              }}
-              className="text-xs font-medium text-emerald-700 hover:text-emerald-900"
-            >
-              Temizle
-            </button>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <select
-            value={ilceFiltre ?? ""}
-            onChange={(e) => {
-              setIlceFiltre(e.target.value || null);
-              setMahalleFiltre(null);
-            }}
-            className="w-full border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none"
-          >
-            <option value="">Tüm ilçeler</option>
-            {ilceSecenekleri.map((i) => (
-              <option key={i.kod} value={i.kod}>
-                {i.ad}
-              </option>
-            ))}
-          </select>
-          <select
-            value={mahalleFiltre ?? ""}
-            onChange={(e) => setMahalleFiltre(e.target.value || null)}
-            disabled={!ilceFiltre}
-            className="w-full border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400"
-          >
-            <option value="">
-              {ilceFiltre ? "Tüm mahalleler" : "Önce ilçe seçin"}
-            </option>
-            {mahalleSecenekleri.map((m) => (
-              <option key={m.kod} value={m.kod}>
-                {m.ad}
-              </option>
-            ))}
-          </select>
-        </div>
-        {konumYukleniyor && (
-          <p className="text-[11px] text-slate-400">Konumlar çözümleniyor…</p>
-        )}
-      </div>
-
-      {/* Hero figur - gorunumdeki tek buyuk sayi */}
-      <div className="mb-5">
-        <p className="text-xs text-slate-500">
-          {filtreAktif ? "Seçili konumdaki varlık" : "Toplam varlık"}
-        </p>
-        <p className="text-5xl font-semibold leading-tight text-slate-900">
-          {toplam}
-        </p>
-      </div>
-
-      {/* Bakim orani - meter (dolgu severity, track ayni ramp'in acik adimi) */}
-      <div className="mb-6">
-        <div className="mb-1.5 flex items-baseline justify-between">
-          <span className="text-xs text-slate-500">Bakım gerektiren</span>
-          <span className="text-sm font-semibold text-slate-800">
-            {bakimGerekli}
-            <span className="ml-1 text-xs font-normal text-slate-500">
-              / {toplam} · %{bakimOrani}
-            </span>
-          </span>
-        </div>
-        <div
-          className="h-2.5 w-full overflow-hidden rounded-full"
-          style={{ background: RENK.uyariTrack }}
-          role="img"
-          aria-label={`Bakım gerektiren varlık oranı yüzde ${bakimOrani}`}
-        >
-          <div
-            className="h-full rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${bakimOrani}%`, background: RENK.uyari }}
-          />
-        </div>
-      </div>
-
-      {/* Tur grubuna gore dagilim - barlar haritadaki grup renklerini tasir,
-          degerler ucta dogrudan etiketli */}
-      <div className="mb-6">
-        <p className="mb-2 text-xs font-medium text-slate-600">
-          Tür grubuna göre dağılım
-        </p>
-        {toplam === 0 ? (
-          <p className="py-4 text-center text-xs text-slate-400">
-            Gösterilecek veri yok.
+        {alanSecimiAktif && (
+          <p className="mb-3 border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+            Seçili alandaki varlıklar gösteriliyor.
           </p>
-        ) : (
-          <ResponsiveContainer width="100%" height={tipDagilimi.length * 42}>
-            <BarChart
-              data={tipDagilimi}
-              layout="vertical"
-              margin={{ top: 0, right: 28, bottom: 0, left: 0 }}
-              barCategoryGap="28%"
-            >
-              <XAxis type="number" hide domain={[0, enBuyuk]} />
-              <YAxis
-                type="category"
-                dataKey="tip"
-                width={78}
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12, fill: RENK.ikincilMetin }}
-              />
-              <Bar
-                dataKey="sayi"
-                barSize={18}
-                radius={[9, 9, 9, 9]}
-                isAnimationActive
-                animationDuration={550}
-                animationEasing="ease-out"
-              >
-                {tipDagilimi.map((d) => (
-                  <Cell key={d.tip} fill={d.renk} />
-                ))}
-                <LabelList
-                  dataKey="sayi"
-                  position="right"
-                  offset={8}
-                  style={{ fontSize: 12, fill: RENK.ikincilMetin, fontWeight: 500 }}
-                />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
         )}
-      </div>
 
-      {/* Departmana gore dagilim: hangi mudurlugun ustunde kac is var.
-          Tur grubu grafiginden AYRI bir sorudur - gorsel gruplama ile is
-          bolumu her zaman ortusmez. */}
-      {departmanDagilimi.length > 0 && (
+        <KonumFiltresi
+          ilceFiltre={ilceFiltre}
+          mahalleFiltre={mahalleFiltre}
+          ilceSecenekleri={ilceSecenekleri}
+          mahalleSecenekleri={mahalleSecenekleri}
+          konumYukleniyor={konumYukleniyor}
+          onIlceDegis={(kod) => {
+            setIlceFiltre(kod);
+            setMahalleFiltre(null);
+          }}
+          onMahalleDegis={setMahalleFiltre}
+          onTemizle={() => {
+            setIlceFiltre(null);
+            setMahalleFiltre(null);
+          }}
+        />
+
+        {/* Hero figur - gorunumdeki tek buyuk sayi */}
+        <div className="mb-5">
+          <p className="text-xs text-slate-500">
+            {filtreAktif ? "Seçili konumdaki varlık" : "Toplam varlık"}
+          </p>
+          <p className="text-5xl font-semibold leading-tight text-slate-900">{toplam}</p>
+        </div>
+
+        {/* Bakim orani - meter (dolgu severity, track ayni ramp'in acik adimi) */}
         <div className="mb-6">
-          <p className="mb-2 text-xs font-medium text-slate-600">
-            Departmana göre dağılım
-          </p>
-          <ResponsiveContainer width="100%" height={departmanDagilimi.length * 42}>
-            <BarChart
-              data={departmanDagilimi}
-              layout="vertical"
-              margin={{ top: 0, right: 28, bottom: 0, left: 0 }}
-              barCategoryGap="28%"
-            >
-              <XAxis type="number" hide domain={[0, enBuyukDepartman]} />
-              <YAxis
-                type="category"
-                dataKey="ad"
-                width={130}
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12, fill: RENK.ikincilMetin }}
-              />
-              <Bar
-                dataKey="sayi"
-                barSize={18}
-                radius={[9, 9, 9, 9]}
-                isAnimationActive
-                animationDuration={550}
-                animationEasing="ease-out"
-              >
-                {departmanDagilimi.map((d) => (
-                  <Cell key={d.kod} fill={d.renk} />
-                ))}
-                <LabelList
-                  dataKey="sayi"
-                  position="right"
-                  offset={8}
-                  style={{ fontSize: 12, fill: RENK.ikincilMetin, fontWeight: 500 }}
-                />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <p className="mt-1 text-[11px] text-slate-400">
-            Bakım bekleyen:{" "}
-            {departmanDagilimi
-              .filter((d) => d.bakim > 0)
-              .map((d) => `${d.ad} ${d.bakim}`)
-              .join(" · ") || "yok"}
-          </p>
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <span className="text-xs text-slate-500">Bakım gerektiren</span>
+            <span className="text-sm font-semibold text-slate-800">
+              {bakimGerekli}
+              <span className="ml-1 text-xs font-normal text-slate-500">
+                / {toplam} · %{bakimOrani}
+              </span>
+            </span>
+          </div>
+          <div
+            className="h-2.5 w-full overflow-hidden rounded-full"
+            style={{ background: RENK.uyariTrack }}
+            role="img"
+            aria-label={`Bakım gerektiren varlık oranı yüzde ${bakimOrani}`}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${bakimOrani}%`, background: RENK.uyari }}
+            />
+          </div>
         </div>
-      )}
 
-      {/* Konum kirilimi - ilce (veya secili ilcede mahalle) bazinda dagilim.
-          Satira tiklamak o konumu filtreler (drill-down). */}
-      <div className="mb-6">
-        <p className="mb-2 text-xs font-medium text-slate-600">
-          {ilceFiltre
-            ? `Mahalle dağılımı${seciliIlceAd ? ` · ${seciliIlceAd}` : ""}`
-            : "İlçe dağılımı"}
-        </p>
-        {kirilim.length === 0 ? (
-          <p className="py-4 text-center text-xs text-slate-400">
-            {konumYukleniyor ? "Çözümleniyor…" : "Gösterilecek veri yok."}
-          </p>
-        ) : (
-          <ul className="space-y-1.5">
-            {kirilim.map((k) => {
-              const tiklanabilir = k.kod !== BILINMIYOR;
-              const secili = ilceFiltre
-                ? mahalleFiltre === k.kod
-                : false;
-              return (
-                <li key={k.kod}>
-                  <button
-                    disabled={!tiklanabilir}
-                    onClick={() => {
-                      if (ilceFiltre) {
-                        setMahalleFiltre((m) => (m === k.kod ? null : k.kod));
-                      } else {
-                        setIlceFiltre(k.kod);
-                        setMahalleFiltre(null);
-                      }
-                    }}
-                    className={`w-full rounded-lg border px-2.5 py-1.5 text-left transition ${
-                      secili
-                        ? "border-emerald-400 bg-emerald-50"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                    } ${tiklanabilir ? "" : "cursor-default opacity-70"}`}
-                  >
-                    <div className="mb-1 flex items-baseline justify-between gap-2">
-                      <span className="truncate text-xs font-medium text-slate-700">
-                        {k.ad}
-                      </span>
-                      <span className="shrink-0 text-xs text-slate-500">
-                        {k.toplam}
-                        {k.bakim > 0 && (
-                          <span className="ml-1 text-amber-700">· {k.bakim} bakım</span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className="h-full rounded-full transition-all duration-500 ease-out"
-                        style={{
-                          width: `${(k.toplam / enBuyukKirilim) * 100}%`,
-                          background: RENK.seri,
-                        }}
-                      />
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+        {departmanDagilimi.length > 0 && (
+          <DagilimBarlari
+            baslik="Departmana göre dağılım"
+            veri={departmanDagilimi}
+            altYazi={`Bakım bekleyen: ${
+              departmanDagilimi
+                .filter((d) => d.bakim > 0)
+                .map((d) => `${d.etiket} ${d.bakim}`)
+                .join(" · ") || "yok"
+            }`}
+          />
         )}
-      </div>
 
-      {/* Disa aktarma - ekranda gorunen (filtrelenmis) kaydi disa aktarir */}
-      <div className="border-t border-slate-200 pt-4">
-        <p className="mb-2 text-xs font-medium text-slate-600">
-          Dışa aktar
-          <span className="ml-1 font-normal text-slate-400">
-            ({toplam} kayıt)
-          </span>
-        </p>
-        <div className="flex gap-2">
-          <button
-            onClick={() => csvIndir(filtreliKoleksiyon)}
-            disabled={toplam === 0}
-            className="flex-1 border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-          >
-            CSV indir
-          </button>
-          <button
-            onClick={() => jsonIndir(filtreliKoleksiyon)}
-            disabled={toplam === 0}
-            className="flex-1 border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-          >
-            GeoJSON indir
-          </button>
+        <KonumKirilimi
+          baslik={
+            ilceFiltre
+              ? `Mahalle dağılımı${seciliIlceAd ? ` · ${seciliIlceAd}` : ""}`
+              : "İlçe dağılımı"
+          }
+          kirilim={kirilim}
+          vurguEtiket="bakım"
+          ilceFiltre={ilceFiltre}
+          mahalleFiltre={mahalleFiltre}
+          konumYukleniyor={konumYukleniyor}
+          onIlceSec={(kod) => {
+            setIlceFiltre(kod);
+            setMahalleFiltre(null);
+          }}
+          onMahalleSec={(kod) => setMahalleFiltre((m) => (m === kod ? null : kod))}
+        />
+
+        <DisaAktar
+          toplam={toplam}
+          onCsv={() => csvIndir(filtreliKoleksiyon)}
+          onJson={() => jsonIndir(filtreliKoleksiyon)}
+        />
+      </div>
+    </>
+  );
+}
+
+function TalepOzeti({
+  gorunumler,
+  alanSecimiAktif,
+}: {
+  gorunumler?: Record<TalepGorunumu, ReportFeature[]>;
+  alanSecimiAktif?: boolean;
+}) {
+  const [ilceFiltre, setIlceFiltre] = useState<string | null>(null);
+  const [mahalleFiltre, setMahalleFiltre] = useState<string | null>(null);
+
+  const features = useMemo(
+    () => (gorunumler ? TALEP_GORUNUMLERI.flatMap((g) => gorunumler[g]) : []),
+    [gorunumler]
+  );
+  const konumluKayitlar = useMemo(
+    () => features.map((f) => ({ id: f.properties.id, koordinat: talepNoktasi(f) })),
+    [features]
+  );
+  const { data: konumlar, isFetching: konumYukleniyor } = useKonumHaritasi(konumluKayitlar);
+  const { data: departmanlar } = useDepartmanlar();
+  const { data: esleme } = useTurDepartmanEslemesi();
+
+  const ilceSecenekleri = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const f of features) {
+      const ilce = konumlar?.[f.properties.id]?.ilce;
+      if (ilce) m.set(ilce.kod, ilce.ad);
+    }
+    return [...m.entries()]
+      .map(([kod, ad]) => ({ kod, ad }))
+      .sort((a, b) => a.ad.localeCompare(b.ad, "tr"));
+  }, [features, konumlar]);
+
+  const mahalleSecenekleri = useMemo(() => {
+    if (!ilceFiltre) return [];
+    const m = new Map<string, string>();
+    for (const f of features) {
+      const k = konumlar?.[f.properties.id];
+      if (k?.ilce?.kod === ilceFiltre && k.mahalle) m.set(k.mahalle.kod, k.mahalle.ad);
+    }
+    return [...m.entries()]
+      .map(([kod, ad]) => ({ kod, ad }))
+      .sort((a, b) => a.ad.localeCompare(b.ad, "tr"));
+  }, [features, konumlar, ilceFiltre]);
+
+  const filtrelenmis = useMemo(() => {
+    return features.filter((f) => {
+      const k = konumlar?.[f.properties.id];
+      if (ilceFiltre && k?.ilce?.kod !== ilceFiltre) return false;
+      if (mahalleFiltre && k?.mahalle?.kod !== mahalleFiltre) return false;
+      return true;
+    });
+  }, [features, konumlar, ilceFiltre, mahalleFiltre]);
+
+  const kirilim = useMemo<Kirilim[]>(() => {
+    const sayac = new Map<string, { ad: string; toplam: number; bekleyen: number }>();
+    for (const f of features) {
+      const k = konumlar?.[f.properties.id];
+      let anahtar: string;
+      let ad: string;
+      if (ilceFiltre) {
+        if (k?.ilce?.kod !== ilceFiltre) continue;
+        anahtar = k?.mahalle?.kod ?? BILINMIYOR;
+        ad = k?.mahalle?.ad ?? "Bilinmiyor";
+      } else {
+        anahtar = k?.ilce?.kod ?? BILINMIYOR;
+        ad = k?.ilce?.ad ?? "Bilinmiyor";
+      }
+      const kayit = sayac.get(anahtar) ?? { ad, toplam: 0, bekleyen: 0 };
+      kayit.toplam += 1;
+      if (f.properties.gorunum === "beklemede") kayit.bekleyen += 1;
+      sayac.set(anahtar, kayit);
+    }
+    return [...sayac.entries()]
+      .map(([kod, v]) => ({ kod, ad: v.ad, toplam: v.toplam, vurgu: v.bekleyen }))
+      .sort((a, b) => b.toplam - a.toplam);
+  }, [features, konumlar, ilceFiltre]);
+
+  if (!gorunumler) {
+    return <p className="p-4 text-sm text-slate-500">Yükleniyor...</p>;
+  }
+
+  const toplam = filtrelenmis.length;
+
+  const durumDagilimi = TALEP_GORUNUMLERI.map((g) => ({
+    anahtar: g,
+    etiket: REPORT_STATUS_LABELS[g],
+    renk: TALEP_DURUM_RENGI[g],
+    sayi: filtrelenmis.filter((f) => f.properties.gorunum === g).length,
+  }));
+
+  const departmanDagilimi = (departmanlar ?? [])
+    .map((d) => ({
+      anahtar: d.kod,
+      etiket: d.ad.replace(/\s*Müdürlüğü$/, ""),
+      renk: d.renk,
+      sayi: filtrelenmis.filter((f) => esleme?.[f.properties.type] === d.kod).length,
+      bekleyen: filtrelenmis.filter(
+        (f) => esleme?.[f.properties.type] === d.kod && f.properties.gorunum === "beklemede"
+      ).length,
+    }))
+    .filter((d) => d.sayi > 0)
+    .sort((a, b) => b.sayi - a.sayi);
+
+  const filtreliKoleksiyon = { type: "FeatureCollection" as const, features: filtrelenmis };
+
+  const filtreAktif = ilceFiltre !== null || mahalleFiltre !== null;
+  const seciliIlceAd = ilceSecenekleri.find((i) => i.kod === ilceFiltre)?.ad;
+  const seciliMahalleAd = mahalleSecenekleri.find((m) => m.kod === mahalleFiltre)?.ad;
+  const seviye = mahalleFiltre ? 2 : ilceFiltre ? 1 : 0;
+
+  return (
+    <>
+      <UstSerit
+        seviye={seviye}
+        ilceFiltre={ilceFiltre}
+        mahalleFiltre={mahalleFiltre}
+        seciliIlceAd={seciliIlceAd}
+        seciliMahalleAd={seciliMahalleAd}
+        onKok={() => {
+          setIlceFiltre(null);
+          setMahalleFiltre(null);
+        }}
+        onIlceyeDon={() => setMahalleFiltre(null)}
+        sayi={toplam}
+        sayiEtiket="talep"
+      />
+
+      <div key={`${ilceFiltre}-${mahalleFiltre}`} className="ozet-giris p-4">
+        {alanSecimiAktif && (
+          <p className="mb-3 border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+            Seçili alandaki talepler gösteriliyor.
+          </p>
+        )}
+
+        <KonumFiltresi
+          ilceFiltre={ilceFiltre}
+          mahalleFiltre={mahalleFiltre}
+          ilceSecenekleri={ilceSecenekleri}
+          mahalleSecenekleri={mahalleSecenekleri}
+          konumYukleniyor={konumYukleniyor}
+          onIlceDegis={(kod) => {
+            setIlceFiltre(kod);
+            setMahalleFiltre(null);
+          }}
+          onMahalleDegis={setMahalleFiltre}
+          onTemizle={() => {
+            setIlceFiltre(null);
+            setMahalleFiltre(null);
+          }}
+        />
+
+        <div className="mb-6">
+          <p className="text-xs text-slate-500">
+            {filtreAktif ? "Seçili konumdaki talep" : "Toplam talep"}
+          </p>
+          <p className="text-5xl font-semibold leading-tight text-slate-900">{toplam}</p>
         </div>
+
+        <DagilimBarlari baslik="Duruma göre dağılım" veri={durumDagilimi} />
+
+        {departmanDagilimi.length > 0 && (
+          <DagilimBarlari
+            baslik="Departmana göre dağılım"
+            veri={departmanDagilimi}
+            altYazi={`Bekleyen: ${
+              departmanDagilimi
+                .filter((d) => d.bekleyen > 0)
+                .map((d) => `${d.etiket} ${d.bekleyen}`)
+                .join(" · ") || "yok"
+            }`}
+          />
+        )}
+
+        <KonumKirilimi
+          baslik={
+            ilceFiltre
+              ? `Mahalle dağılımı${seciliIlceAd ? ` · ${seciliIlceAd}` : ""}`
+              : "İlçe dağılımı"
+          }
+          kirilim={kirilim}
+          vurguEtiket="bekliyor"
+          ilceFiltre={ilceFiltre}
+          mahalleFiltre={mahalleFiltre}
+          konumYukleniyor={konumYukleniyor}
+          onIlceSec={(kod) => {
+            setIlceFiltre(kod);
+            setMahalleFiltre(null);
+          }}
+          onMahalleSec={(kod) => setMahalleFiltre((m) => (m === kod ? null : kod))}
+        />
+
+        <DisaAktar
+          toplam={toplam}
+          onCsv={() => talepCsvIndir(filtreliKoleksiyon)}
+          onJson={() => talepJsonIndir(filtreliKoleksiyon)}
+        />
       </div>
-      </div>
-    </div>
+    </>
   );
 }

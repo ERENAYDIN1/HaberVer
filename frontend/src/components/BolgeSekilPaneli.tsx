@@ -25,8 +25,12 @@ interface BolgeSekilPaneliProps {
    *  ST_Buffer ile. Yalnizca alan tipinde anlamli oldugundan cizgide verilmez. */
   onGenislet?: (mesafeM: number) => void;
   genisletiliyor?: boolean;
-  /** Taslagi kaydin son kaydedilmis haline dondurur. */
-  onSifirla: () => void;
+  /** Son adimi (kose surukle/ekle/sil, genislet-daralt) geri alir - bastan
+   *  degil BIR ONCEKI duruma doner (`CizimPaneli`deki "Geri al" ile ayni
+   *  davranis). */
+  onGeriAl: () => void;
+  /** Geri alinacak bir adim var mi; yoksa dugme devre disi kalir. */
+  geriAlinabilir: boolean;
   /** Mobil: panelin ekran dibinden yuksekligi (px), bkz. CizimPaneli. */
   altOfset?: number;
 }
@@ -45,7 +49,8 @@ export default function BolgeSekilPaneli({
   hata,
   onGenislet,
   genisletiliyor,
-  onSifirla,
+  onGeriAl,
+  geriAlinabilir,
   altOfset,
 }: BolgeSekilPaneliProps) {
   const [ozelMesafe, setOzelMesafe] = useState("");
@@ -73,41 +78,48 @@ export default function BolgeSekilPaneli({
           : "1.5rem",
       }}
     >
-      <div className="pointer-events-auto flex w-full max-w-sm flex-col gap-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur-sm">
+      {/* Genis + yatay duzen bilincli: bu panel `CizimPaneli` gibi dikey
+          yigilirsa (`max-w-sm`) haritanin buyuk kismini kaplar - sekil
+          duzenleme tam da haritayi gormeyi gerektiren bir islem. Yatayda
+          yayilip dikeyde kisalmak icin genislik masaustunde ekranin buyuk
+          bir kismina, satirlar tek satira yakin sigacak sekilde ayarlandi. */}
+      <div className="pointer-events-auto flex w-full max-w-3xl flex-col gap-2.5 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur-sm">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-violet-700">
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-100 text-violet-600">
             <Ikon className="h-3 w-3" />
           </span>
           Şekli Düzenle
           <span
-            className="ml-auto h-2.5 w-2.5 rounded-full"
+            className="h-2.5 w-2.5 rounded-full"
             style={{ background: duzenleme.renk }}
           />
+          <span className="ml-1 min-w-0 flex-1 truncate normal-case tracking-normal text-slate-500">
+            {duzenleme.ad} · {noktaSayisi} nokta · {olcu}
+          </span>
+          <button
+            onClick={onVazgec}
+            title="Şekil düzenlemeyi kapat"
+            aria-label="Şekil düzenlemeyi kapat"
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <IconX className="h-3.5 w-3.5" />
+          </button>
         </div>
 
-        <div className="rounded-lg bg-violet-50/70 px-2.5 py-1.5 text-xs text-slate-600">
-          <span className="block truncate font-medium text-slate-800">
-            {duzenleme.ad}
-          </span>
-          <span className="mt-0.5 block text-sm font-medium text-slate-800">
-            {noktaSayisi} nokta · {olcu}
-          </span>
-        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
+            <li>• Köşeyi sürükleyerek taşı.</li>
+            <li>• Kenardaki “+” ile yeni köşe ekle.</li>
+            <li>• Köşeye sağ tıklayarak sil.</li>
+          </ul>
 
-        <ul className="space-y-0.5 text-[11px] text-slate-500">
-          <li>• Köşeyi sürükleyerek taşı.</li>
-          <li>• Kenardaki “+” işaretine tıklayarak yeni köşe ekle.</li>
-          <li>• Köşeye sağ tıklayarak sil.</li>
-        </ul>
-
-        {/* Alani kenarlara paralel buyutup kucultmek koseleri tek tek
-            surukleyerek yapilamaz; PostGIS ST_Buffer ile jeodezik yapilir. */}
-        {!cizgi && onGenislet && (
-          <div className="border-t border-slate-100 pt-2.5">
-            <p className="mb-1.5 text-[11px] font-medium text-slate-600">
-              Alanı genişlet / daralt
-            </p>
-            <div className="flex flex-wrap items-center gap-1">
+          {/* Alani kenarlara paralel buyutup kucultmek koseleri tek tek
+              surukleyerek yapilamaz; PostGIS ST_Buffer ile jeodezik yapilir. */}
+          {!cizgi && onGenislet && (
+            <div className="flex flex-wrap items-center gap-1.5 border-l border-slate-100 pl-3">
+              <span className="text-[11px] font-medium text-slate-600">
+                Genişlet/daralt:
+              </span>
               {TAMPON_ADIMLARI.map((m) => (
                 <span key={m} className="flex overflow-hidden rounded-md border border-slate-200">
                   <button
@@ -131,14 +143,12 @@ export default function BolgeSekilPaneli({
                   </button>
                 </span>
               ))}
-            </div>
-            <div className="mt-1.5 flex items-center gap-1">
               <input
                 value={ozelMesafe}
                 onChange={(e) => setOzelMesafe(e.target.value)}
                 inputMode="decimal"
                 placeholder="Özel (m)"
-                className="w-24 rounded-md border border-slate-300 px-2 py-1 text-[11px] outline-none focus:border-violet-500"
+                className="w-20 rounded-md border border-slate-300 px-2 py-1 text-[11px] outline-none focus:border-violet-500"
               />
               <button
                 onClick={() => ozelUygula(-1)}
@@ -158,8 +168,8 @@ export default function BolgeSekilPaneli({
                 <span className="text-[11px] text-slate-400">…</span>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {hata && (
           <p className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-700">{hata}</p>
@@ -167,9 +177,9 @@ export default function BolgeSekilPaneli({
 
         <div className="flex items-center gap-2 border-t border-slate-100 pt-2.5">
           <button
-            onClick={onSifirla}
-            disabled={!degisti}
-            title="Şekli son kaydedilmiş haline döndür"
+            onClick={onGeriAl}
+            disabled={!geriAlinabilir}
+            title="Son adımı geri al"
             className="rounded-lg border border-slate-300 px-2 py-1.5 text-[11px] font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
           >
             Geri al

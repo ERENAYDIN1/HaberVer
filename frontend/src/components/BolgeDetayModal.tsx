@@ -125,7 +125,7 @@ export default function BolgeDetayModal({
   ];
 
   return (
-    <Modal acik baslik={BOLGE_TIP_ETIKETLERI[bolge.tip]} onKapat={onKapat}>
+    <Modal acik baslik={BOLGE_TIP_ETIKETLERI[bolge.tip]} onKapat={onKapat} ustte>
       <div className="space-y-3">
         <div className="flex items-start gap-2.5">
           <span

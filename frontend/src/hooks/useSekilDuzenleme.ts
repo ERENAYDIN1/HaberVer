@@ -54,6 +54,19 @@ export function useSekilDuzenleme({
   const [hata, setHata] = useState<string | null>(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [genisletiliyor, setGenisletiliyor] = useState(false);
+  // Her ayrik duzenleme (kose surukle/ekle/sil, genislet-daralt) bir onceki
+  // nokta listesini buraya yigar; "Geri al" bastan degil SON adimdan geri
+  // gider. Taslak `kapat`/`baslat`ta sifirlanir. Uzunluk ayrica state'te
+  // tutulur (`gecmisUzunlugu`) ki "Geri al" dugmesi gecmis bosken devre disi
+  // kalabilsin - ref'in kendisi render tetiklemez.
+  const gecmisRef = useRef<[number, number][][][]>([]);
+  const [gecmisUzunlugu, setGecmisUzunlugu] = useState(0);
+  // `duzenleme` state'inin guncel yansimasi: `degisti` icinde YENI nokta
+  // listesine gecmeden ONCEKI listeyi okumak icin (setState updater'i icinde
+  // ref mutasyonu yapmamak adina render sirasinda senkron tutulur, bir efekte
+  // birakilirsa bir kare gerideki degeri okurdu).
+  const duzenlemeRef = useRef(duzenleme);
+  duzenlemeRef.current = duzenleme;
 
   // Callback'ler ref'te: `baslat`in kimligi her render'da degismesin
   // (bkz. useAlanSecimi'ndeki ayni desen).
@@ -67,6 +80,8 @@ export function useSekilDuzenleme({
   const baslat = useCallback((bolge: Bolge) => {
     onBaslarkenRef.current();
     setHata(null);
+    gecmisRef.current = [];
+    setGecmisUzunlugu(0);
     setDuzenleme({
       id: bolge.id,
       ad: bolge.ad,
@@ -80,10 +95,23 @@ export function useSekilDuzenleme({
   const kapat = useCallback(() => {
     setDuzenleme(null);
     setHata(null);
+    gecmisRef.current = [];
+    setGecmisUzunlugu(0);
   }, []);
 
-  /** Harita uzerindeki tutamaklardan gelen canli geometri. */
+  /** Harita uzerindeki tutamaklardan gelen canli geometri. Onceki taslak
+   *  gecmise yigilir ki "Geri al" tek adim geri gidebilsin.
+   *
+   *  Ref mutasyonu setState UPDATER'ININ DISINDA yapilir: StrictMode
+   *  gelistirmede updater fonksiyonlarini iki kez cagirir (yan etki
+   *  yakalamak icin), ref icerideyse her duzenleme sessizce IKI kez
+   *  gecmise yigilirdi - "Geri al" ilk tikta hicbir sey yapmiyormus gibi
+   *  gorunurdu (aslinda kopya kaydi siliyordu), gercek geri alma ikinci
+   *  tikta gelirdi. */
   const degisti = useCallback((noktalar: [number, number][][]) => {
+    if (!duzenlemeRef.current) return;
+    gecmisRef.current.push(duzenlemeRef.current.noktalar);
+    setGecmisUzunlugu(gecmisRef.current.length);
     setDuzenleme((s) => (s ? { ...s, noktalar } : s));
   }, []);
 
@@ -92,10 +120,22 @@ export function useSekilDuzenleme({
     [bolgeler, duzenleme?.id]
   );
 
-  /** Taslagi kaydin son kaydedilmis geometrisine dondurur. */
+  /** Son adimi geri alir (kose surukle/ekle/sil, genislet-daralt); gecmis
+   *  bossa (hic degisiklik yapilmamis) hicbir sey yapmaz. */
+  const geriAl = useCallback(() => {
+    const onceki = gecmisRef.current.pop();
+    if (!onceki) return;
+    setGecmisUzunlugu(gecmisRef.current.length);
+    setHata(null);
+    setDuzenleme((s) => (s ? { ...s, noktalar: onceki } : s));
+  }, []);
+
+  /** Taslagi kaydin son kaydedilmis geometrisine dondurur (tum gecmisi atar). */
   const sekliSifirla = useCallback(() => {
     if (!kayitliKayit) return;
     setHata(null);
+    gecmisRef.current = [];
+    setGecmisUzunlugu(0);
     setDuzenleme((s) =>
       s
         ? { ...s, noktalar: sekilNoktalari(kayitliKayit.tip, kayitliKayit.noktalar) }
@@ -129,6 +169,8 @@ export function useSekilDuzenleme({
       setHata(null);
       try {
         const sonuc = await alanTamponu(duzenleme.noktalar, mesafeM);
+        gecmisRef.current.push(duzenleme.noktalar);
+        setGecmisUzunlugu(gecmisRef.current.length);
         setDuzenleme((s) =>
           s ? { ...s, noktalar: sekilNoktalari("alan", sonuc.noktalar) } : s
         );
@@ -152,9 +194,11 @@ export function useSekilDuzenleme({
     kaydediliyor,
     genisletiliyor,
     degismis,
+    geriAlinabilir: gecmisUzunlugu > 0,
     baslat,
     kapat,
     degisti,
+    geriAl,
     sekliSifirla,
     kaydet,
     genislet,
