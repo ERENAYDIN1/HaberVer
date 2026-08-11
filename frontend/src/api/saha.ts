@@ -48,6 +48,13 @@ export function havuz() {
   return istek<HavuzVarlik[]>("/saha/havuz");
 }
 
+/** Personel: havuzu (ve bekleyen bolge/guzergahlari) elle yeniden dagitmayi
+ *  dener - kayit aninda uygun ekip yokken sonradan uygun hale gelen isleri
+ *  telafi eder. */
+export function havuzDagit() {
+  return istek<{ dagitilan: number }>("/saha/havuz/dagit", { method: "POST" });
+}
+
 /** Personel: bir bakim varligini elle bir ekibe (yeniden) yonlendirir. */
 export function ekibeAta(asset_id: string, worker_id: string) {
   return istek<void>("/saha/ata", {

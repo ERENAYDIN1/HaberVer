@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { ekibeAta, ekipGorevleri, gorevGeriAl, havuz as havuzGetir } from "../api/saha";
+import { bolgeAta } from "../api/bolgeler";
+import {
+  ekibeAta,
+  ekipGorevleri,
+  gorevGeriAl,
+  havuz as havuzGetir,
+  havuzDagit,
+} from "../api/saha";
 import { YEDEK_YOKLAMA_MS } from "../hooks/useCanliGuncelleme";
 import {
   useDepartmanlar,
@@ -39,7 +46,8 @@ import {
 /** Bir varlik/gorev icin uygulanabilecek islem. */
 type Islem =
   | { tip: "ata"; asset_id: string; worker_id: string }
-  | { tip: "havuz"; asset_id: string };
+  | { tip: "havuz"; asset_id: string }
+  | { tip: "bolge-ata"; bolge_id: string; worker_id: string | null };
 
 /** Havuz siralamasi: bekleme suresine gore (en eski/en yeni once). */
 type HavuzSira = "eski" | "yeni";
@@ -192,16 +200,46 @@ export interface DepBaglami {
  *  bir <select> duruyordu; uc ekip x uc gorev = dokuz acilir, pano "ne var"
  *  yerine "ne yapabilirim" gibi okunuyordu. Islem nadir, okuma sik. */
 /** Bir ekibin uzerindeki gorev bolgesi / guzergah satiri. Tekil bakim isiyle
- *  ayni listede durur (ayni kota), ama islemi burada YOK: bolge atamasi
- *  "Bölgeler"/"Güzergâhlar" panelinden ya da harita uzerinden yapilir - iki
- *  ayri yerde ayni islemi sunmak, hangisinin gecerli oldugunu belirsizlestirir.
+ *  ayni listede durur (ayni kota) ve artik AYNI islemi paylasir: baska ekibe
+ *  tasi / havuza al (`BolgeGorevSatiri`nin backend'i `BolgePaneli` ile ayni
+ *  uc, `POST /bolgeler/{id}/ata`) - "iki yerde ayni islem" artik gecerli
+ *  degil, cunku bolge/guzergah tek ekrana kadar bu panoda hic yoktu. Govdeye
+ *  tiklamak detay acar (`onBolgeDetay`), sag ustteki "Tasi" ayri bir hedeftir.
  *  Rozet "alan"/"güzergâh" der ki yuk cubugundaki sayinin nereden geldigi
- *  okunabilsin. */
-function BolgeGorevSatiri({ gorev }: { gorev: BolgeGorevOzet }) {
+ *  okunabilsin. Departman bilgisi `BolgeGorevOzet`'te yok, bu yuzden
+ *  `ekipSecenegi` burada yalniz karsi-yaka uyarisi verir. */
+function BolgeGorevSatiri({
+  gorev,
+  digerEkipler,
+  onIslem,
+  calisiyor,
+  dep,
+  onBolgeDetay,
+}: {
+  gorev: BolgeGorevOzet;
+  digerEkipler: EkipGorevleri[];
+  onIslem: (v: Islem) => void;
+  calisiyor: boolean;
+  dep: DepBaglami;
+  onBolgeDetay?: (bolgeId: string) => void;
+}) {
+  const [acik, setAcik] = useState(false);
   const alan = gorev.tip === "alan";
+
   return (
-    <li className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
-      <div className="flex items-start gap-2.5">
+    <li className="rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+      <div
+        className="flex items-start gap-2 rounded-md transition hover:bg-slate-50"
+        role={onBolgeDetay ? "button" : undefined}
+        tabIndex={onBolgeDetay ? 0 : undefined}
+        onClick={() => onBolgeDetay?.(gorev.bolge_id)}
+        onKeyDown={(e) => {
+          if (onBolgeDetay && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            onBolgeDetay(gorev.bolge_id);
+          }
+        }}
+      >
         <span
           className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white"
           style={{ background: gorev.renk }}
@@ -214,10 +252,10 @@ function BolgeGorevSatiri({ gorev }: { gorev: BolgeGorevOzet }) {
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="break-words text-sm font-medium leading-snug text-slate-800">
+          <p className="break-words text-[13px] font-medium leading-snug text-slate-800">
             {gorev.ad}
           </p>
-          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
             <span className="text-slate-500">
               {alan ? "Görev bölgesi" : "Güzergâh"}
             </span>
@@ -233,7 +271,51 @@ function BolgeGorevSatiri({ gorev }: { gorev: BolgeGorevOzet }) {
             </span>
           </p>
         </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setAcik((a) => !a);
+          }}
+          aria-expanded={acik}
+          title="Başka ekibe taşı ya da havuza al"
+          className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[11px] font-medium transition ${
+            acik
+              ? "border-slate-400 bg-slate-100 text-slate-700"
+              : "border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
+          }`}
+        >
+          {calisiyor ? "…" : "Taşı"}
+        </button>
       </div>
+      {acik && (
+        <select
+          value=""
+          disabled={calisiyor}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (!v) return;
+            setAcik(false);
+            onIslem({
+              tip: "bolge-ata",
+              bolge_id: gorev.bolge_id,
+              worker_id: v === "__havuz__" ? null : v,
+            });
+          }}
+          className="mt-2 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+        >
+          <option value="">{calisiyor ? "İşleniyor…" : "Taşı / işlem…"}</option>
+          <optgroup label="Başka ekibe taşı">
+            {digerEkipler.map((e) => (
+              <option key={e.id} value={e.id}>
+                {ekipSecenegi(e, gorev.yaka, undefined, dep.adlar)}
+              </option>
+            ))}
+          </optgroup>
+          <option value="__havuz__">↩ Havuza al (atamayı kaldır)</option>
+        </select>
+      )}
     </li>
   );
 }
@@ -244,24 +326,37 @@ function GorevSatiri({
   onIslem,
   calisiyor,
   dep,
+  onVarlikDetay,
 }: {
   gorev: GorevOzet;
   digerEkipler: EkipGorevleri[];
   onIslem: (v: Islem) => void;
   calisiyor: boolean;
   dep: DepBaglami;
+  onVarlikDetay?: (assetId: string) => void;
 }) {
   const [acik, setAcik] = useState(false);
 
   return (
-    <li className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
-      <div className="flex items-start gap-2.5">
+    <li className="rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+      <div
+        className="flex items-start gap-2 rounded-md transition hover:bg-slate-50"
+        role={onVarlikDetay ? "button" : undefined}
+        tabIndex={onVarlikDetay ? 0 : undefined}
+        onClick={() => onVarlikDetay?.(gorev.asset_id)}
+        onKeyDown={(e) => {
+          if (onVarlikDetay && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            onVarlikDetay(gorev.asset_id);
+          }
+        }}
+      >
         <TipRozet type={gorev.type} />
         <div className="min-w-0 flex-1">
-          <p className="break-words text-sm font-medium leading-snug text-slate-800">
+          <p className="break-words text-[13px] font-medium leading-snug text-slate-800">
             {gorev.name}
           </p>
-          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
             <span className="text-slate-500">{turAdi(gorev.type)}</span>
             <KaynakRozet source={gorev.source} />
             <YakaRozet yaka={gorev.yaka} />
@@ -278,7 +373,10 @@ function GorevSatiri({
         </div>
         <button
           type="button"
-          onClick={() => setAcik((a) => !a)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setAcik((a) => !a);
+          }}
           aria-expanded={acik}
           title="Görevi başka ekibe taşı ya da havuza al"
           className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[11px] font-medium transition ${
@@ -294,6 +392,7 @@ function GorevSatiri({
         <select
           value=""
           disabled={calisiyor}
+          onClick={(e) => e.stopPropagation()}
           onChange={(e) => {
             const v = e.target.value;
             if (!v) return;
@@ -324,13 +423,19 @@ function EkipKarti({
   tumEkipler,
   onIslem,
   islenenAsset,
+  islenenBolge,
   dep,
+  onVarlikDetay,
+  onBolgeDetay,
 }: {
   ekip: EkipGorevleri;
   tumEkipler: EkipGorevleri[];
   onIslem: (v: Islem) => void;
   islenenAsset: string | undefined;
+  islenenBolge: string | undefined;
   dep: DepBaglami;
+  onVarlikDetay?: (assetId: string) => void;
+  onBolgeDetay?: (bolgeId: string) => void;
 }) {
   const t = tazelik(ekip.last_seen_at);
   const dolu = ekip.aktif_gorev >= MAKS_AKTIF_GOREV;
@@ -403,7 +508,7 @@ function EkipKarti({
           Aktif görev yok.
         </p>
       ) : (
-        <ul className="space-y-1.5 p-2">
+        <ul className="space-y-1 p-1.5">
           {ekip.gorevler.map((g) => (
             <GorevSatiri
               key={g.assignment_id}
@@ -412,10 +517,19 @@ function EkipKarti({
               onIslem={onIslem}
               calisiyor={islenenAsset === g.asset_id}
               dep={dep}
+              onVarlikDetay={onVarlikDetay}
             />
           ))}
           {(ekip.bolge_gorevleri ?? []).map((b) => (
-            <BolgeGorevSatiri key={b.bolge_id} gorev={b} />
+            <BolgeGorevSatiri
+              key={b.bolge_id}
+              gorev={b}
+              digerEkipler={diger}
+              onIslem={onIslem}
+              calisiyor={islenenBolge === b.bolge_id}
+              dep={dep}
+              onBolgeDetay={onBolgeDetay}
+            />
           ))}
         </ul>
       )}
@@ -435,7 +549,10 @@ function DepartmanBolumu({
   tumEkipler,
   onIslem,
   islenenAsset,
+  islenenBolge,
   dep,
+  onVarlikDetay,
+  onBolgeDetay,
 }: {
   ad: string;
   renk: string;
@@ -443,7 +560,10 @@ function DepartmanBolumu({
   tumEkipler: EkipGorevleri[];
   onIslem: (v: Islem) => void;
   islenenAsset: string | undefined;
+  islenenBolge: string | undefined;
   dep: DepBaglami;
+  onVarlikDetay?: (assetId: string) => void;
+  onBolgeDetay?: (bolgeId: string) => void;
 }) {
   const aktif = ekipler.reduce((t, e) => t + e.aktif_gorev, 0);
   const kapasite = ekipler.length * MAKS_AKTIF_GOREV;
@@ -474,7 +594,10 @@ function DepartmanBolumu({
             tumEkipler={tumEkipler}
             onIslem={onIslem}
             islenenAsset={islenenAsset}
+            islenenBolge={islenenBolge}
             dep={dep}
+            onVarlikDetay={onVarlikDetay}
+            onBolgeDetay={onBolgeDetay}
           />
         ))}
       </div>
@@ -489,16 +612,29 @@ function HavuzSatiri({
   onIslem,
   calisiyor,
   dep,
+  onVarlikDetay,
 }: {
   varlik: HavuzVarlik;
   ekipler: EkipGorevleri[];
   onIslem: (v: Islem) => void;
   calisiyor: boolean;
   dep: DepBaglami;
+  onVarlikDetay?: (assetId: string) => void;
 }) {
   return (
     <li className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
-      <div className="flex items-start gap-2.5">
+      <div
+        className="flex items-start gap-2.5 rounded-md transition hover:bg-slate-50"
+        role={onVarlikDetay ? "button" : undefined}
+        tabIndex={onVarlikDetay ? 0 : undefined}
+        onClick={() => onVarlikDetay?.(varlik.asset_id)}
+        onKeyDown={(e) => {
+          if (onVarlikDetay && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            onVarlikDetay(varlik.asset_id);
+          }
+        }}
+      >
         <TipRozet type={varlik.type} />
         <div className="min-w-0 flex-1">
           <p className="break-words text-sm font-medium leading-snug text-slate-800">
@@ -549,6 +685,7 @@ function HavuzGrup({
   onIslem,
   islenenAsset,
   dep,
+  onVarlikDetay,
 }: {
   kaynak: AssetSource;
   varliklar: HavuzVarlik[];
@@ -556,6 +693,7 @@ function HavuzGrup({
   onIslem: (v: Islem) => void;
   islenenAsset: string | undefined;
   dep: DepBaglami;
+  onVarlikDetay?: (assetId: string) => void;
 }) {
   if (varliklar.length === 0) return null;
   // Kaynaga gore ayirt edici vurgu: kayitli=slate, talep=amber.
@@ -586,6 +724,7 @@ function HavuzGrup({
             onIslem={onIslem}
             calisiyor={islenenAsset === h.asset_id}
             dep={dep}
+            onVarlikDetay={onVarlikDetay}
           />
         ))}
       </ul>
@@ -593,9 +732,22 @@ function HavuzGrup({
   );
 }
 
+/** Saha ekibi yonetim panosunun disa acik proplari. Ikisi de opsiyoneldir:
+ *  pano baska bir baglamda (callback'siz) da kullanilabilir olsun diye -
+ *  mevcut cagrı yerinde (App.tsx) her zaman gecirilir. */
+export interface SahaEkipleriProps {
+  /** Bir gorev/havuz satirinin govdesine tiklaninca varligin detayini acar. */
+  onVarlikDetay?: (assetId: string) => void;
+  /** Bir bolge/guzergah satirinin govdesine tiklaninca kaydin detayini acar. */
+  onBolgeDetay?: (bolgeId: string) => void;
+}
+
 /** Saha ekibi yonetim panosu: hangi ekipte hangi gorevler var, gorevi baska
  *  ekibe tasi / havuza al, havuzdaki isleri elle ata. 20 sn'de bir tazelenir. */
-export default function SahaEkipleri() {
+export default function SahaEkipleri({
+  onVarlikDetay,
+  onBolgeDetay,
+}: SahaEkipleriProps = {}) {
   const queryClient = useQueryClient();
   const [durum, setDurum] = useState<{ ok: boolean; metin: string } | null>(null);
   // Havuz filtresi: tipe gore daraltma + bekleme sirasina gore siralama.
@@ -629,15 +781,41 @@ export default function SahaEkipleri() {
   });
 
   const islem = useMutation({
-    mutationFn: (v: Islem) =>
-      v.tip === "ata" ? ekibeAta(v.asset_id, v.worker_id) : gorevGeriAl(v.asset_id),
+    mutationFn: (v: Islem): Promise<unknown> => {
+      if (v.tip === "ata") return ekibeAta(v.asset_id, v.worker_id);
+      if (v.tip === "havuz") return gorevGeriAl(v.asset_id);
+      return bolgeAta(v.bolge_id, v.worker_id);
+    },
     onSuccess: (_d, v) => {
-      setDurum({
-        ok: true,
-        metin: v.tip === "ata" ? "Görev ilgili ekibe taşındı." : "Görev havuza alındı.",
-      });
-      // Ekip yukleri, gorev listeleri ve havuz birlikte degisir.
+      const metin =
+        v.tip === "ata"
+          ? "Görev ilgili ekibe taşındı."
+          : v.tip === "havuz"
+            ? "Görev havuza alındı."
+            : v.worker_id
+              ? "Görev bölgesi/güzergâh ilgili ekibe taşındı."
+              : "Görev bölgesi/güzergâhın ataması kaldırıldı.";
+      setDurum({ ok: true, metin });
+      // Ekip yukleri, gorev listeleri ve havuz birlikte degisir; bolge/guzergah
+      // ise BolgePaneli'nin de okudugu ["bolgeler"] sorgusundan gelir.
       queryClient.invalidateQueries({ queryKey: ["saha"] });
+      if (v.tip === "bolge-ata") {
+        queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
+      }
+    },
+    onError: (e) => setDurum({ ok: false, metin: (e as Error).message }),
+  });
+
+  const dagitKontrol = useMutation({
+    mutationFn: havuzDagit,
+    onSuccess: ({ dagitilan }) => {
+      setDurum(
+        dagitilan > 0
+          ? { ok: true, metin: `${dagitilan} görev ekiplere atandı.` }
+          : { ok: true, metin: "Havuzda uygun ekibi bulunan iş yok." }
+      );
+      queryClient.invalidateQueries({ queryKey: ["saha"] });
+      queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
     },
     onError: (e) => setDurum({ ok: false, metin: (e as Error).message }),
   });
@@ -690,7 +868,13 @@ export default function SahaEkipleri() {
     });
   const havuzKayitli = havuzFiltreli.filter((h) => h.source === "kayitli");
   const havuzTalep = havuzFiltreli.filter((h) => h.source === "ihbar");
-  const islenenAsset = islem.isPending ? islem.variables?.asset_id : undefined;
+  const islenenVar = islem.isPending ? islem.variables : undefined;
+  const islenenAsset =
+    islenenVar?.tip === "ata" || islenenVar?.tip === "havuz"
+      ? islenenVar.asset_id
+      : undefined;
+  const islenenBolge =
+    islenenVar?.tip === "bolge-ata" ? islenenVar.bolge_id : undefined;
   const yenile = () => {
     ekipSorgu.refetch();
     havuzSorgu.refetch();
@@ -772,7 +956,10 @@ export default function SahaEkipleri() {
               tumEkipler={ekipler}
               onIslem={(v) => islem.mutate(v)}
               islenenAsset={islenenAsset}
+              islenenBolge={islenenBolge}
               dep={dep}
+              onVarlikDetay={onVarlikDetay}
+              onBolgeDetay={onBolgeDetay}
             />
           ))}
         </div>
@@ -785,12 +972,23 @@ export default function SahaEkipleri() {
           Havuzda Bekleyen{" "}
           <span className="text-xs font-normal text-slate-400">({havuz.length})</span>
         </h3>
-        <p className="mb-2 text-xs text-slate-500">
+        <p className="mt-0.5 text-xs text-slate-500">
           Kendi yakasında ~{MAKS_ATAMA_MESAFE_KM} km içinde uygun (boş, konumu
           bilinen) ekip olmadığı için bekleyen işler. Aynı yakadaki bir ekip
           kapasite açınca ya da menzile girecek şekilde yer değiştirince otomatik
           yönlendirilir; dilerseniz aşağıdan elle atayabilirsiniz.
         </p>
+
+        <button
+          type="button"
+          onClick={() => dagitKontrol.mutate()}
+          disabled={dagitKontrol.isPending}
+          title="Havuzu ve bekleyen bölge/güzergâhları şimdi yeniden dağıtmayı dener"
+          className="my-3 flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <IconRefresh className={`h-3.5 w-3.5 ${dagitKontrol.isPending ? "animate-spin" : ""}`} />
+          {dagitKontrol.isPending ? "Kontrol ediliyor…" : "Atamayı Kontrol Et"}
+        </button>
 
         {havuz.length > 0 && (
           <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -847,6 +1045,7 @@ export default function SahaEkipleri() {
               onIslem={(v) => islem.mutate(v)}
               islenenAsset={islenenAsset}
               dep={dep}
+              onVarlikDetay={onVarlikDetay}
             />
             <HavuzGrup
               kaynak="ihbar"
@@ -855,6 +1054,7 @@ export default function SahaEkipleri() {
               onIslem={(v) => islem.mutate(v)}
               islenenAsset={islenenAsset}
               dep={dep}
+              onVarlikDetay={onVarlikDetay}
             />
           </div>
         )}

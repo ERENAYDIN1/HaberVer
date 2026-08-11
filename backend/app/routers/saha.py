@@ -203,6 +203,28 @@ def havuz(
     return [HavuzVarlik.from_row(r) for r in crud.havuz_varliklari(db, kapsam_turleri=alan.turler)]
 
 
+@router.post("/havuz/dagit")
+def havuz_dagit(
+    _: User = Depends(personel),
+    db: Session = Depends(get_db),
+):
+    """Personel: havuzu (ve bekleyen bolge/guzergahlari) elle yeniden dagitmayi
+    dener. Olay tabanli tetikleyiciler (konum ping'i, gorev tamamlama, bolge
+    olusturma) coğu durumu ANINDA yakalar; bu uc yalnizca KAYIT ANINDA uygun
+    ekip yokken sonradan uygun hale gelen durumlari (orn. ekip bosa cikip yeni
+    konum gondermeden bekliyorsa) telafi eder - artik periyodik degil, personel
+    'Atamayi Kontrol Et' dedigi an calisir.
+
+    Kapsam uygulanmaz: dagitim tum mudurlukleri birden etkileyebilir (bir
+    mudurlugun kapasitesi acilmasi baska bir mudurlugun havuzunu degistirmez,
+    ama tek cagride hepsi taranir), yetki zaten personelde."""
+    dagitilan = crud.bekleyen_gorevleri_dagit(db)
+    db.commit()
+    if dagitilan:
+        _atama_degisti()
+    return {"dagitilan": dagitilan}
+
+
 @router.post("/ata", status_code=status.HTTP_204_NO_CONTENT)
 def ata(
     data: AtamaGirdi,

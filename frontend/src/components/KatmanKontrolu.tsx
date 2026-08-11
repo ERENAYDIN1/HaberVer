@@ -57,6 +57,17 @@ export interface AltGrup {
   onBaslikSec?: () => void;
   secenekler: AltFiltre[];
   onSec: (anahtar: string) => void;
+  /** Bu grup baska bir alt-filtreye BAGIMLIYSA (or. talep mudurluk kirilimi,
+   *  ancak kendi durum satiri acikken anlamlidir), o bagimliligin o an acik
+   *  olup olmadigi. Verilmezse (`undefined`) grup her zaman aktif sayilir -
+   *  varsayilan, bagimsiz gruplarin (varliklar/ekipler/bolgeler) davranisini
+   *  degistirmez. `false` iken grup gizlenir: kapali bir durumun altinda
+   *  tiklanabilir ama etkisiz kutucuklar durmasin. */
+  aktif?: boolean;
+  /** Basliksiz bir grubu normalden fazla sola-girintili gosterir: "bu grup
+   *  YUKARIDAKİ satirin alt-filtresidir" der, ayrica bir baslik yazmadan
+   *  (or. talep mudurluk kirilimi kendi durum satirinin hemen altinda). */
+  girintili?: boolean;
 }
 
 /** Birden fazla rengi keskin geciste yan yana dizen swatch arka plani. */
@@ -428,8 +439,14 @@ export default function KatmanKontrolu({
               {altlar && genisletilmis && (
                 // 13 varlik turu + durumlar listeyi uzattigindan kaydirmali.
                 <div className="mb-1 ml-3 max-h-[17rem] space-y-1.5 overflow-y-auto pl-0.5">
-                  {altlar.map((grup, i) => (
-                    <div key={grup.baslik ?? i}>
+                  {altlar.map((grup, i) => {
+                    // Bagimli bir grup (or. talep mudurluk kirilimi) kendi
+                    // durum satiri kapaliyken hic gorunmez - alt-filtre
+                    // olmasinin anlami budur, tiklanabilir ama etkisiz bir
+                    // kutucuk kafa karistirir.
+                    if (grup.aktif === false) return null;
+                    return (
+                    <div key={i}>
                       {/* Mudurluk basligi: adin tamami ("… Müdürlüğü"), kendi
                           renginde bir seritle. Basligin altindaki turler o
                           mudurlugun isleridir; swatch'lari ise haritada
@@ -456,7 +473,15 @@ export default function KatmanKontrolu({
                             </span>
                           </p>
                         ))}
-                      <div className={grup.baslik ? "mt-0.5 pl-1" : undefined}>
+                      <div
+                        className={
+                          grup.girintili
+                            ? "pl-3"
+                            : grup.baslik
+                              ? "mt-0.5 pl-1"
+                              : undefined
+                        }
+                      >
                         {grup.secenekler.map((alt) => (
                         <button
                           key={alt.anahtar}
@@ -502,7 +527,8 @@ export default function KatmanKontrolu({
                         ))}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

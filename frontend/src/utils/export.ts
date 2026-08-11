@@ -1,6 +1,8 @@
 import { turAdi } from "../data/turSozlugu";
 import { ASSET_STATUS_LABELS } from "../types/asset";
 import type { AssetFeatureCollection } from "../types/asset";
+import { REPORT_STATUS_LABELS, talepNoktasi } from "../types/report";
+import type { ReportFeatureCollection } from "../types/report";
 
 function indir(icerik: string, dosyaAdi: string, mimeType: string) {
   const blob = new Blob([icerik], { type: `${mimeType};charset=utf-8;` });
@@ -72,6 +74,48 @@ export function jsonIndir(data: AssetFeatureCollection) {
   indir(
     JSON.stringify(data, null, 2),
     `haberver-${zamanDamgasi()}.geojson`,
+    "application/geo+json"
+  );
+}
+
+export function talepCsvIndir(data: ReportFeatureCollection) {
+  const basliklar = [
+    "id",
+    "isim",
+    "tip",
+    "gorunum",
+    "boylam",
+    "enlem",
+    "aciklama",
+    "olusturulma",
+  ];
+
+  const satirlar = data.features.map((f) => {
+    const p = f.properties;
+    const n = talepNoktasi(f);
+    return [
+      p.id,
+      p.name,
+      turAdi(p.type),
+      REPORT_STATUS_LABELS[p.gorunum ?? p.status],
+      n?.[0] ?? null,
+      n?.[1] ?? null,
+      p.note,
+      p.created_at,
+    ]
+      .map(csvAlan)
+      .join(AYIRICI);
+  });
+
+  const icerik =
+    "﻿" + [basliklar.join(AYIRICI), ...satirlar].join("\r\n");
+  indir(icerik, `haberver-talepler-${zamanDamgasi()}.csv`, "text/csv");
+}
+
+export function talepJsonIndir(data: ReportFeatureCollection) {
+  indir(
+    JSON.stringify(data, null, 2),
+    `haberver-talepler-${zamanDamgasi()}.geojson`,
     "application/geo+json"
   );
 }

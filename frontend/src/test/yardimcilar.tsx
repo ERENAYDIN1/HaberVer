@@ -76,6 +76,7 @@ export function varlik(
       created_at: props.created_at ?? "2026-01-01T00:00:00Z",
       updated_at: props.updated_at ?? "2026-01-01T00:00:00Z",
       repaired_at: props.repaired_at ?? null,
+      assigned: props.assigned ?? false,
     },
   };
 }
@@ -102,6 +103,7 @@ export function talep(
       review_note: props.review_note ?? null,
       created_asset_id: props.created_asset_id ?? null,
       created_at: props.created_at ?? "2026-01-01T00:00:00Z",
+      assigned: props.assigned ?? false,
     } as ReportFeature["properties"],
   };
 }

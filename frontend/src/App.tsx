@@ -6,7 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAsset } from "./api/assets";
 import { bolgeler as bolgeleriGetir } from "./api/bolgeler";
 import { bolgeGuncelle } from "./api/bolgeler";
-import { ekipGorevleri as ekipGorevleriGetir } from "./api/saha";
+import {
+  ekipGorevleri as ekipGorevleriGetir,
+  havuz as havuzGetir,
+} from "./api/saha";
 import { useAuth } from "./auth/AuthContext";
 import {
   useCanliGuncelleme,
@@ -216,13 +219,13 @@ export default function App() {
     katmanDurumlari,
     ekipDepartmaniSecili,
     bolgeDepartmani,
+    talepDepartmani,
     katmanDegistir,
     katmanTuruDegistir,
     katmanTurGrubuDegistir,
     katmanVarlikDurumuDegistir,
     katmanDurumuDegistir,
     ekipDepartmaniDegistir,
-    panelTuruSec,
     departmanTurleriniSec,
     panelDurumuSec,
     katmaniAc,
@@ -586,6 +589,30 @@ export default function App() {
     refetchInterval: YEDEK_YOKLAMA_MS,
   });
 
+  /** Havuzda bekleyen (hicbir ekibe atanmamis) bakim varliklari.
+   *
+   *  ANAHTAR SahaEkipleri panosuyla AYNI (`["saha","havuz"]`): iki yuzey de
+   *  ayni ucu cagirir, tek istek gider ve atama sonrasi ikisi birlikte
+   *  tazelenir - ekip sorgusunda alinan kararin aynisi.
+   *
+   *  Burada yalnizca "atanmamis mi" bilgisi icin okunur: `AssetProperties`
+   *  atama tasimaz (atama ayri bir tabloda) ve varlik listesine bir alan
+   *  eklemek yerine zaten var olan bu uc kullanilir - liste uclari boylece
+   *  atama tablosuna hic dokunmaz. */
+  const havuzSorgu = useQuery({
+    queryKey: ["saha", "havuz"],
+    queryFn: havuzGetir,
+    enabled: personel,
+    refetchInterval: YEDEK_YOKLAMA_MS,
+  });
+  /** Atanmamis varlik id'leri. Havuz YALNIZCA `bakim_lazim` varliklari
+   *  dondurur; "iyi" durumdakiler bu kumede yoktur ve zaten atanmalari soz
+   *  konusu degildir (siralama onlari en sona koyar, bkz. AssetList). */
+  const atanmamisIdler = useMemo(
+    () => new Set((havuzSorgu.data ?? []).map((h) => h.asset_id)),
+    [havuzSorgu.data]
+  );
+
   // Departman sozlugu: ekip isaretcilerinin rengi ve lejanttaki ekip
   // alt-filtresi buradan beslenir (uzun staleTime, bkz. useDepartmanlar).
   const departmanSorgu = useDepartmanlar();
@@ -723,10 +750,11 @@ export default function App() {
     kaydediliyor: sekilKaydediliyor,
     genisletiliyor: sekilGenisletiliyor,
     degismis: sekilDegismis,
+    geriAlinabilir: sekilGeriAlinabilir,
     baslat: sekilDuzenlemeBaslat,
     kapat: sekilDuzenlemeKapat,
     degisti: sekilDegisti,
-    sekliSifirla: sekilSifirla,
+    geriAl: sekilGeriAl,
     kaydet: sekilKaydet,
     genislet: sekilGenislet,
   } = useSekilDuzenleme({
@@ -819,31 +847,50 @@ export default function App() {
    *  sayaci bilincli olarak ham sorgudan gelir: zil sistemin tamamini anlatir,
    *  haritanin secimini degil. */
   const talepGorunumleriAlanda = useMemo(() => {
-    if (!alandaMi) return talepGorunumleri;
     return Object.fromEntries(
       TALEP_GORUNUMLERI.map((g) => [
         g,
         talepGorunumleri[g].filter((f) => {
-          const n = talepNoktasi(f);
-          return n ? alandaMi(n) : false;
+          if (alandaMi) {
+            const n = talepNoktasi(f);
+            if (!n || !alandaMi(n)) return false;
+          }
+          // Mudurluk alt-filtresi yalnizca acik is sayilan iki gorunumde
+          // uygulanir ("Onaylandı"/"Bekleyen"), HER BIRI KENDI state'inden
+          // okunur - "Tamir Edildi" ve "Reddedildi" gecmis kayittir, personel
+          // kendi mudurlugu disindaki kapanmis bir isi de gorebilmeli.
+          const filtre = talepDepartmani[g];
+          if (filtre) {
+            const departman = eslemeSorgu.data?.[f.properties.type] ?? null;
+            if (!filtre.secili(departman)) return false;
+          }
+          return true;
         }),
       ])
     ) as Record<TalepGorunumu, ReportFeature[]>;
-  }, [talepGorunumleri, alandaMi]);
+  }, [talepGorunumleri, alandaMi, eslemeSorgu.data, talepDepartmani]);
 
   // Talep katmani: secili gorunumlerin talepleri id'ye gore tekillestirilir.
-  // Varlik katmaniyla ayni gerekce: alan secimi HARITAYI daraltmaz, yalnizca
-  // lejant sayaclarini ve panel listelerini besleyen `talepGorunumleriAlanda`
-  // daralir. Aksi halde bir ilce secmek sehrin geri kalanindaki pinleri de
-  // silerdi.
+  // ALAN SECIMI HARITAYI daraltmaz (varlik katmaniyla ayni gerekce: bir ilce
+  // secmek sehrin geri kalanindaki pinleri silmemeli) - ama MUDURLUK
+  // alt-filtresi ekip katmanindaki gibi (bkz. `haritaEkipleri`) haritayi da
+  // suzer: bu bir "sorgu" degil "hangi katman gorunsun" secimi, tur/durum
+  // kutucuklariyla ayni sinifta.
   const talepKatmanVeri = useMemo<ReportFeatureCollection>(() => {
     const gorulen = new Map<string, ReportFeature>();
     for (const gorunum of TALEP_GORUNUMLERI) {
       if (!katmanDurumlari[gorunum]) continue;
-      for (const f of talepGorunumleri[gorunum]) gorulen.set(f.properties.id, f);
+      const filtre = talepDepartmani[gorunum];
+      for (const f of talepGorunumleri[gorunum]) {
+        if (filtre) {
+          const departman = eslemeSorgu.data?.[f.properties.type] ?? null;
+          if (!filtre.secili(departman)) continue;
+        }
+        gorulen.set(f.properties.id, f);
+      }
     }
     return { type: "FeatureCollection", features: [...gorulen.values()] };
-  }, [katmanDurumlari, talepGorunumleri]);
+  }, [katmanDurumlari, talepGorunumleri, talepDepartmani, eslemeSorgu.data]);
 
   // Secilen talebin gorunumu panelin alt sekmesini de belirler, yoksa secili
   // kayit acilan listede gorunmezdi. Ham durum degil gorunum kullanilir:
@@ -1055,21 +1102,113 @@ export default function App() {
     };
   }, [bolgeSorgu.data, gorunurDepartmanlar, bolgeDepartmani]);
 
-  const talepAltFiltre = useMemo<AltGrup[]>(
-    () => [
-      {
-        onSec: katmanDurumuDegistir,
-        secenekler: TALEP_GORUNUMLERI.map((d) => ({
+  // Mudurluk alt-filtresi icin "Onaylandı" ve "Bekleyen" talepleri AYRI AYRI
+  // (alan secimiyle sinirli, ama kendi mudurluk filtresinden BAGIMSIZ)
+  // mudurluge gore sayilir - kutucugun kendi sayaci, o kutucugu kapatinca
+  // sifira dusmemeli. Iki gorunum ayri Map'te tutulur ki "Onaylandı"da bir
+  // mudurlugu kapatmak "Bekleyen"in sayaclarini etkilemesin.
+  const talepMudurlukSayilari = useMemo(() => {
+    const sonuc: Partial<Record<TalepGorunumu, Map<string, number>>> = {};
+    for (const g of ["onaylandi", "beklemede"] as const) {
+      const sayilar = new Map<string, number>();
+      for (const f of talepGorunumleri[g]) {
+        if (alandaMi) {
+          const n = talepNoktasi(f);
+          if (!n || !alandaMi(n)) continue;
+        }
+        const anahtar = eslemeSorgu.data?.[f.properties.type] ?? DEPARTMANSIZ;
+        sayilar.set(anahtar, (sayilar.get(anahtar) ?? 0) + 1);
+      }
+      sonuc[g] = sayilar;
+    }
+    return sonuc;
+  }, [talepGorunumleri, alandaMi, eslemeSorgu.data]);
+
+  /** TalepPaneli'ne gecirilen mudurluk suzgusu: lejanttaki kutucuklarla AYNI
+   *  `talepDepartmani` state'ini okur, boylece bir mudurlugu kapatmak hem
+   *  lejant sayaclarini hem panel listesini birlikte daraltir - iki yuzey
+   *  ayri filtre gibi davranip birbirini yalanlamamali. "Onaylandı"/"Bekleyen"
+   *  disinda hicbir kisit yok (bkz. talepGorunumleriAlanda). */
+  const talepMudurlukSecili = useCallback(
+    (gorunum: TalepGorunumu, tur: AssetType) => {
+      const filtre = talepDepartmani[gorunum];
+      if (!filtre) return true;
+      const departman = eslemeSorgu.data?.[tur] ?? null;
+      return filtre.secili(departman);
+    },
+    [talepDepartmani, eslemeSorgu.data]
+  );
+
+  // Her durum satiri KENDI grubudur (tek ortak "Durum" grubu DEGIL): boylece
+  // "Onaylandı"nin mudurluk kirilimi tam onun altina, "Bekleyen"inki de onun
+  // altina girebilir - DOM sirasi = gorsel sira, iki blok araya karismaz.
+  const talepAltFiltre = useMemo<AltGrup[]>(() => {
+    const durumSatiri = (d: TalepGorunumu): AltGrup => ({
+      onSec: katmanDurumuDegistir,
+      secenekler: [
+        {
           anahtar: d,
           etiket: REPORT_STATUS_LABELS[d],
           renk: TALEP_DURUM_RENGI[d],
           secili: katmanDurumlari[d],
           sayi: talepGorunumleriAlanda[d].length,
-        })),
-      },
-    ],
-    [katmanDurumlari, talepGorunumleriAlanda, katmanDurumuDegistir]
-  );
+        },
+      ],
+    });
+
+    // Mudurluk kirilimi: yalnizca acik is sayilan "Onaylandı" ve "Bekleyen"
+    // gorunumlerinde vardir, HER BIRI KENDI grubu ve KENDI state'i ile - bir
+    // gorunumun mudurluk secimi digerini etkilemez (bkz. talepDepartmani).
+    const mudurlukGrubu = (gorunum: TalepGorunumu): AltGrup | null => {
+      const filtre = talepDepartmani[gorunum];
+      const sayilar = talepMudurlukSayilari[gorunum];
+      if (!filtre || !sayilar) return null;
+      const secenekler = (gorunurDepartmanlar ?? [])
+        .filter((d) => sayilar.has(d.kod))
+        .map((d) => ({
+          anahtar: d.kod,
+          etiket: d.ad,
+          renk: d.renk,
+          secili: filtre.secili(d.kod),
+          sayi: sayilar.get(d.kod) ?? 0,
+        }));
+      if (sayilar.has(DEPARTMANSIZ)) {
+        secenekler.push({
+          anahtar: DEPARTMANSIZ,
+          etiket: YONLENDIRILMEMIS_AD,
+          renk: YONLENDIRILMEMIS_RENK,
+          secili: filtre.secili(null),
+          sayi: sayilar.get(DEPARTMANSIZ) ?? 0,
+        });
+      }
+      if (secenekler.length === 0) return null;
+      return {
+        // Baslik YOK: bu grup kendi durum satirinin alt-filtresidir, ayri bir
+        // "Müdürlük" basligi ayni seviyede baska bir kategori gibi
+        // gorunmesine yol aciyordu. Girinti (`girintili`) bagimliligi
+        // anlatir, DOM sirasi da zaten durum satirinin hemen altindadir.
+        onSec: filtre.degistir,
+        secenekler,
+        girintili: true,
+        aktif: katmanDurumlari[gorunum],
+      };
+    };
+
+    const gruplar: AltGrup[] = [];
+    for (const d of TALEP_GORUNUMLERI) {
+      gruplar.push(durumSatiri(d));
+      const mg = mudurlukGrubu(d);
+      if (mg) gruplar.push(mg);
+    }
+    return gruplar;
+  }, [
+    katmanDurumlari,
+    talepGorunumleriAlanda,
+    katmanDurumuDegistir,
+    gorunurDepartmanlar,
+    talepMudurlukSayilari,
+    talepDepartmani,
+  ]);
 
   // --- Sekme -> lejant (ana katmanlar) senkronu ---------------------------
   // Lejant, panelde o an secili olani isaretler; her sekme degisiminde
@@ -1220,7 +1359,7 @@ export default function App() {
     ? [
         {
           id: "saha",
-          etiket: "Saha Ekipleri",
+          etiket: "Saha Ekipleri ve Havuz",
           ikon: IconUsers,
           onClick: () => setUstModal("saha"),
           aktif: ustModal === "saha",
@@ -1356,7 +1495,7 @@ export default function App() {
           isError={sorgu.isError}
           error={sorgu.error as Error | null}
           turler={katmanTurleri}
-          onTurSec={panelTuruSec}
+          onTurDegistir={katmanTuruDegistir}
           onDepartmanSec={departmanTurleriniSec}
           durumlar={katmanVarlikDurumlari}
           onDurumSec={panelDurumuSec}
@@ -1370,6 +1509,8 @@ export default function App() {
           idariHatasi={idariHatasi}
           ekipler={ekipSorgu.data}
           onVarligaGit={varligaGit}
+          atanmamisIdler={personel ? atanmamisIdler : undefined}
+          mobil={mobil}
         />
       )}
 
@@ -1404,6 +1545,7 @@ export default function App() {
             queryClient.invalidateQueries({ queryKey: ["saha"] });
           }}
           onTaleplerChange={setTalepler}
+          mudurlukSecili={talepMudurlukSecili}
           seciliRaporId={seciliTalepId}
           onRaporSec={talepSecildi}
           talepVarlikSorgu={talepVarlikSorgu}
@@ -1414,11 +1556,19 @@ export default function App() {
           // Panel secili alanla daralir (varlik listesindeki desen); harita
           // katmani bilincli olarak tam kalir.
           alandaMi={alandaMi}
+          atanmamisIdler={personel ? atanmamisIdler : undefined}
+          mobil={mobil}
         />
       )}
 
       {bolgeSekmesi(sekme) && (
         <BolgePaneli
+          // NOT: burada bilincli olarak `key={sekme}` YOK. Iki sekmeyi ayri
+          // kopyalar yapmak arama sizintisini cozerdi ama siralama secimini de
+          // her sekme degisiminde unuttururdu. Ayrim panelin kendi icinde
+          // yapiliyor (`useListeAraci`'nin `kapsam`i): arama sifirlanir,
+          // siralama sekme basina hatirlanir. Duzenleme formu / silme onayi
+          // ise kaydin id'sine bagli oldugundan zaten karismaz.
           tip={BOLGE_SEKMELERI[sekme].tip}
           alanda={alandaMi ? bolgeAlanda : null}
           ekipler={ekipSorgu.data}
@@ -1433,6 +1583,7 @@ export default function App() {
           sekilDuzenlenenId={sekilDuzenleme?.id ?? null}
           seciliId={seciliBolgeId}
           onDetay={(b) => setDetayBolgeId(b.id)}
+          mobil={mobil}
         />
       )}
     </div>
@@ -1498,7 +1649,8 @@ export default function App() {
       hata={sekilHatasi}
       onGenislet={sekilGenislet}
       genisletiliyor={sekilGenisletiliyor}
-      onSifirla={sekilSifirla}
+      onGeriAl={sekilGeriAl}
+      geriAlinabilir={sekilGeriAlinabilir}
       altOfset={aracOfseti}
     />
   ) : (
@@ -1669,8 +1821,11 @@ export default function App() {
         <MapStilKontrolu aktifId={aktifStilId} onSec={setAktifStilId} harita={harita} />
 
         {/* Aktif sekmenin yuzen paneli: kenar cubugunun sagindan acilir,
-            sol bosluk `--kenar` uzerinden verilir. */}
-        {panelAcik && (
+            sol bosluk `--kenar` uzerinden verilir. Sekil duzenlenirken
+            gizlenir (harita + alt panel ikisi birden yer isterken sol panel
+            de acik kalirsa ekran tikanir); secili sekme/kayit STATE'te durur,
+            sekil kapatilinca panel oldugu yerden geri acilir. */}
+        {panelAcik && !sekilDuzenleme && (
           <div className="absolute bottom-4 top-4 z-20 flex w-[360px] max-w-[calc(100vw_-_var(--kenar)_-_2rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur-sm transition-[left] duration-200 ease-out" style={{ left: "calc(var(--kenar) + 1rem)" }}>
             <div
               className={`flex shrink-0 items-center justify-between border-b px-3.5 py-2.5 ${SEKME_RENK_SINIFLARI[SEKME_TANIMLARI[sekme].renk].aktif}`}
@@ -2088,6 +2243,7 @@ export default function App() {
             da soyler). Harita katmani bilincli olarak tam kalir. */}
         <Dashboard
           data={varlikPanelVeri}
+          talepGorunumleri={personel ? talepGorunumleriAlanda : undefined}
           alanSecimiAktif={tamamlananAlanlar.length > 0}
         />
       </Modal>
@@ -2124,12 +2280,17 @@ export default function App() {
 
       <Modal
         acik={ustModal === "saha"}
-        baslik="Saha Ekipleri"
+        baslik="Saha Ekipleri ve Havuz"
         genis
         icerikSinifi="flex h-[70vh] flex-col"
         onKapat={() => setUstModal(null)}
       >
-        {personel && <SahaEkipleri />}
+        {personel && (
+          <SahaEkipleri
+            onVarlikDetay={ekipGoreviAcildi}
+            onBolgeDetay={ekipBolgesiAcildi}
+          />
+        )}
       </Modal>
     </div>
   );

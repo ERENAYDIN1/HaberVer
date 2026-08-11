@@ -8,7 +8,7 @@ import {
 } from "../hooks/useDepartmanlar";
 import { useIlceler, useMahalleler } from "../hooks/useSinirlar";
 import { departmanBul, departmanTurleri } from "../types/departman";
-import { turKodlari } from "../data/turSozlugu";
+import { turAdi, turKodlari } from "../data/turSozlugu";
 import { ASSET_STATUSES, ASSET_STATUS_LABELS } from "../types/asset";
 import type {
   AssetFeature,
@@ -19,7 +19,17 @@ import type {
 import AssetDetayModal, { useVarlikYonetimi } from "./AssetDetayModal";
 import type { EkipOzet } from "../types/saha";
 import { ISTANBUL_IL_KODU } from "../utils/istanbulMaskesi";
-import TipSecenekleri from "./TipSecenekleri";
+import ListeAraciCubugu from "./ListeAraciCubugu";
+import { useListeAraci } from "../hooks/useListeAraci";
+import {
+  aramaMetni,
+  atanmamisOnce,
+  metinKarsilastir,
+  suzVeSirala,
+  tariheGoreYeni,
+  type SiralamaSecenegi,
+} from "../utils/listeAraci";
+import TipCoktanSecici from "./TipCoktanSecici";
 import VarlikSatiri from "./VarlikSatiri";
 import { IconX } from "./icons";
 
@@ -51,6 +61,70 @@ function karisikEtiketi(acikSayisi: number, ad: string): string {
   return acikSayisi === 0 ? `Hiçbir ${ad} seçili değil` : `${acikSayisi} ${ad} seçili`;
 }
 
+/** Siralama secenekleri. Varsayilan "en yeni": listeler bugune kadar backend
+ *  ne dondururse o sirada geliyordu, yani kullaniciya hicbir sey vaat
+ *  etmiyordu; en son eklenen kaydi gormek en sik istenen sey.
+ *
+ *  "Bakım Lazım önce" ayri bir secenek: acik isi one almak bu panelin en
+ *  islevsel siralamasi, ama varsayilan YAPILMADI - o zaman yeni eklenen bir
+ *  "iyi" varlik listenin dibine dusup kaydedildigi fark edilmezdi. */
+const VARLIK_SIRALAMASI: readonly SiralamaSecenegi<AssetFeature>[] = [
+  {
+    deger: "yeni",
+    etiket: "En yeni",
+    karsilastir: (a, b) =>
+      tariheGoreYeni(a.properties.created_at, b.properties.created_at),
+  },
+  {
+    deger: "eski",
+    etiket: "En eski",
+    karsilastir: (a, b) =>
+      tariheGoreYeni(b.properties.created_at, a.properties.created_at),
+  },
+  {
+    deger: "ad",
+    etiket: "Ada göre (A-Z)",
+    karsilastir: (a, b) => metinKarsilastir(a.properties.name, b.properties.name),
+  },
+  {
+    deger: "durum",
+    etiket: "Bakım Lazım önce",
+    karsilastir: (a, b) => {
+      const agirlik = (s: AssetStatus) => (s === "bakim_lazim" ? 0 : 1);
+      const fark = agirlik(a.properties.status) - agirlik(b.properties.status);
+      // Esit durumda en yeniye duser: ikinci bir olcut olmazsa ayni durumdaki
+      // kayitlarin sirasi backend'in kaprisine kalirdi.
+      return fark !== 0
+        ? fark
+        : tariheGoreYeni(a.properties.created_at, b.properties.created_at);
+    },
+  },
+];
+
+/** Havuz bilgisi geldiyse listeye "Önce atanmamış" secenegini ekler.
+ *
+ *  Secenek KOSULLU: `GET /saha/havuz` yalnizca personele acik, saha calisani
+ *  ise atama yapamaz. Veri yoksa secenegi gostermek, secildiginde hicbir sey
+ *  degistirmeyen olu bir secenek birakirdi. */
+function varlikSiralamasi(
+  atanmamisIdler?: ReadonlySet<string>
+): readonly SiralamaSecenegi<AssetFeature>[] {
+  if (!atanmamisIdler) return VARLIK_SIRALAMASI;
+  return [
+    ...VARLIK_SIRALAMASI,
+    {
+      deger: "atanmamis",
+      etiket: "Önce atanmamış",
+      karsilastir: atanmamisOnce<AssetFeature>(
+        atanmamisIdler,
+        (a) => a.properties.id,
+        (a) => a.properties.status === "bakim_lazim",
+        (a) => a.properties.created_at
+      ),
+    },
+  ];
+}
+
 interface AssetListProps {
   data?: AssetFeatureCollection;
   isLoading: boolean;
@@ -60,7 +134,9 @@ interface AssetListProps {
    *  Buradaki acilir tekil secer (= yalnizca o kutucuk), lejant coklu secer;
    *  ikisi de ayni durumu yazdigi icin biri digerini sifirlamaz. */
   turler: Record<AssetType, boolean>;
-  onTurSec: (tur: AssetType | null) => void;
+  /** Coklu secim checkbox'i: tek bir turu ac/kapa (lejant kutucuklariyla
+   *  AYNI state'i yazar). */
+  onTurDegistir: (tur: AssetType) => void;
   /** Departman filtresi: bir departman = bir tur kumesi oldugu icin AYRI BIR
    *  STATE DEGIL, ayni tur kutucuklarina yazilir (bkz. useKatmanlar). */
   onDepartmanSec: (turler: readonly AssetType[] | null) => void;
@@ -81,6 +157,12 @@ interface AssetListProps {
   ekipler?: EkipOzet[];
   /** Detay modalindaki "Konuma Git" - haritayi varligin konumuna ucurur. */
   onVarligaGit?: (asset: AssetFeature) => void;
+  /** Havuzda bekleyen (hicbir ekibe atanmamis) varliklarin id'leri. Verilirse
+   *  "Önce atanmamış" siralamasi acilir. Yalnizca personel icin doludur:
+   *  havuz ucu saha calisanina kapali. */
+  atanmamisIdler?: ReadonlySet<string>;
+  /** Mobil kabuk: arac cubugu dar ekranda daha sikisik dizilir. */
+  mobil?: boolean;
 }
 
 export default function AssetList({
@@ -89,7 +171,7 @@ export default function AssetList({
   isError,
   error,
   turler,
-  onTurSec,
+  onTurDegistir,
   onDepartmanSec,
   durumlar,
   onDurumSec,
@@ -103,6 +185,8 @@ export default function AssetList({
   idariHatasi,
   ekipler,
   onVarligaGit,
+  atanmamisIdler,
+  mobil,
 }: AssetListProps) {
   const { user } = useAuth();
   const tamCrudYetkisi = user?.role !== "saha_calisani";
@@ -125,9 +209,7 @@ export default function AssetList({
   // Tur listesi sozlukten gelir (backend verisi): admin bir tur ekledi diye
   // filtre cubugunun yeniden derlenmesi gerekmiyor.
   const tumTurKodlari = turKodlari();
-  const tipDegeri = acilirDegeri(tumTurKodlari, turler);
   const durumDegeri = acilirDegeri(ASSET_STATUSES, durumlar);
-  const acikTipSayisi = tumTurKodlari.filter((t) => turler[t]).length;
 
   // Departman filtresi yalnizca ADMIN'e gosterilir: diger personelin listesi
   // zaten backend'de kendi mudurluguyle sinirli, filtre tek secenekli olurdu.
@@ -150,6 +232,39 @@ export default function AssetList({
     return tamKume.length === acik.length ? kod : "";
   }, [esleme, turler, adminMi, tumTurKodlari]);
   const acikDurumSayisi = ASSET_STATUSES.filter((s) => durumlar[s]).length;
+
+  // Arama + siralama. Ikisi de YALNIZCA PANELI etkiler; haritanin tabani her
+  // zaman ham sorgudur (bkz. CLAUDE.md "Alan secimi HARITAYI DARALTMAZ").
+  // Aramayi backend'e goturmemenin sebebi: tur/durum filtresi de client-side
+  // ve ayni suzulmus koleksiyon haritaya/panele/Dashboard'a gidiyor - aramayi
+  // ayirmak bu tek akisi ikiye bolerdi.
+  const { arama, setArama, sira, setSira } = useListeAraci("yeni");
+
+  const siralamalar = useMemo(
+    () => varlikSiralamasi(atanmamisIdler),
+    [atanmamisIdler]
+  );
+
+  const tumVarliklar = data?.features;
+  const gosterilen = useMemo(
+    () =>
+      tumVarliklar &&
+      suzVeSirala(
+        tumVarliklar,
+        arama,
+        // Tur ADI da aranir: kullanici "aydınlatma direği" diye arar, tur
+        // kodunu (`direk`) bilmez.
+        (a) =>
+          aramaMetni(
+            a.properties.name,
+            a.properties.brand_model,
+            turAdi(a.properties.type)
+          ),
+        siralamalar,
+        sira
+      ),
+    [tumVarliklar, arama, sira, siralamalar]
+  );
 
   // Haritadan secim yapildiginda listedeki karti gorunur alana kaydir.
   useEffect(() => {
@@ -201,20 +316,12 @@ export default function AssetList({
       )}
 
       <div className="flex gap-2 border-b border-slate-200 px-4 py-3">
-        <select
-          className={selectClass}
-          value={tipDegeri}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v !== KARISIK) onTurSec((v || null) as AssetType | null);
-          }}
-        >
-          <option value="">Tüm tipler</option>
-          {tipDegeri === KARISIK && (
-            <option value={KARISIK}>{karisikEtiketi(acikTipSayisi, "tip")}</option>
-          )}
-          <TipSecenekleri turler={tumTurKodlari} />
-        </select>
+        <TipCoktanSecici
+          turler={tumTurKodlari}
+          secili={turler}
+          onDegis={onTurDegistir}
+          hepsiEtiketi="Tüm tipler"
+        />
 
         <select
           className={selectClass}
@@ -296,6 +403,21 @@ export default function AssetList({
         )}
       </div>
 
+      <ListeAraciCubugu
+        mobil={mobil}
+        arama={{
+          deger: arama,
+          onDegis: setArama,
+          ipucu: "Ad, marka veya tür ara…",
+        }}
+        siralama={{ secenekler: siralamalar, deger: sira, onDegis: setSira }}
+        sayac={{
+          gorunen: gosterilen?.length ?? 0,
+          toplam: tumVarliklar?.length ?? 0,
+          birim: "varlık",
+        }}
+      />
+
       {idariHatasi && (
         <p className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
           {idariHatasi}
@@ -333,14 +455,21 @@ export default function AssetList({
         {isError && (
           <p className="p-3 text-sm text-red-600">{error?.message}</p>
         )}
+        {/* Bos liste mesaji sebebini soyler: arama yuzunden bosaldiysa
+            filtreleri kurcalamak yanlis yol olurdu. */}
         {data?.features.length === 0 && (
           <p className="p-6 text-center text-sm text-slate-500">
             Bu filtrelere uyan varlık yok.
           </p>
         )}
+        {data && data.features.length > 0 && gosterilen?.length === 0 && (
+          <p className="p-6 text-center text-sm text-slate-500">
+            "{arama.trim()}" aramasına uyan varlık yok.
+          </p>
+        )}
 
         <ul className="divide-y divide-slate-100">
-          {data?.features.map((asset) => {
+          {gosterilen?.map((asset) => {
             const id = asset.properties.id;
             const secili = id === seciliId;
             return (

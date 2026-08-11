@@ -151,6 +151,22 @@ export function useKatmanlar() {
     () => ({ bolgeler: alanDepartmani, guzergahlar: cizgiDepartmani }),
     [alanDepartmani, cizgiDepartmani]
   );
+  /** Talepler katmaninin mudurluk alt-filtresi: yalnizca "Onaylandı" ve
+   *  "Bekleyen" gorunumlerinde vardir, ikisi AYRI state'tir (bolge/guzergah
+   *  ciftiyle ayni desen - "Onaylandı"da bir mudurlugu kapatmak "Bekleyen"i de
+   *  gizleseydi kutucuk yalan soylerdi; sekmeler ayni is kuyrugunun farkli
+   *  asamalari olsa da personel genelde birini kontrol ederken digerini
+   *  degistirmez). Varlik katmanindaki tur filtresinden de AYRIdir: ikisi ayni
+   *  `katmanTurleri`yi paylassaydi, varlik lejantindan bir tur kapatmak
+   *  talepleri de gizlerdi. */
+  const onaylandiDepartmani = useDepartmanFiltresi();
+  const beklemedeDepartmani = useDepartmanFiltresi();
+  const talepDepartmani = useMemo<
+    Partial<Record<TalepGorunumu, DepartmanFiltresi>>
+  >(
+    () => ({ onaylandi: onaylandiDepartmani, beklemede: beklemedeDepartmani }),
+    [onaylandiDepartmani, beklemedeDepartmani]
+  );
 
   // --- Lejant kutucuklari (coklu secim) ---
   const katmanDegistir = useCallback((anahtar: KatmanAnahtari) => {
@@ -179,9 +195,6 @@ export function useKatmanlar() {
   }, []);
 
   // --- Panel acilirlari (tekil secim) ---
-  const panelTuruSec = useCallback((tur: AssetType | null) => {
-    setKatmanTurleri(yalnizca(turKodlari(), tur));
-  }, []);
   const panelDurumuSec = useCallback((durum: AssetStatus | null) => {
     setKatmanVarlikDurumlari(yalnizca(ASSET_STATUSES, durum));
   }, []);
@@ -232,7 +245,15 @@ export function useKatmanlar() {
     ekipDepartmani.sifirla();
     alanDepartmani.sifirla();
     cizgiDepartmani.sifirla();
-  }, [ekipDepartmani, alanDepartmani, cizgiDepartmani]);
+    onaylandiDepartmani.sifirla();
+    beklemedeDepartmani.sifirla();
+  }, [
+    ekipDepartmani,
+    alanDepartmani,
+    cizgiDepartmani,
+    onaylandiDepartmani,
+    beklemedeDepartmani,
+  ]);
 
   return {
     katmanlar,
@@ -241,13 +262,13 @@ export function useKatmanlar() {
     katmanDurumlari,
     ekipDepartmaniSecili: ekipDepartmani.secili,
     bolgeDepartmani,
+    talepDepartmani,
     katmanDegistir,
     katmanTuruDegistir,
     katmanTurGrubuDegistir,
     katmanVarlikDurumuDegistir,
     katmanDurumuDegistir,
     ekipDepartmaniDegistir: ekipDepartmani.degistir,
-    panelTuruSec,
     panelDurumuSec,
     departmanTurleriniSec,
     katmaniAc,

@@ -74,14 +74,71 @@ vi.mock("./api/reports", () => ({
 
 vi.mock("./api/saha", () => ({
   ekipGorevleri: vi.fn(async () => []),
-  havuz: vi.fn(async () => []),
+  // AGAC havuzda (atanmamis), DIREK bir ekibe atali. "Önce atanmamış"
+  // siralamasi bu ayrimi okur; havuz ucu yalnizca `bakim_lazim` dondurur.
+  havuz: vi.fn(async () => [
+    {
+      asset_id: AGAC.properties.id,
+      name: AGAC.properties.name,
+      type: "agac",
+      source: "kayitli",
+      longitude: 28.98,
+      latitude: 41.01,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      yaka: "avrupa",
+    },
+  ]),
   ekibeAta: vi.fn(),
   gorevGeriAl: vi.fn(),
   gorevDurumu: vi.fn(async () => ({ gorev: null, varlik_yaka: null, varlik_yaka_ad: null })),
 }));
 
+/** Bir alan + bir cizgi: "Bölgeler" ve "Güzergâhlar" sekmeleri AYRI panellerdir,
+ *  her biri yalnizca kendi tipini listeler. */
+const BOLGE_KAYDI = {
+  id: "bolge-1",
+  ad: "Kadikoy Parki",
+  aciklama: null,
+  tip: "alan" as const,
+  renk: "#7c3aed",
+  departman: null,
+  noktalar: [
+    [
+      [28.9, 41.0],
+      [28.91, 41.0],
+      [28.91, 41.01],
+      [28.9, 41.0],
+    ] as [number, number][],
+  ],
+  alan_m2: 1000,
+  uzunluk_m: null,
+  worker_id: null,
+  worker_ad: null,
+  assigned_at: null,
+  tamamlandi_at: null,
+  yaka: "avrupa",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
+const GUZERGAH_KAYDI = {
+  ...BOLGE_KAYDI,
+  id: "guzergah-1",
+  ad: "Sahil Yolu Hatti",
+  tip: "cizgi" as const,
+  alan_m2: null,
+  uzunluk_m: 500,
+  noktalar: [
+    [
+      [28.9, 41.0],
+      [28.92, 41.02],
+    ] as [number, number][],
+  ],
+};
+
 vi.mock("./api/bolgeler", () => ({
-  bolgeler: vi.fn(async () => []),
+  bolgeler: vi.fn(async () => [BOLGE_KAYDI, GUZERGAH_KAYDI]),
   bolgeGuncelle: vi.fn(),
   bolgeOlustur: vi.fn(),
   bolgeSil: vi.fn(),
@@ -120,6 +177,18 @@ function gorunenAdlar(): string[] {
     .filter((ad) => screen.queryAllByText(ad).length > 0);
 }
 
+/** Varlik adlarini LISTEDEKI GERCEK SIRAYLA dondurur. `gorunenAdlar` sabit bir
+ *  dizi uzerinde filtreledigi icin siralamayi olcemez; burada DOM sirasi
+ *  okunur. */
+function siradakiAdlar(): string[] {
+  const adlar = [AGAC, DIREK, SAGLAM_BANK, TALEP_VARLIGI].map(
+    (v) => v.properties.name
+  );
+  return [...document.querySelectorAll("li")]
+    .map((li) => adlar.find((ad) => li.textContent?.includes(ad)))
+    .filter((ad): ad is string => Boolean(ad));
+}
+
 /** App acilista sol paneli kapali gosterir; listeyi gormek icin kenar
  *  cubugundan "Varlıklar" sekmesi acilmali. */
 async function varlikPaneliniAc(kullanici: ReturnType<typeof userEvent.setup>) {
@@ -132,19 +201,47 @@ async function varlikPaneliniAc(kullanici: ReturnType<typeof userEvent.setup>) {
   await kullanici.click(dugme);
 }
 
-/** Sol paneldeki tur acilirini dondurur.
+/** Sol paneldeki tur filtresi ARTIK checkbox tabanli coklu secim - buton
+ *  ICERIGIYLE bulunur (indeksle degil, ayni gerekce: yeni bir filtre eklendiginde
+ *  indeks kayiyor ve test ilgisiz bir degisiklik yuzunden anlamsiz bir yerde
+ *  patliyordu). */
+function tipButonu(): HTMLElement {
+  const buton = screen
+    .getAllByRole("button")
+    .find((b) => /tip seçili|tüm tipler|hiçbiri seçili değil/i.test(b.textContent ?? ""));
+  if (!buton) throw new Error("tur acilir dugmesi bulunamadi");
+  return buton;
+}
+
+/** Tip acilirini ACIK degilse acar (buton tiklamasi zaten acikken tersleyip
+ *  kapatir - panel secimden sonra bilincli olarak acik kalir, coklu isaretleme
+ *  bir tikla kapanmasin diye). */
+async function tipAciliriAc(kullanici: ReturnType<typeof userEvent.setup>) {
+  if (screen.queryByText("Tümünü seç") || screen.queryByText("Seçimi temizle")) return;
+  await kullanici.click(tipButonu());
+}
+
+/** Tip acilirini acar ve verilen tur adindaki checkbox'a tiklar.
  *
- *  Acilir INDEKSLE degil ICERIGIYLE bulunur: panele yeni bir filtre eklendiginde
- *  (orn. departman secici) indeks kayiyor ve test, ilgisiz bir degisiklik
- *  yuzunden anlamsiz bir yerde patliyordu. */
-function tipSecici(): HTMLSelectElement {
-  const secici = screen
-    .getAllByRole("combobox")
-    .find((s) =>
-      [...(s as HTMLSelectElement).options].some((o) => o.textContent === "Tüm tipler")
-    );
-  if (!secici) throw new Error("tur acilir listesi bulunamadi");
-  return secici as HTMLSelectElement;
+ *  Ayni tur adi lejantta da checkbox olarak gecebilir, bu yuzden secim
+ *  ICINDE bulundugu `<label>`'a gore daraltilir - tip acilirindaki satirlar
+ *  `<label>` iken lejanttakiler farkli bir yapidadir. */
+async function tipSec(
+  kullanici: ReturnType<typeof userEvent.setup>,
+  turAdi: string
+) {
+  await tipAciliriAc(kullanici);
+  const adaylar = await screen.findAllByText(turAdi);
+  const kutu = adaylar.find((el) => el.closest("label"));
+  if (!kutu) throw new Error(`tip acilirinda '${turAdi}' bulunamadi`);
+  await kullanici.click(kutu);
+}
+
+/** Tip acilirindaki "Tümünü seç" ile hepsini geri acar. */
+async function tipHepsiniSec(kullanici: ReturnType<typeof userEvent.setup>) {
+  await tipAciliriAc(kullanici);
+  const dugme = await screen.findByText("Tümünü seç");
+  await kullanici.click(dugme);
 }
 
 describe("App - tur/durum filtresi tek kaynaktan beslenir", () => {
@@ -179,7 +276,7 @@ describe("App - tur/durum filtresi tek kaynaktan beslenir", () => {
       expect(gorunenAdlar()).toContain("Aydinlatma Diregi")
     );
 
-    await kullanici.selectOptions(tipSecici(), "agac");
+    await tipSec(kullanici, "Aydınlatma Direği");
 
     await waitFor(() => {
       const adlar = gorunenAdlar();
@@ -187,9 +284,9 @@ describe("App - tur/durum filtresi tek kaynaktan beslenir", () => {
       expect(adlar).not.toContain("Aydinlatma Diregi");
     });
 
-    // "Tüm tipler"e donunce hepsi geri gelmeli. Regresyon: sorgu bir donem
+    // "Tümünü seç"e donunce hepsi geri gelmeli. Regresyon: sorgu bir donem
     // tur/durum ile daraltiliyordu ve o kayitlar hic getirilmiyordu.
-    await kullanici.selectOptions(tipSecici(), "");
+    await tipHepsiniSec(kullanici);
     await waitFor(() => {
       const adlar = gorunenAdlar();
       expect(adlar).toContain("Cinar Agaci");
@@ -207,13 +304,252 @@ describe("App - tur/durum filtresi tek kaynaktan beslenir", () => {
     );
     const oncekiCagri = vi.mocked(listAssets).mock.calls.length;
 
-    await kullanici.selectOptions(tipSecici(), "agac");
+    await tipSec(kullanici, "Aydınlatma Direği");
     await waitFor(() =>
       expect(gorunenAdlar()).not.toContain("Aydinlatma Diregi")
     );
 
     // Sorgu tur/durum bilmez; yalnizca `source` degisince yeniden gider.
     expect(vi.mocked(listAssets).mock.calls.length).toBe(oncekiCagri);
+  });
+});
+
+describe("App - liste aramasi paneli suzer, sorguyu degil", () => {
+  /** Varlik panelindeki arama kutusu. Indeksle degil ROL+etiketle bulunur
+   *  (tipSecici'deki gerekce). */
+  function aramaKutusu(): HTMLInputElement {
+    return screen.getByPlaceholderText(/ara…/i) as HTMLInputElement;
+  }
+
+  it("arama listeyi daraltir", async () => {
+    const kullanici = userEvent.setup();
+    sarmala(<App />);
+    await varlikPaneliniAc(kullanici);
+    await waitFor(() => expect(gorunenAdlar()).toContain("Cinar Agaci"));
+    expect(gorunenAdlar()).toContain("Aydinlatma Diregi");
+
+    await kullanici.type(aramaKutusu(), "cinar");
+
+    await waitFor(() =>
+      expect(gorunenAdlar()).not.toContain("Aydinlatma Diregi")
+    );
+    expect(gorunenAdlar()).toContain("Cinar Agaci");
+  });
+
+  it("arama BACKEND'e yeni istek gondermez (client-side suzme)", async () => {
+    const kullanici = userEvent.setup();
+    const { listAssets } = await import("./api/assets");
+    sarmala(<App />);
+    await varlikPaneliniAc(kullanici);
+    await waitFor(() => expect(gorunenAdlar()).toContain("Cinar Agaci"));
+    const oncekiCagri = vi.mocked(listAssets).mock.calls.length;
+
+    await kullanici.type(aramaKutusu(), "cinar");
+    await waitFor(() =>
+      expect(gorunenAdlar()).not.toContain("Aydinlatma Diregi")
+    );
+
+    // Arama tur/durum filtresiyle ayni tarafta durur: sorgu degismez.
+    expect(vi.mocked(listAssets).mock.calls.length).toBe(oncekiCagri);
+  });
+
+  it("temizlenince liste eski haline doner", async () => {
+    const kullanici = userEvent.setup();
+    sarmala(<App />);
+    await varlikPaneliniAc(kullanici);
+    await waitFor(() => expect(gorunenAdlar()).toContain("Aydinlatma Diregi"));
+
+    await kullanici.type(aramaKutusu(), "cinar");
+    await waitFor(() =>
+      expect(gorunenAdlar()).not.toContain("Aydinlatma Diregi")
+    );
+
+    await kullanici.clear(aramaKutusu());
+    await waitFor(() => expect(gorunenAdlar()).toContain("Aydinlatma Diregi"));
+  });
+
+  it("tur ADIYLA da bulunur (kullanici tur kodunu bilmez)", async () => {
+    const kullanici = userEvent.setup();
+    sarmala(<App />);
+    await varlikPaneliniAc(kullanici);
+    await waitFor(() => expect(gorunenAdlar()).toContain("Cinar Agaci"));
+
+    // "Aydinlatma Diregi" varliginin turu `direk`, adi "Aydınlatma Direği".
+    // Sapkasiz/kucuk harfli yazim da eslesmeli.
+    await kullanici.type(aramaKutusu(), "aydinlatma");
+
+    await waitFor(() => expect(gorunenAdlar()).not.toContain("Cinar Agaci"));
+    expect(gorunenAdlar()).toContain("Aydinlatma Diregi");
+  });
+});
+
+describe("App - 'Önce atanmamış' siralamasi (varliklar)", () => {
+  function siraSeciciVarlik(): HTMLSelectElement {
+    return screen.getByLabelText("Sıralama") as HTMLSelectElement;
+  }
+
+  it("atanmamis bakim isi en uste, 'İyi' varlik en sona gider", async () => {
+    const kullanici = userEvent.setup();
+    sarmala(<App />);
+    await varlikPaneliniAc(kullanici);
+    await waitFor(() => expect(gorunenAdlar()).toContain("Cinar Agaci"));
+
+    // "İyi" varliklar da listede olsun diye durum filtresi acilir.
+    const durumSecici = screen
+      .getAllByRole("combobox")
+      .find((s) =>
+        [...(s as HTMLSelectElement).options].some(
+          (o) => o.textContent === "Tüm durumlar"
+        )
+      ) as HTMLSelectElement;
+    await kullanici.selectOptions(durumSecici, "");
+    await waitFor(() => expect(gorunenAdlar()).toContain("Saglam Bank"));
+
+    await kullanici.selectOptions(siraSeciciVarlik(), "atanmamis");
+
+    await waitFor(() => {
+      const sira = siradakiAdlar();
+      // AGAC havuzda (kademe 0), DIREK atali (kademe 1), SAGLAM_BANK iyi (2).
+      expect(sira.indexOf("Cinar Agaci")).toBeLessThan(
+        sira.indexOf("Aydinlatma Diregi")
+      );
+      expect(sira.indexOf("Aydinlatma Diregi")).toBeLessThan(
+        sira.indexOf("Saglam Bank")
+      );
+    });
+  });
+
+  it("secenek listede yer alir", async () => {
+    const kullanici = userEvent.setup();
+    sarmala(<App />);
+    await varlikPaneliniAc(kullanici);
+    await waitFor(() => expect(gorunenAdlar()).toContain("Cinar Agaci"));
+
+    await waitFor(() =>
+      expect(
+        [...siraSeciciVarlik().options].map((o) => o.textContent)
+      ).toContain("Önce atanmamış")
+    );
+  });
+});
+
+describe("App - Bölgeler ve Güzergâhlar AYRI panellerdir", () => {
+  /** Kenar cubugundaki bir sekmeyi acar (tam eslesme: lejant dugmeleri de
+   *  ayni adla basliyor). */
+  async function sekmeAc(
+    kullanici: ReturnType<typeof userEvent.setup>,
+    ad: string
+  ) {
+    const dugme = screen
+      .getAllByRole("button")
+      .find((b) => b.textContent?.trim() === ad);
+    if (!dugme) throw new Error(`kenar cubugunda '${ad}' sekmesi bulunamadi`);
+    await kullanici.click(dugme);
+  }
+
+  function siraSecici(): HTMLSelectElement {
+    return screen.getByLabelText("Sıralama") as HTMLSelectElement;
+  }
+
+  it("her sekme yalnizca kendi tipini listeler", async () => {
+    const kullanici = userEvent.setup();
+    sarmala(<App />);
+
+    await sekmeAc(kullanici, "Bölgeler");
+    await waitFor(() =>
+      expect(screen.getByText("Kadikoy Parki")).toBeInTheDocument()
+    );
+    expect(screen.queryByText("Sahil Yolu Hatti")).not.toBeInTheDocument();
+
+    await sekmeAc(kullanici, "Güzergâhlar");
+    await waitFor(() =>
+      expect(screen.getByText("Sahil Yolu Hatti")).toBeInTheDocument()
+    );
+    expect(screen.queryByText("Kadikoy Parki")).not.toBeInTheDocument();
+  });
+
+  it("siralama secimi sekme basina HATIRLANIR, sizmaz", async () => {
+    // Iki ayri regresyon tek testte:
+    //  1. Sizinti: iki sekme ayni state'i paylasiyordu, birinde secilen
+    //     siralama digerine tasiniyordu.
+    //  2. Unutma: `key={sekme}` ile ayirmak sizintiyi cozuyordu ama secimi
+    //     her sekme degisiminde SIFIRLIYORDU - kullanicinin bildirdigi sorun.
+    // Dogru davranis: her sekme kendi secimini korur.
+    const kullanici = userEvent.setup();
+    sarmala(<App />);
+
+    await sekmeAc(kullanici, "Bölgeler");
+    await waitFor(() =>
+      expect(screen.getByText("Kadikoy Parki")).toBeInTheDocument()
+    );
+    await kullanici.selectOptions(siraSecici(), "ad");
+    expect(siraSecici().value).toBe("ad");
+
+    // Guzergahlar kendi varsayilaniyla acilir: secim SIZMAZ.
+    await sekmeAc(kullanici, "Güzergâhlar");
+    await waitFor(() =>
+      expect(screen.getByText("Sahil Yolu Hatti")).toBeInTheDocument()
+    );
+    expect(siraSecici().value).toBe("yeni");
+    await kullanici.selectOptions(siraSecici(), "atanmamis");
+
+    // Bolgeler'e donunce KENDI secimi yerinde durur: UNUTULMAZ.
+    await sekmeAc(kullanici, "Bölgeler");
+    await waitFor(() =>
+      expect(screen.getByText("Kadikoy Parki")).toBeInTheDocument()
+    );
+    expect(siraSecici().value).toBe("ad");
+
+    // Guzergahlar da kendi secimini korur.
+    await sekmeAc(kullanici, "Güzergâhlar");
+    await waitFor(() =>
+      expect(screen.getByText("Sahil Yolu Hatti")).toBeInTheDocument()
+    );
+    expect(siraSecici().value).toBe("atanmamis");
+  });
+
+  it("sekme degisince ARAMA sifirlanir (siralamadan farkli)", async () => {
+    // Arama listeyi GIZLER: asili kalirsa sekmeye donen kullanici bos bir
+    // liste gorup "kayit yok" sanar. Siralama hicbir sey gizlemedigi icin
+    // hatirlanir - bu testin ustundeki testte olculuyor.
+    const kullanici = userEvent.setup();
+    sarmala(<App />);
+
+    // Varlik panelinde arama her zaman gorunur (bolgedeki 8 kayit esigi yok).
+    await varlikPaneliniAc(kullanici);
+    await waitFor(() => expect(gorunenAdlar()).toContain("Cinar Agaci"));
+    const kutu = screen.getByPlaceholderText(/ara…/i) as HTMLInputElement;
+    await kullanici.type(kutu, "cinar");
+    expect(kutu.value).toBe("cinar");
+
+    await sekmeAc(kullanici, "Talepler");
+    await sekmeAc(kullanici, "Varlıklar");
+
+    await waitFor(() =>
+      expect(
+        (screen.getByPlaceholderText(/ara…/i) as HTMLInputElement).value
+      ).toBe("")
+    );
+    // Tam liste geri gelmis olmali.
+    expect(gorunenAdlar()).toContain("Aydinlatma Diregi");
+  });
+
+  it("'Büyükten küçüğe' secenegi YOKTUR", async () => {
+    const kullanici = userEvent.setup();
+    sarmala(<App />);
+    await sekmeAc(kullanici, "Bölgeler");
+    await waitFor(() =>
+      expect(screen.getByText("Kadikoy Parki")).toBeInTheDocument()
+    );
+
+    const etiketler = [...siraSecici().options].map((o) => o.textContent);
+    expect(etiketler).not.toContain("Büyükten küçüğe");
+    expect(etiketler).toEqual([
+      "En yeni",
+      "En eski",
+      "Ada göre (A-Z)",
+      "Önce atanmamış",
+    ]);
   });
 });
 
