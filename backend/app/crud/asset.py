@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
 from ..models import Asset, User
 from ..models.asset import AssetSource, AssetStatus, AssetType
+from ..models.assignment import Assignment, AssignmentStatus
 from ..models.log import LogAction
 from ..schemas.asset import AssetCreate, AssetUpdate
 from . import assignment as assignment_crud
@@ -16,11 +17,20 @@ TAMIR_SAKLAMA_GUN = 5
 
 
 def _select_with_coords():
-    """Asset satirini geometriden cikarilan longitude/latitude ile secer."""
+    """Asset satirini geometriden cikarilan longitude/latitude ve aktif bir
+    goreve atanmis olup olmadigi (harita isaretcisindeki atama noktasi icin)
+    ile secer. Correlated EXISTS: LEFT JOIN + GROUP BY yerine, tek satirlik
+    bool - performans kuralina uygun (1 sorgu, N+1 yok)."""
     return select(
         Asset,
         func.ST_X(Asset.geometry).label("longitude"),
         func.ST_Y(Asset.geometry).label("latitude"),
+        exists(
+            select(Assignment.id).where(
+                Assignment.asset_id == Asset.id,
+                Assignment.status == AssignmentStatus.atandi,
+            )
+        ).label("assigned"),
     )
 
 

@@ -35,15 +35,23 @@ function detayDugmesi(renk: string): string {
   return (
     `<div style="margin-top:8px">` +
     `<button type="button" class="popup-detay-btn" style="` +
-    `width:100%; padding:6px 0; border:1px solid ${renk}; border-radius:6px; ` +
-    `background:${renk}; color:#fff; font-size:11px; font-weight:600; ` +
+    `width:100%; padding:2px 0; border:1px solid ${renk}; border-radius:6px; ` +
+    `background:${renk}; color:#fff; font-size:11px; font-weight:500; ` +
     `cursor:pointer;">Detay</button></div>`
   );
 }
 
 export function popupIcerigi(asset: AssetFeature): string {
-  const { name, type, status, source, brand_model, install_date, photo_url } =
-    asset.properties;
+  const {
+    name,
+    type,
+    status,
+    source,
+    brand_model,
+    install_date,
+    photo_url,
+    assigned,
+  } = asset.properties;
   const bakim = status === "bakim_lazim";
   const foto = fotoUrl(photo_url);
   const satirlar = [
@@ -80,6 +88,17 @@ export function popupIcerigi(asset: AssetFeature): string {
           color:${source === "ihbar" ? "#92400e" : "#065f46"}">
           ${ASSET_SOURCE_LABELS[source]}
         </span>
+        ${
+          bakim
+            ? `<span style="
+                display:inline-block; padding:2px 8px; border-radius:9999px;
+                font-size:11px; font-weight:500;
+                background:${assigned ? "#e0e7ff" : "#f1f5f9"};
+                color:${assigned ? "#3730a3" : "#64748b"}">
+                ${assigned ? "Ekibe atanmış" : "Havuzda bekliyor"}
+              </span>`
+            : ""
+        }
       </div>
       <div style="color:#64748b; font-size:11px; margin-top:6px">${satirlar}</div>
       <div class="popup-konum" style="color:#64748b; font-size:11px; margin-top:2px"></div>
@@ -108,7 +127,7 @@ export async function konumSatiriDoldur(
 /** Talep popup'i. Karar (onay/ret), reddi geri alma ve onaylanmis talepten
  *  varliga gecis "Detay"daki modaldedir - bkz. `detayDugmesi`. */
 export function talepPopupIcerigi(report: ReportFeature): string {
-  const { name, type, status, note, photo_url } = report.properties;
+  const { name, type, status, note, photo_url, assigned } = report.properties;
   // Rozet ham durumu degil gorunumu anlatir: tamir edilmis bir is "Onaylandı"
   // yazip acik isle ayni rengi tasimasin.
   const gorunum = report.properties.gorunum ?? status;
@@ -130,12 +149,23 @@ export function talepPopupIcerigi(report: ReportFeature): string {
       }
       <div style="font-weight: 600; margin-bottom: 4px">${kacis(name)}</div>
       <div style="color:#475569; font-size:12px">${turAdi(type)} · Talep</div>
-      <div style="margin-top:6px">
+      <div style="margin-top:6px; display:flex; gap:4px; flex-wrap:wrap">
         <span style="
           display:inline-block; padding:2px 8px; border-radius:9999px;
           font-size:11px; font-weight:500; background:${dr.bg}; color:${dr.fg}">
           ${REPORT_STATUS_LABELS[gorunum]}
         </span>
+        ${
+          gorunum === "onaylandi"
+            ? `<span style="
+                display:inline-block; padding:2px 8px; border-radius:9999px;
+                font-size:11px; font-weight:500;
+                background:${assigned ? "#e0e7ff" : "#f1f5f9"};
+                color:${assigned ? "#3730a3" : "#64748b"}">
+                ${assigned ? "Ekibe atanmış" : "Havuzda bekliyor"}
+              </span>`
+            : ""
+        }
       </div>
       ${
         note

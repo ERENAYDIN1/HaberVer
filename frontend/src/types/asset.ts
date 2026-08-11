@@ -137,6 +137,8 @@ export interface AssetProperties {
   updated_at: string;
   /** "Tamir Edildi" zamani; otomatik silme geri sayimi bundan hesaplanir. */
   repaired_at: string | null;
+  /** Su an aktif (status="atandi") bir goreve bagli mi. */
+  assigned: boolean;
 }
 
 export interface PointGeometry {

@@ -156,6 +156,8 @@ export interface ReportProperties {
   /** Seklin temsil noktasi [lon, lat]; cizgi/alan taleplerde harita pini ve
    *  mesafe hesabi bunu kullanir. */
   nokta: [number, number] | null;
+  /** Onaydan dogan varlik (varsa) su an aktif bir goreve mi bagli. */
+  assigned: boolean;
   /** Yalnizca frontend'de doldurulur (bkz. `talepGorunumu`); backend boyle bir
    *  alan dondurmez. Yoksa `status`a dusulur. */
   gorunum?: TalepGorunumu;

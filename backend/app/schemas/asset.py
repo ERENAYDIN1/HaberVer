@@ -55,6 +55,9 @@ class AssetProperties(BaseModel):
     # "Tamir Edildi" olarak isaretlenme zamani; talep kaynakli varliklarda
     # 5 gunluk otomatik silme geri sayimini frontend bundan hesaplar.
     repaired_at: datetime | None
+    # Su an aktif (status='atandi') bir goreve bagli mi. Asset modelinde
+    # karsiligi yok, satir CRUD'da ayrica hesaplanip model_construct ile eklenir.
+    assigned: bool = False
 
 
 class PointGeometry(BaseModel):
@@ -123,11 +126,13 @@ class AssetFeature(BaseModel):
 
     @classmethod
     def from_row(cls, row) -> "AssetFeature":
-        """CRUD katmanindan gelen (Asset, longitude, latitude) satirini Feature'a cevirir."""
-        asset, longitude, latitude = row
+        """CRUD katmanindan gelen (Asset, longitude, latitude, assigned) satirini Feature'a cevirir."""
+        asset, longitude, latitude, assigned = row
+        properties = AssetProperties.model_validate(asset)
+        properties.assigned = assigned
         return cls(
             geometry=PointGeometry(coordinates=(longitude, latitude)),
-            properties=AssetProperties.model_validate(asset),
+            properties=properties,
         )
 
 

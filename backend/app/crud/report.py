@@ -1,10 +1,11 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, exists, func, select
 from sqlalchemy.orm import Session
 
 from ..models.asset import Asset, AssetSource, AssetStatus, AssetType
+from ..models.assignment import Assignment, AssignmentStatus
 from ..models.log import LogAction
 from ..models.report import Report, ReportStatus
 from ..models.user import User
@@ -19,7 +20,9 @@ def _select_with_coords():
     ST_X/ST_Y dogrudan `geometry` uzerinde calistirilmaz - onlar `nokta`
     sutunundan okunur. Ayrica olusan varligin durumu LEFT JOIN ile gelir:
     vatandas varlik listesini goremedigi icin "Tamir Edildi" bilgisini baska
-    turlu ogrenemezdi."""
+    turlu ogrenemezdi. `assigned`, onaylanmis bir talepten dogan varligin
+    (varsa) aktif bir goreve bagli olup olmadigidir - harita pini de daire
+    gibi ayni atama noktasini gostersin diye (bkz. crud/asset.py)."""
     return (
         select(
             Report,
@@ -27,6 +30,12 @@ def _select_with_coords():
             func.ST_X(Report.temsil_noktasi).label("longitude"),
             func.ST_Y(Report.temsil_noktasi).label("latitude"),
             Asset.status.label("asset_status"),
+            exists(
+                select(Assignment.id).where(
+                    Assignment.asset_id == Report.created_asset_id,
+                    Assignment.status == AssignmentStatus.atandi,
+                )
+            ).label("assigned"),
         )
         .outerjoin(Asset, Asset.id == Report.created_asset_id)
     )

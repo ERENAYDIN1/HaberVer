@@ -38,6 +38,9 @@ class ReportProperties(BaseModel):
     # Talebin temsil noktasi [lon, lat]. `geometry` cizgi/alan oldugunda harita
     # pini ve mesafe hesabi bu noktayi kullanir.
     nokta: tuple[float, float] | None = None
+    # Onaydan dogan varlik (varsa) su an aktif bir goreve mi bagli. Harita
+    # pini de varlik dairesiyle AYNI atama noktasini gostersin diye.
+    assigned: bool = False
 
 
 class TalepGeometrisi(BaseModel):
@@ -94,10 +97,11 @@ class ReportFeature(BaseModel):
 
     @classmethod
     def from_row(cls, row) -> "ReportFeature":
-        report, geojson, longitude, latitude, asset_status = row
+        report, geojson, longitude, latitude, asset_status, assigned = row
         ozellikler = ReportProperties.model_validate(report)
         ozellikler.asset_status = asset_status
         ozellikler.nokta = (longitude, latitude)
+        ozellikler.assigned = assigned
         return cls(
             geometry=TalepGeometrisi.model_validate(json.loads(geojson)),
             properties=ozellikler,
