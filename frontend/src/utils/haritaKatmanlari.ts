@@ -6,7 +6,14 @@ import {
   tipRengiIfadesi,
   VARLIK_UYARI_RENK,
 } from "./haritaIkonlari";
+import { EKIP_VARSAYILAN_RENK } from "./haritaPopup";
 import type { AssetFeatureCollection } from "../types/asset";
+
+/** Varlik isaretcisindeki atama noktasinin rengi: saha ekibi pininin rengiyle
+ *  ayni aile (bkz. haritaPopup.ts::EKIP_VARSAYILAN_RENK) - kullanici bu rengi
+ *  zaten ekip pininden taniyor. Katmanin kendisi MapView'da eklenir (bkz.
+ *  ATAMA_KAYMA_EKSENI). */
+export const ATAMA_RENGI = EKIP_VARSAYILAN_RENK;
 
 /** Haritadaki kaynak + katman kurulumu, aileye gore ayrilmis halde. Buradaki
  *  fonksiyonlar yalnizca `map`'e dokunur; olay baglama ve veri yazma guncel
@@ -45,15 +52,40 @@ export const ROZET_MINZOOM = 12.5;
  *  (z10-12) birbirine girmesin diye o uctaki yaricaplar kucuk. */
 export const ISARETCI = {
   /** Varlik dairesi yaricapi (zoom 10 -> 16 interpolasyonu). */
-  varlikYaricap: ["interpolate", ["linear"], ["zoom"], 10, 8, 16, 14.5],
+  varlikYaricap: ["interpolate", ["linear"], ["zoom"], 10, 4.5, 16, 10],
   /** Talep pininin ucundaki yer golgesi (pin havada durmasin). */
-  talepGolgeYaricap: ["interpolate", ["linear"], ["zoom"], 10, 2.5, 16, 4],
+  talepGolgeYaricap: ["interpolate", ["linear"], ["zoom"], 10, 1.5, 16, 3],
   /** "Bakim lazim" amber uyari halkasi; ana dairenin disinda kalir. */
-  uyariYaricap: ["interpolate", ["linear"], ["zoom"], 10, 10.5, 16, 17],
+  uyariYaricap: ["interpolate", ["linear"], ["zoom"], 10, 6.5, 16, 12.5],
   /** Secim halkasi; uyari halkasinin da disinda. */
-  varlikSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 12.5, 16, 19],
-  beyazHalka: 2.2,
+  varlikSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 8, 16, 14],
+  beyazHalka: 2,
+  /** Atama noktasi (bkz. assets-atama): ana daireden kucuk, sabit yaricap -
+   *  cok kucuk zoomda dahi ayirt edilebilir kalsin diye interpolasyon yok. */
+  atamaYaricap: 3.5,
 } as const;
+
+/** Atama noktasinin sag-alt koseye kaymasi (px).
+ *
+ *  DIKKAT: `circle-translate` array tipinde bir paint property'dir ve
+ *  expression DIZININ KENDISI olmak zorundadir - `[expr, expr]` gibi eleman
+ *  basina expression style-spec dogrulamasindan gecmez, MapLibre property'yi
+ *  sessizce reddedip varsayilana ([0,0]) duser ve nokta dairenin tam ortasinda
+ *  kalip gorunmez olur. Bu yuzden `interpolate` bir DIZI dondurur.
+ *
+ *  Olcu ANA DAIREYE degil `uyariYaricap`a (amber halka) gore: bakim bekleyen
+ *  varlikta halka ana dairenin disindadir ve nokta ana daireye gore
+ *  hizalanirsa halkanin ALTINDA kalip yariya kadar gizleniyordu. Halka
+ *  yaricapinin kosegen izdusumu (r/√2) noktayi kenara oturtur. */
+export const ATAMA_KAYMASI = [
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  10,
+  ["literal", [4.6, 4.6]],
+  16,
+  ["literal", [8.8, 8.8]],
+] as unknown as maplibregl.ExpressionSpecification;
 
 /** Isaretcinin altina yumusak golge: asagi kaydirilmis, bulaniklastirilmis
  *  siyah daire - altliktan bagimsiz derinlik hissi verir. */
@@ -123,6 +155,12 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
         "circle-stroke-color": "#0f766e",
       },
     });
+
+    // Atama noktasi (assets-atama) BURADA EKLENMEZ: assets-icon/assets-rozet
+    // symbol katmanlari glif goruntuleri yuklendikten sonra ASENKRON eklenir
+    // (bkz. MapView::tipIkonlariniHazirla().then()) ve haritada bu circle
+    // katmanlarindan sonra/USTUNDE kalir. Ayni z-siraya girsin diye atama
+    // noktasi da o asenkron blokta, assets-rozet'ten SONRA eklenir.
   }
 }
 

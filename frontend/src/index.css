@@ -56,9 +56,10 @@
   transition: left 200ms ease-out;
 }
 
-/* Ana harita: yakinlastirma/pusula kontrolu sag-alt yerine sagin ortasinda. */
+/* Ana harita: yakinlastirma/pusula kontrolu sag-alt yerine sagin ortasinda
+   (tam ortadan biraz asagida). */
 .haberver-harita .maplibregl-ctrl-bottom-right {
-  top: 50%;
+  top: 56%;
   bottom: auto;
   transform: translateY(-50%);
 }
@@ -167,11 +168,17 @@
    yalnizca damla pin'in kendisine, `box-shadow` olarak verilir; boylece metin
    ana katmanda kalir ve her karede net cizilir (ekip popup'indaki katman
    promosyonu sorununun aynisi, bkz. `.ekip-popup`). */
+/* Kok eleman katman promosyonundan cikarilir: MapLibre marker'lara
+   `will-change: transform` verir, icerik (rozet sayisi/ad) her konum
+   guncellemesinde `innerHTML` ile yeniden yazildigi icin promote edilmis
+   katman eski rasterizasyonu olcekleyerek gosteriyordu (`.ekip-popup` ve
+   `.harita-etiket` ile ayni sinif hata). */
 .ekip-marker {
   --ekip-renk: #4338ca;
   --ekip-renk-acik: #818cf8;
   cursor: pointer;
   line-height: 0;
+  will-change: auto;
 }
 .ekip-marker:hover {
   z-index: 4;
@@ -184,11 +191,13 @@
    icin uc, kutunun ~8px altina taser -> `margin-bottom` o bosluğu birakir ki
    marker'in anchor'i ("bottom") tam ucun oldugu yere denk gelsin.
    Kenarlik 2px (eskiden 2.5px): kesirli kenarlik pin kutusunu yarim piksele
-   oturtup ictaki glifi bulaniklastiriyordu. */
+   oturtup ictaki glifi bulaniklastiriyordu. Olcu TAM PIKSEL/CIFT (25 -> 26):
+   -45 derece donus kok kutunun kosegenini kaplar, tek sayili genislik/yukseklik
+   donus sonrasi yarim piksele denk gelip ictaki SVG'yi bulaniklastiriyordu. */
 .ekip-marker__pin {
-  width: 32px;
-  height: 32px;
-  margin-bottom: 8px;
+  width: 26px;
+  height: 26px;
+  margin-bottom: 7px;
   border-radius: 50% 50% 50% 0;
   border: 2px solid #fff;
   background: linear-gradient(145deg, var(--ekip-renk-acik), var(--ekip-renk));
@@ -202,8 +211,11 @@
   transform: rotate(-45deg);
   transition: transform 0.15s ease;
 }
-/* Ikon pin ile birlikte donmesin diye ters cevrilir. */
+/* Ikon pin ile birlikte donmesin diye ters cevrilir. Boyut de pinle orantili
+   kucultulur (SVG'nin kendi width/height'ini override eder). */
 .ekip-marker__pin svg {
+  width: 16px;
+  height: 16px;
   transform: rotate(45deg);
 }
 .ekip-marker:hover .ekip-marker__pin {
@@ -215,16 +227,16 @@
    `.harita-etiket`). Kenarlik 2px, satir yuksekligi kutu yuksekligiyle ayni. */
 .ekip-marker__rozet {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
+  top: -3px;
+  right: -3px;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 3px;
   border-radius: 9999px;
-  border: 2px solid #fff;
+  border: 1px solid #fff;
   background: #059669;
   color: #fff;
-  font: 700 10px/12px system-ui, sans-serif;
+  font: 700 8px/8px system-ui, sans-serif;
   text-align: center;
 }
 /* Ad etiketi `left:50%` + `translate(-50%)` ile ortalanir, yani metin genisligi
@@ -235,12 +247,12 @@
   position: absolute;
   top: 100%;
   left: 50%;
-  margin-top: 4px;
-  padding: 2px 8px;
+  margin-top: 3px;
+  padding: 2px 6px;
   border-radius: 6px;
   background: rgba(15, 23, 42, 0.88);
   color: #fff;
-  font: 600 10px/14px system-ui, sans-serif;
+  font: 600 9px/12px system-ui, sans-serif;
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;

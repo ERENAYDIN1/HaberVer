@@ -96,9 +96,12 @@ describe("gorunumlereAyir", () => {
     expect(g.tamir[0].properties.gorunum).toBe("tamir");
   });
 
-  it("onayli talebin konumunu olusan varliktan alir", () => {
+  it("onayli talebin PIN konumunu olusan varliktan alir, ham SEKLINE dokunmaz", () => {
     // Regresyon: personel varligin enlem/boylamini duzeltince haritadaki talep
     // isaretcisi eski (vatandasin isaretledigi) noktada kaliyordu.
+    // Regresyon 2: geometry'nin tamamini degistirmek cizgi/alan taleplerin
+    // ham seklini (talep-sekil katmani) bir noktaya cevirmisti - yalnizca
+    // properties.nokta (pinin oturdugu yer) degismeli.
     const tasinmis = varlik({
       status: "bakim_lazim",
       source: "ihbar",
@@ -113,8 +116,9 @@ describe("gorunumlereAyir", () => {
       { beklemede: [], onaylandi: [raporu], reddedildi: [] },
       [tasinmis]
     );
-    expect(g.onaylandi[0].geometry.coordinates).toEqual([29.5, 40.9]);
-    // Ham kayit degismez.
+    expect(g.onaylandi[0].properties.nokta).toEqual([29.5, 40.9]);
+    // Ham sekil/geometri degismez.
+    expect(g.onaylandi[0].geometry).toEqual(raporu.geometry);
     expect(raporu.geometry.coordinates).toEqual([28.98, 41.01]);
   });
 
@@ -123,6 +127,7 @@ describe("gorunumlereAyir", () => {
       { beklemede: [bekleyen], onaylandi: [], reddedildi: [] },
       [acikIs]
     );
+    expect(g.beklemede[0].properties.nokta).toEqual(bekleyen.properties.nokta);
     expect(g.beklemede[0].geometry.coordinates).toEqual(
       bekleyen.geometry.coordinates
     );

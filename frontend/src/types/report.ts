@@ -70,8 +70,12 @@ export interface TalepGiysisi {
 }
 
 export const TALEP_GIYSISI: Record<TalepGorunumu, TalepGiysisi> = {
-  // Acik is: dolu amber halka + "!", bakim lazim varlikla ayni giysi.
-  onaylandi: { halka: true, halkaKesikli: false, rozet: "unlem", opaklik: 1 },
+  // Acik is: dolu amber halka, bakim lazim varlikla ayni giysi. Rozet YOK:
+  // halka ile "!" ayni kosula bagli iki isaretti ve ayni seyi iki kez soyleyip
+  // pini kalabalıklastiriyordu (varlik tarafinda da ayni sebeple kaldirildi).
+  // Halkasi olmayan gorunumlerde (tamir/reddedildi) rozet TEK isaret oldugu
+  // icin orada durmaya devam eder.
+  onaylandi: { halka: true, halkaKesikli: false, rozet: null, opaklik: 1 },
   // Kapanmis is: halkasiz, sonuk, kucuk onay isareti.
   tamir: { halka: false, halkaKesikli: false, rozet: "onay", opaklik: 0.5 },
   // Karar bekliyor: kesikli mor halka.

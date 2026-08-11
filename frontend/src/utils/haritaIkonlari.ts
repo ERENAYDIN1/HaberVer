@@ -10,6 +10,7 @@ import {
   ROZETLI_GORUNUMLER,
   type DurumRozeti,
 } from "../types/report";
+import { EKIP_VARSAYILAN_RENK } from "./haritaPopup";
 
 /** Haritadaki isaretci goruntuleri: pin/glif/halka/rozet SVG'lerinin
  *  uretilmesi, haritaya yuklenmesi ve bunlara bagli stil ifadeleri.
@@ -157,27 +158,27 @@ function talepRozetSvg(renk: string, simge: DurumRozeti): string {
   );
 }
 
-/* --- Varlik rozeti ---------------------------------------------------
- * Varliklar `circle` katmani oldugu icin rozet ayri bir symbol katmanindadir.
- * Kaydirma `icon-offset` yerine GORUNTUYE gomulur (seffaf tuvalin sag-ustunde
- * bir disk): boylece tek bir icon-size interpolasyonu hem konumu hem boyu
- * birlikte olcekler. */
-const VARLIK_ROZET_VIEWBOX = 40;
-/** Rozet diskinin tuval merkezine gore kosegen kaymasi (her iki eksende). */
-const VARLIK_ROZET_KAYMA = 9.9;
-
-function varlikRozetSvg(renk: string, simge: DurumRozeti): string {
-  const m = VARLIK_ROZET_VIEWBOX / 2;
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VARLIK_ROZET_VIEWBOX} ${VARLIK_ROZET_VIEWBOX}" ` +
-    `width="${VARLIK_ROZET_VIEWBOX * 2}" height="${VARLIK_ROZET_VIEWBOX * 2}">` +
-    // Yaricap pin rozetinden buyuk: varlik rozetinin icon-size'i daha kucuk,
-    // ikisi ekranda ayni capa gelsin diye telafi edilir.
-    `${rozetCizimi(m + VARLIK_ROZET_KAYMA, m - VARLIK_ROZET_KAYMA, 7.1, renk, simge)}</svg>`
+/** Pinin SAG-ALT omzunda kucuk bir nokta: aktif bir goreve bagli (ayni renk
+ *  saha ekibi pininde, bkz. EKIP_VARSAYILAN_RENK). Varlik dairesindeki atama
+ *  noktasiyla ayni fikir ve AYNI KOSE - iki isaretci tipi ayni sozlugu
+ *  konussun diye; pin geometrisine uyarlanmis hali. Sabit tek goruntu (renk
+ *  degiskeni yok, tur basina uretilmez). */
+function talepAtamaSvg(): string {
+  // Kayma pin BASINA degil, durum halkasinin yaricapina (`talepHalkaSvg`)
+  // gore: halkali gorunumlerde nokta bas yaricapina hizalanirsa halkanin
+  // altinda kalip yariya kadar gizleniyordu. Kosegen izdusumu (r/√2) noktayi
+  // halkanin kenarina oturtur; viewBox'a sigar (26.5+6.3 < 34, 31.5+6.3 < 42).
+  const kayma = (PIN_BAS_YARICAP + 3.9) / Math.SQRT2;
+  return pinSvgKabugu(
+    `<circle cx="${(PIN_BAS.x + kayma).toFixed(2)}" cy="${(PIN_BAS.y + kayma).toFixed(2)}" r="4.4" ` +
+      `fill="${EKIP_VARSAYILAN_RENK}" stroke="#ffffff" stroke-width="1.9"/>`
   );
 }
 
-/** Bakim rozetinin rengi: onaylanmis taleple ayni amber, ikisi de acik is. */
+/** Bakim uyari halkasinin rengi: onaylanmis taleple ayni amber, ikisi de acik
+ *  is. Bu halka (`assets-durum`) "bakim lazim"in TEK gorsel isaretidir - ayrica
+ *  basilan bir "!" rozeti vardi, ayni kosula bagli ikinci bir isaret olarak
+ *  isaretciyi kalabalıklastirdigi icin kaldirildi. */
 export const VARLIK_UYARI_RENK = TALEP_DURUM_RENGI.onaylandi;
 
 /** Bir turun glifini uc varyantla yukler: daire (tip-*), pin glifi
@@ -214,11 +215,7 @@ export function tipIkonlariniHazirla(map: maplibregl.Map): Promise<void> {
       )
     ),
     svgIkonuYukle(map, "talep-pin-secim", talepPinSvg(TALEP_PIN_SECIM_RENK)),
-    svgIkonuYukle(
-      map,
-      "varlik-rozet-bakim",
-      varlikRozetSvg(VARLIK_UYARI_RENK, "unlem")
-    ),
+    svgIkonuYukle(map, "talep-pin-atama", talepAtamaSvg()),
   ]).then(() => undefined);
 }
 

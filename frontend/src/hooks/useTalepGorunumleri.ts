@@ -48,16 +48,22 @@ export function onayliEslemeKur(onaylananlar: readonly ReportFeature[]): OnayliE
  *  Onaylanmis bir talebin KONUMU da olusan varliktan alinir: personel varligin
  *  koordinatini duzeltince (vatandas yanlis yere isaretlemis olabilir) harita
  *  isaretcisi de tasinmali. Ham talep noktasi veritabaninda oldugu gibi kalir,
- *  yalnizca gosterim isin guncel yerini izler. */
+ *  yalnizca gosterim isin guncel yerini izler. **Yalnizca `properties.nokta`
+ *  (pinin oturdugu yer) degistirilir, `geometry` DEGIL** - cizgi/alan
+ *  taleplerde ham sekli tasiyan odur ve `talep-sekil` katmani onu okur;
+ *  geometry'yi de varligin (her zaman POINT olan) konumuyla degistirmek
+ *  onaylanmis her cizgi/alani noktaya cevirirdi. */
 export function gorunumlereAyir(
   durumaGoreTalepler: Record<ReportStatus, readonly ReportFeature[] | undefined>,
   taleptenDoganVarliklar: readonly AssetFeature[] | undefined
 ): Record<TalepGorunumu, ReportFeature[]> {
   const varlikDurumu = new Map<string, "iyi" | "bakim_lazim">();
-  const varlikKonumu = new Map<string, AssetFeature["geometry"]>();
+  const varlikKonumu = new Map<string, [number, number]>();
   for (const a of taleptenDoganVarliklar ?? []) {
     varlikDurumu.set(a.properties.id, a.properties.status);
-    varlikKonumu.set(a.properties.id, a.geometry);
+    if (a.geometry.type === "Point") {
+      varlikKonumu.set(a.properties.id, a.geometry.coordinates as [number, number]);
+    }
   }
   const varlikBilgisiVar = taleptenDoganVarliklar !== undefined;
   const gruplar: Record<TalepGorunumu, ReportFeature[]> = {
@@ -77,8 +83,7 @@ export function gorunumlereAyir(
       const konum = varlikId ? varlikKonumu.get(varlikId) : undefined;
       gruplar[g].push({
         ...f,
-        geometry: konum ?? f.geometry,
-        properties: { ...f.properties, gorunum: g },
+        properties: { ...f.properties, gorunum: g, nokta: konum ?? f.properties.nokta },
       });
     }
   }

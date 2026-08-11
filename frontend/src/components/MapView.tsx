@@ -39,10 +39,13 @@ import {
 } from "../utils/haritaIkonlari";
 // Kaynak/katman tanimlari. Olay baglama ve veri yazma burada kalir.
 import {
+  ATAMA_KAYMASI,
+  ATAMA_RENGI,
   BOLGE_SOURCE_ID,
   BOS_KOLEKSIYON,
   CIZIM_SOURCE_ID,
   DINAMIK_SOURCE_ID,
+  ISARETCI,
   OLCUM_RENK,
   OLCUM_SOURCE_ID,
   REPORTS_SOURCE_ID,
@@ -98,7 +101,7 @@ const UCUS_SURESI_VARSAYILAN = 1600;
 const BOLGE_ETIKET_MINZOOM = 13;
 
 const IKON_KATMAN_YERLESIMI: Record<string, unknown> = {
-  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.55, 16, 0.95],
+  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.32, 16, 0.65],
   "icon-allow-overlap": true,
   "icon-ignore-placement": true,
 };
@@ -108,7 +111,7 @@ const IKON_KATMAN_YERLESIMI: Record<string, unknown> = {
  *  dairesinin capina esit olacak sekilde secildi (bas capi = 19.2 birim). */
 const PIN_KATMAN_YERLESIMI: Record<string, unknown> = {
   ...IKON_KATMAN_YERLESIMI,
-  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.83, 16, 1.51],
+  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.48, 16, 1.03],
   "icon-anchor": "bottom",
 };
 
@@ -116,16 +119,7 @@ const PIN_KATMAN_YERLESIMI: Record<string, unknown> = {
  *  tasarak kontur etkisi verir. */
 const PIN_SECIM_YERLESIMI: Record<string, unknown> = {
   ...PIN_KATMAN_YERLESIMI,
-  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 1.01, 16, 1.84],
-};
-
-/** Varlik rozeti: kaymasi goruntuye gomulu, bu yuzden merkeze cakili. Olcek
- *  pin rozetiyle ayni capa gelecek sekilde secildi. Uzakta okunmadigi icin
- *  katmana minzoom uygulanir (o mesafede durumu amber halka tasiyor). */
-const VARLIK_ROZET_YERLESIMI: Record<string, unknown> = {
-  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.75, 16, 1.36],
-  "icon-allow-overlap": true,
-  "icon-ignore-placement": true,
+  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.59, 16, 1.26],
 };
 
 /** Sekil duzenleme tutamagi. `orta=true` ise kenar ortasindaki "yeni kose ekle"
@@ -467,11 +461,12 @@ export default function MapView({
     // kapladigi icin bos harita tiklamasini yutardi.
     for (const k of [
       "assets-icon",
-      "assets-rozet",
+      "assets-atama",
       "reports-circle",
       "reports-pin",
       "reports-icon",
       "reports-rozet",
+      "reports-atama",
     ]) {
       if (map.getLayer(k)) katmanlar.push(k);
     }
@@ -1322,19 +1317,32 @@ export default function MapView({
         });
         katmanBagla(map, "assets-icon", assetsTiklandiRef.current);
 
-        // Bakim gerektiren varligin sag-ust omzunda amber "!" rozeti.
-        map.addLayer({
-          id: "assets-rozet",
-          type: "symbol",
-          source: SOURCE_ID,
-          minzoom: ROZET_MINZOOM,
-          filter: ["==", ["get", "status"], "bakim_lazim"],
-          layout: {
-            "icon-image": "varlik-rozet-bakim",
-            ...VARLIK_ROZET_YERLESIMI,
-          },
-        });
-        katmanBagla(map, "assets-rozet", assetsTiklandiRef.current);
+        // "Bakim lazim" durumunun TEK gorsel isareti amber halkadir
+        // (`assets-durum`). Ayrica bir "!" rozeti de basiliyordu; ayni kosula
+        // bagli iki isaret ayni seyi iki kez soyleyip isaretciyi
+        // kalabalıklastiriyordu, rozet kaldirildi.
+        //
+        // Aktif bir goreve bagli varliklarin sag-alt kosesinde kucuk bir
+        // nokta: saha ekibi pininin rengiyle ayni aile (ATAMA_RENGI), "bir
+        // ekiple iliskili" anlamini haritanin baska bir yerinden odunc alir.
+        // BURADA (assets-icon ile ayni asenkron blokta) eklenir ki z-sirada
+        // glif katmaniyla ayni seviyede kalsin.
+        if (!map.getLayer("assets-atama")) {
+          map.addLayer({
+            id: "assets-atama",
+            type: "circle",
+            source: SOURCE_ID,
+            filter: ["==", ["get", "assigned"], true],
+            paint: {
+              "circle-radius": ISARETCI.atamaYaricap,
+              "circle-color": ATAMA_RENGI,
+              "circle-stroke-width": 1.5,
+              "circle-stroke-color": "#ffffff",
+              "circle-translate": ATAMA_KAYMASI as never,
+            },
+          });
+          katmanBagla(map, "assets-atama", assetsTiklandiRef.current);
+        }
       }
 
       if (map.getSource(REPORTS_SOURCE_ID) && !map.getLayer("reports-icon")) {
@@ -1403,9 +1411,29 @@ export default function MapView({
           },
           paint: { "icon-opacity": TALEP_OPAKLIK_IFADESI as never },
         });
+        // Pinin sag-alt omzunda kucuk bir nokta: onaydan dogan varlik aktif
+        // bir goreve bagliysa. `assets-atama` ile ayni fikir, ayni renk ve
+        // AYNI KOSE (bkz. haritaIkonlari.ts::talepAtamaSvg) - daire ve pin
+        // ayni sozlugu konussun diye.
+        map.addLayer({
+          id: "reports-atama",
+          type: "symbol",
+          source: REPORTS_SOURCE_ID,
+          filter: ["==", ["get", "assigned"], true],
+          layout: {
+            "icon-image": "talep-pin-atama",
+            ...PIN_KATMAN_YERLESIMI,
+          },
+          paint: { "icon-opacity": TALEP_OPAKLIK_IFADESI as never },
+        });
         // Halka tiklamaya baglanmaz: genis bir alan kapladigi icin bos harita
         // tiklamasini (koordinat secimini) yutardi.
-        for (const katman of ["reports-pin", "reports-icon", "reports-rozet"]) {
+        for (const katman of [
+          "reports-pin",
+          "reports-icon",
+          "reports-rozet",
+          "reports-atama",
+        ]) {
           katmanBagla(map, katman, reportsTiklandiRef.current);
         }
         // Secim katmani asenkron eklendi: bu arada yapilmis secimin filtresi
