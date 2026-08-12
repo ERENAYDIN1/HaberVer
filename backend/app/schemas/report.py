@@ -117,6 +117,15 @@ class ReportFeatureCollection(BaseModel):
         return cls(features=[ReportFeature.from_row(row) for row in rows])
 
 
+class ReportSekilGuncelle(BaseModel):
+    """Bekleyen ya da onaylanmis bir talebin ham seklini (geometry) yerinde
+    degistirir - vatandas yanlis cizmis olabilir. Tip (Point/LineString/
+    Polygon) sabit kalir; noktalar kaydin MEVCUT sekil tipiyle ayni sekilde
+    dogrulanir (bkz. TalepGeometrisi)."""
+
+    geometry: TalepGeometrisi
+
+
 class ReportReview(BaseModel):
     """Talebi onaylama/reddetme istegi. review_note red icin gerekce olabilir.
 

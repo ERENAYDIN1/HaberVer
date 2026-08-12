@@ -393,6 +393,15 @@ export default function MapView({
     const popup = new maplibregl.Popup({
       offset: 8,
       closeButton: true,
+      // ANCHOR SABIT ("bottom", varlik/talep/ekip popup'lariyla ayni): anchor
+      // verilmezse MapLibre onu HER konum guncellemesinde popup'in olculen
+      // yuksekligine ve ekranda kalan bosluga gore yeniden secer. Harita
+      // kaydirilirken popup ekranin ust bandina girip cikarken anchor
+      // `bottom` <-> `top` arasinda takla atiyor, translate yuzdesi
+      // (-50%,-100%) <-> (-50%,0) olarak degisiyor ve popup kendi yuksekligi
+      // kadar ZIPLIYORDU. Diger uc popup'ta anchor zaten sabitti; zilayan tek
+      // popup'in bu olmasinin sebebi buydu.
+      anchor: "bottom",
       // Kapatma carpisinin olcusu index.css'teki `.bolge-popup` kuralinda.
       className: "bolge-popup",
     })
@@ -411,23 +420,31 @@ export default function MapView({
 
   // Popup metnini keskin tutar: MapLibre CSS pikseline yuvarlar, kesirli DPR'de
   // (%125/%150) bu kesirli bir cihaz pikseline denk gelip yaziyi bulaniklastirir.
-  // Her karede translate degerini cihaz piksel izgarasina oturtur.
+  // Her karede translate degerinin PIKSEL kismini cihaz piksel izgarasina
+  // oturtur.
+  //
+  // YUZDE KISMI KORUNUR: MapLibre popup'i `translate(-50%,-100%) translate(Xpx,Ypx)`
+  // gibi BILESIK bir transform ile konumlandirir - ilk translate anchor'i
+  // (popup'in hangi kosesinin koordinata oturdugunu), ikincisi ekran konumunu
+  // tasir. Burada `getComputedStyle` okunursa tarayici bileseni tek bir
+  // matrise COZER; yuzde kismi piksele donusup inline stile gomulur ve
+  // MapLibre bir sonraki karede kendi bilesigini yeniden yazinca deger iki
+  // durum arasinda gidip gelir (goze carpan bir titreme/ziplama). Bu yuzden
+  // ham inline deger okunur ve yalnizca `...px` sayilari yuvarlanir; yuzdeler
+  // metinde oldugu gibi birakilir.
   const popupHizalaRef = useRef(() => {
     const el = popupRef.current?.getElement() as HTMLElement | undefined;
     if (!el) return;
     const dpr = window.devicePixelRatio || 1;
     if (dpr === 1) return;
-    const t = getComputedStyle(el).transform;
-    if (!t || t === "none") return;
-    let m: DOMMatrixReadOnly;
-    try {
-      m = new DOMMatrixReadOnly(t);
-    } catch {
-      return;
-    }
+    const ham = el.style.transform;
+    if (!ham || !ham.includes("px")) return;
     const izgara = (v: number) => Math.round(v * dpr) / dpr;
-    const yeni = `translate(${izgara(m.m41)}px, ${izgara(m.m42)}px)`;
-    if (el.style.transform !== yeni) el.style.transform = yeni;
+    const yeni = ham.replace(
+      /(-?\d*\.?\d+)px/g,
+      (_, sayi: string) => `${izgara(parseFloat(sayi))}px`
+    );
+    if (ham !== yeni) el.style.transform = yeni;
   });
   const fareGirdiRef = useRef(() => {
     const map = mapRef.current;
@@ -602,6 +619,18 @@ export default function MapView({
     }
   }
 
+  /** Haritada CIZILECEK bolge/guzergah listesi: sekli duzenlenen kayit disarida
+   *  birakilir - o kayit `sekil-duzenleme` kaynaginda taslak olarak cizilir ve
+   *  ikisi ust uste binmemelidir.
+   *
+   *  Tek yerde durmasi sart: etiketler `zoomend`ten de tazeleniyor ve orada ham
+   *  liste kullanilirsa (eskiden oyleydi) duzenlemeye girerken yapilan ucus
+   *  `zoomend` tetikleyip silinen etiketi geri getiriyordu. */
+  function cizilecekBolgeler(): Bolge[] {
+    const duzenlenenId = sekilDuzenlemeRef.current?.id;
+    return (bolgelerRef.current ?? []).filter((b) => b.id !== duzenlenenId);
+  }
+
   /** Kaydedilmis bolgeleri/guzergahlari cizer. Anlik alan seciminden ayri
    *  kaynak/katman kullanir (kesik cizgili kenarlik + ad etiketi). */
   function bolgeleriUygula(map: maplibregl.Map) {
@@ -610,9 +639,7 @@ export default function MapView({
       | undefined;
     if (!source) return;
 
-    // Sekli duzenlenen kayit kendi kaynaginda cizilir, burada atlanir.
-    const duzenlenenId = sekilDuzenlemeRef.current?.id;
-    const liste = (bolgelerRef.current ?? []).filter((b) => b.id !== duzenlenenId);
+    const liste = cizilecekBolgeler();
     const features: GeoJSON.Feature[] = liste.map((bolge) => ({
       type: "Feature",
       geometry:
@@ -986,7 +1013,13 @@ export default function MapView({
       | maplibregl.GeoJSONSource
       | undefined;
 
-    const kayitlar = reportsRef.current?.features ?? [];
+    // Sekli duzenlenen talep kendi taslak kaynaginda cizilir (bkz.
+    // sekilDuzenlemeTaslagiUygula); burada atlanir - bolgelerdeki
+    // `duzenlenenId` filtresiyle ayni kural, cift isaretci olmasin diye.
+    const duzenlenenId = sekilDuzenlemeRef.current?.id;
+    const kayitlar = (reportsRef.current?.features ?? []).filter(
+      (f) => f.properties.id !== duzenlenenId
+    );
 
     noktaSource?.setData({
       type: "FeatureCollection",
@@ -1197,24 +1230,46 @@ export default function MapView({
       ?.addEventListener("click", () => onVarlikDetayRef.current?.(secili.properties.id));
   }
 
-  /** Secili bolgeyi belirgin kenarlikla isaretler. Acik popup'a dokunmaz:
-   *  bolge popup'i tiklama aninda acilir, secim efekti onu kapatmamali. */
+  /** Secili bolgeyi belirgin kenarlikla isaretler. Acik popup'a normalde
+   *  dokunmaz: bolge popup'i tiklama aninda acilir, secim efekti onu
+   *  kapatmamali.
+   *
+   *  ISTISNA sekli duzenlenen kayittir: o kayit `bolgeleriUygula` tarafindan
+   *  kalici kaynaktan cikarilir (duzenleme taslagi haritadaki tek gorsel
+   *  olsun diye), bu yuzden secim kenarligi ve popup'i da bastirilir -
+   *  duzenleme "Git" ile secimi de tasidigindan, aksi halde eski popup
+   *  duzenleme tutamaklarinin ustunde acik kalirdi (talep tarafindaki
+   *  `secimTalepUygula` ile ayni kural). */
   function secimBolgeUygula(map: maplibregl.Map) {
     if (!map.getLayer("bolge-secili")) return;
     const id = seciliBolgeIdRef.current;
-    map.setFilter("bolge-secili", ["==", ["get", "id"], id ?? ""]);
-    if (!id) popupKapat(["bolge"]);
+    const duzenleniyor = sekilDuzenlemeRef.current?.id === id;
+    map.setFilter(
+      "bolge-secili",
+      ["==", ["get", "id"], duzenleniyor ? "" : (id ?? "")]
+    );
+    if (!id || duzenleniyor) popupKapat(["bolge"]);
   }
 
-  /** Secili talebi vurgular ve popup acar. */
+  /** Secili talebi vurgular ve popup acar. Sekli duzenlenen kayit HARIC: o
+   *  kayit `reportsUygula` tarafindan kaynaktan tamamen cikarilir (duzenleme
+   *  taslagi haritada tek gorsel olsun diye), bu yuzden ayni kaydin secim
+   *  halkasi/popup'i da burada bastirilir - aksi halde secim onceden
+   *  yapilmis oldugundan (duzenleme "Git" ile secimi de tasir) eski pin
+   *  popup'i duzenleme tutamaklarinin ustunde acik kalirdi. */
   function secimTalepUygula(map: maplibregl.Map) {
     if (!map.getLayer("reports-selected")) return;
     const id = seciliTalepIdRef.current;
-    map.setFilter("reports-selected", ["==", ["get", "id"], id ?? ""]);
+    const duzenleniyor = sekilDuzenlemeRef.current?.id === id;
+    map.setFilter(
+      "reports-selected",
+      ["==", ["get", "id"], duzenleniyor ? "" : (id ?? "")]
+    );
 
-    const secili = id
-      ? reportsRef.current?.features.find((f) => f.properties.id === id)
-      : undefined;
+    const secili =
+      id && !duzenleniyor
+        ? reportsRef.current?.features.find((f) => f.properties.id === id)
+        : undefined;
     if (!secili) {
       popupKapat(["talep"]);
       return;
@@ -1476,7 +1531,7 @@ export default function MapView({
     map.on("load", () => kaynaklariHazirla(map));
     map.on("render", popupHizalaRef.current);
     // Bolge etiketleri BOLGE_ETIKET_MINZOOM esiginde gorunur/gizlenir olmali.
-    map.on("zoomend", () => bolgeEtiketleriUygula(map, bolgelerRef.current ?? []));
+    map.on("zoomend", () => bolgeEtiketleriUygula(map, cizilecekBolgeler()));
 
     // MapLibre kapsayici boyutu degisince kendiliginden yeniden boyutlanmaz.
     const boyutGozlemci = new ResizeObserver(() => map.resize());
@@ -1629,8 +1684,9 @@ export default function MapView({
   }, [seciliBolgeId]);
 
   // --- Sekil duzenleme: taslak degisince cizimi ve tutamaklari yenile ---
-  // `bolgeleriUygula` da cagrilir: duzenlenen kayit kalici katmandan cikarilir,
-  // duzenleme bitince geri konur.
+  // `bolgeleriUygula`/`reportsUygula` da cagrilir: duzenlenen kayit (bolge ya
+  // da talep, hangisiyse) kalici katmandan cikarilir, duzenleme bitince geri
+  // konur - cift isaretci (kalici pin + duzenleme taslagi ustuste) olmasin.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !hazirRef.current) return;
@@ -1640,6 +1696,11 @@ export default function MapView({
     sekilUygula(map);
     sekilTutamaklariUygula(map);
     bolgeleriUygula(map);
+    reportsUygula(map);
+    // Secili kaydin popup'i/halkasi: duzenlenen ayni kayitsa (raporaGit onu
+    // secili de birakir) burada bastirilir, duzenleme bitince geri acilir.
+    secimTalepUygula(map);
+    secimBolgeUygula(map);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sekilDuzenleme]);
 

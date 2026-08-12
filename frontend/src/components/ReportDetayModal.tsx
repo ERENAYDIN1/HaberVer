@@ -7,7 +7,7 @@ import { gorevDurumu } from "../api/saha";
 import { useKonumCozumu } from "../hooks/useSinirlar";
 import { turAdi, turKodlari } from "../data/turSozlugu";
 import { durumEtiketi, type AssetType } from "../types/asset";
-import { talepNoktasi } from "../types/report";
+import { sekilliTalep, talepNoktasi } from "../types/report";
 import type { ReportFeature } from "../types/report";
 import { AksiyonButonu, AksiyonSeridi } from "./Aksiyonlar";
 import { IconCheck } from "./icons";
@@ -27,6 +27,11 @@ interface ReportDetayModalProps {
    *  modalini acar. Haritadaki popup'in ayni adli dugmesiyle TEK islemdir -
    *  talep ekrani ile varlik ekrani arasindaki tek gecis noktasi. */
   onVarligiYonet?: (raporId: string) => void;
+  /** "Şekli Düzenle": vatandasin cizdigi CIZGI/ALAN yanlis olabilir - haritada
+   *  koseleri surukleyerek duzeltme modunu acar (kaydedilmis bolge/guzergah
+   *  seklinin duzenlenmesiyle ayni mekanizma). Yalnizca cizgi/alan taleplerde
+   *  gosterilir; nokta taleplerde "sekil" diye bir sey yok. */
+  onSekilDuzenle?: (report: ReportFeature) => void;
 }
 
 /** Bir talebin (bekleyen/onaylanmis/reddedilen) tum detaylarini (foto dahil)
@@ -38,6 +43,7 @@ export default function ReportDetayModal({
   islemYetkisi = false,
   onIslemBitti,
   onVarligiYonet,
+  onSekilDuzenle,
 }: ReportDetayModalProps) {
   const koord = report ? talepNoktasi(report) : null;
   const { data: konum } = useKonumCozumu(koord ? koord[1] : null, koord ? koord[0] : null);
@@ -164,6 +170,25 @@ export default function ReportDetayModal({
           </div>
         )}
 
+        {/* Sekil duzenleme: vatandas yol catlagini/alani yanlis cizmis olabilir.
+            Yalnizca CIZGI/ALAN taleplerde (nokta talepte "sekil" yoktur) ve
+            reddedilmemis durumda - reddedilmis kapanmis bir istir. ONAYLANDI
+            durumunda "Varligi Yonet" ile AYNI seritte durur (asagida); burada
+            yalnizca BEKLEMEDE durumu icin (o blokta "Varligi Yonet" yoktur). */}
+        {islemYetkisi &&
+          onSekilDuzenle &&
+          sekilliTalep(report) &&
+          p.status === "beklemede" && (
+            <AksiyonSeridi>
+              <AksiyonButonu tur="mor" onClick={() => onSekilDuzenle(report)}>
+                Şekli Düzenle
+              </AksiyonButonu>
+              <span className="text-[11px] text-slate-500">
+                Vatandaşın çizdiği şekil yanlışsa haritada düzeltin.
+              </span>
+            </AksiyonSeridi>
+          )}
+
         {/* Onay/ret: haritadaki talep isaretcisinden de karar verilebilsin diye
             (popup -> "Detay" -> buradaki butonlar). Onay yeni bir bakim varligi
             olusturur ve otomatik atamayi tetikler (bkz. crud/report.py).
@@ -226,9 +251,6 @@ export default function ReportDetayModal({
             oldugu ozetlenir, sonra tek gecis dugmesi gelir. */}
         {islemYetkisi && p.status === "onaylandi" && (
           <div className="space-y-2 border-t border-slate-100 pt-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Bu talepten doğan varlık
-            </p>
             <div className="border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs">
               {varlik ? (
                 <>
@@ -253,14 +275,18 @@ export default function ReportDetayModal({
                 </span>
               )}
             </div>
-            {onVarligiYonet && (
+            {(onVarligiYonet || (onSekilDuzenle && sekilliTalep(report))) && (
               <AksiyonSeridi>
-                <AksiyonButonu tur="birincil" onClick={() => onVarligiYonet(p.id)}>
-                  Varlığı Yönet
-                </AksiyonButonu>
-                <span className="text-[11px] text-slate-500">
-                  Ekibe atama, tamir, düzenleme ve silme varlık kartında.
-                </span>
+                {onVarligiYonet && (
+                  <AksiyonButonu tur="birincil" onClick={() => onVarligiYonet(p.id)}>
+                    Varlığı Yönet
+                  </AksiyonButonu>
+                )}
+                {onSekilDuzenle && sekilliTalep(report) && (
+                  <AksiyonButonu tur="mor" onClick={() => onSekilDuzenle(report)}>
+                    Şekli Düzenle
+                  </AksiyonButonu>
+                )}
               </AksiyonSeridi>
             )}
           </div>

@@ -25,6 +25,7 @@ from ..schemas.report import (
     ReportFeature,
     ReportFeatureCollection,
     ReportReview,
+    ReportSekilGuncelle,
     TalepGeometrisi,
 )
 from ..security import Kapsam, kapsam, personel, require_role
@@ -240,6 +241,43 @@ def reject(
         crud.reject_report(db, report, user, data.review_note)
     )
     _talep_degisti()
+    return sonuc
+
+
+@router.patch("/{report_id}/sekil", response_model=ReportFeature)
+def sekil_guncelle(
+    report_id: uuid.UUID,
+    data: ReportSekilGuncelle,
+    user: User = Depends(personel),
+    alan: Kapsam = Depends(kapsam),
+    db: Session = Depends(get_db),
+):
+    """Talebin ham seklini (cizgi/alan) haritada duzenler - vatandas yanlis
+    cizmis olabilir. Yalnizca BEKLEMEDE veya ONAYLANMIS taleplerde: reddedilmis
+    kapanmis bir istir, sekli duzeltmenin bir anlami yok.
+
+    Sekil TIPI degismez (bir cizgi cizgi, bir alan alan kalir) - kaydedilmis
+    bolge/guzergah seklinin duzenlenmesiyle ayni kural."""
+    row = _talep_getir(db, report_id, alan)
+    report = row[0]
+    if report.status == ReportStatus.reddedildi:
+        raise HTTPException(
+            status_code=409, detail="Reddedilmiş talebin şekli düzenlenemez"
+        )
+    if data.geometry.type == "Point":
+        raise HTTPException(
+            status_code=422, detail="Nokta talepler için şekil düzenleme yok"
+        )
+    mevcut = TalepGeometrisi.model_validate_json(row[1])
+    if data.geometry.type != mevcut.type:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Şekil tipi değiştirilemez: kayıt {mevcut.type} tipinde",
+        )
+    sonuc = ReportFeature.from_row(
+        crud.update_geometry(db, report, data.geometry.model_dump_json(), user)
+    )
+    _talep_degisti(varlik_da=report.created_asset_id is not None)
     return sonuc
 
 

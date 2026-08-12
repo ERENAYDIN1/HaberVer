@@ -151,8 +151,9 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
       paint: {
         "circle-radius": ISARETCI.varlikSecimYaricap as never,
         "circle-color": "transparent",
-        "circle-stroke-width": 3,
-        "circle-stroke-color": "#0f766e",
+        "circle-stroke-width": 1,
+        "circle-stroke-opacity": 0.6,
+        "circle-stroke-color": "#000000",
       },
     });
 

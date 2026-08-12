@@ -190,6 +190,39 @@ def approve_report(
     return get(db, report.id)
 
 
+def update_geometry(db: Session, report: Report, geojson: str, actor: User):
+    """Talebin ham seklini (cizgi/alan) yerinde degistirir - vatandas yanlis
+    cizmis olabilir. Temsil noktasi PostGIS'te yeniden turetilir.
+
+    Onaylanmis bir talepse (created_asset_id dolu) ondan dogan VARLIGIN
+    konumu da tasinir: harita pini, atama mesafesi ve yaka her zaman guncel
+    sekli yansitsin diye (bkz. 'Pinin konumu varliktan gelir' kurali).
+    Varligin mevcut aktif atamasi/yakasi YENIDEN DEGERLENDIRILMEZ, yalnizca
+    konum tasinir - kucuk bir sekil duzeltmesi otomatik atamayi tetiklemez."""
+    geom = _geometri(geojson)
+    yeni_nokta = temsil_nokta(geom)
+    report.geometry = geom
+    report.temsil_noktasi = yeni_nokta
+
+    if report.created_asset_id is not None:
+        asset = db.get(Asset, report.created_asset_id)
+        if asset is not None:
+            asset.geometry = yeni_nokta
+
+    add_log(
+        db,
+        action=LogAction.report_shape_updated,
+        actor=actor,
+        entity_type="report",
+        entity_id=report.id,
+        entity_name=report.name,
+        detail="Şekil güncellendi",
+        tur=report.type,
+    )
+    db.commit()
+    return get(db, report.id)
+
+
 def reject_report(
     db: Session,
     report: Report,

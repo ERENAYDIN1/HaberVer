@@ -70,3 +70,13 @@ export function rejectReport(id: string, review_note?: string) {
 export function reopenReport(id: string) {
   return istek<ReportFeature>(`/reports/${id}/geri-al`, { method: "POST" });
 }
+
+/** Bekleyen ya da onaylanmis bir talebin ham seklini (cizgi/alan) haritada
+ *  duzenler - vatandas yanlis cizmis olabilir. Sekil TIPI degismez. Onaylanmis
+ *  talepte ondan dogan varligin konumu da tasinir (backend). */
+export function updateReportGeometry(id: string, geometry: TalepGeometrisi) {
+  return istek<ReportFeature>(`/reports/${id}/sekil`, {
+    method: "PATCH",
+    body: JSON.stringify({ geometry }),
+  });
+}
