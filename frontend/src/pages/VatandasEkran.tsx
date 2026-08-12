@@ -60,21 +60,19 @@ export default function VatandasEkran() {
   const mobil = useMobil();
 
   const [ad, setAd] = useState("");
-  // Bilincli olarak BOS baslar: 13 tur arasinda sessiz bir varsayilan (eskiden
-  // "agac"), kullanici tur alanini hic fark etmeden gonderdiginde yanlis
-  // veri uretiyordu. Gonderimde zorunlu alan olarak dogrulanir.
+  // Bilincli olarak BOS baslar: sessiz bir varsayilan kullanici fark etmeden
+  // yanlis veri uretirdi. Gonderimde zorunlu alan olarak dogrulanir.
   const [tip, setTip] = useState<AssetType | "">("");
   const [not, setNot] = useState("");
 
-  // Konum iki bicimde tutulur: tek nokta secimi ile cok noktali cizim ayri
-  // durumlardir. Sekil tipi degisince ikisi de sifirlanir - yarim kalmis bir
-  // cizginin alan olarak devam etmesi kullaniciyi yaniltirdi.
+  // Sekil tipi degisince konum/noktalar sifirlanir - yarim kalmis bir cizginin
+  // alan olarak devam etmesi kullaniciyi yaniltirdi.
   const [sekil, setSekil] = useState<TalepSekilTipi>("Point");
   const [konum, setKonum] = useState<[number, number] | null>(null);
   const [noktalar, setNoktalar] = useState<[number, number][]>([]);
-  // Cizimin bittigi acik bir an: "Tamamla"ya basilana kadar haritadaki her
-  // tiklama kose ekler. Bayrak olmadan kullanici formu doldururken haritaya
-  // degdiginde seklini farkinda olmadan buyutuyordu.
+  // "Tamamla"ya basilana kadar haritadaki her tiklama kose ekler; bayrak
+  // olmadan formu doldururken haritaya degmek seklini farkinda olmadan
+  // buyutuyordu.
   const [cizimTamam, setCizimTamam] = useState(false);
 
   const [ucus, setUcus] = useState<{
@@ -103,14 +101,11 @@ export default function VatandasEkran() {
   const [panelAcik, setPanelAcik] = useState(true);
 
   // --- Yalnizca mobil kabuk ---
-  // Masaustunde form ve liste tek bir yan panelde alt alta durur; mobilde
-  // ikisi ayri sheet'tir, cunku ekranin tamami bir tanesine bile zor yetiyor.
+  // Masaustunde form ve liste tek yan panelde durur; mobilde ayri sheet'tir.
   const [formAcik, setFormAcik] = useState(false);
   const [listeSheetAcik, setListeSheetAcik] = useState(false);
-  // Konum isaretleme kipi: form sheet'i kapanir, harita tam ekran olur ve
-  // altta yalnizca isaretlemeye ait kontroller kalir. Mobilde form ile
-  // haritanin ayni anda kullanilabilir olmasi mumkun degil - kullanici
-  // haritaya dokunacaksa panelin cekilmesi gerekiyor.
+  // Konum isaretleme kipi: form sheet'i kapanir, harita tam ekran olur.
+  // Mobilde form ile harita ayni anda kullanilamaz.
   const [konumKipi, setKonumKipi] = useState(false);
   /** Vatandasin kendi konumu - SECIM DEGIL, yalnizca haritada referans olsun
    *  diye gosterilen mavi nokta ("Neredeyim?" dugmesi doldurur). */
@@ -129,7 +124,6 @@ export default function VatandasEkran() {
     localStorage.setItem(LISTE_ANAHTARI, listeAcik ? "1" : "0");
   }, [listeAcik]);
 
-  // Foto secilince onizleme URL'si uret ve temizle.
   useEffect(() => {
     if (!foto) {
       setFotoOnizleme(null);
@@ -140,8 +134,7 @@ export default function VatandasEkran() {
     return () => URL.revokeObjectURL(url);
   }, [foto]);
 
-  // Cizim rengi turun grup rengidir: form ile haritadaki sekil ayni sinyali
-  // tasisin (tur secilmemisken notr yesil).
+  // Cizim rengi turun grup rengidir (tur secilmemisken notr yesil).
   const cizimRengi = tip ? GRUP_RENGI[turGrubu(tip)] : "#059669";
 
   const cizim: CizimAyari | null = useMemo(() => {
@@ -150,8 +143,7 @@ export default function VatandasEkran() {
       tip: sekil,
       noktalar,
       onDegis: (yeni) => {
-        // Sinir backend'de de uygulanir; burada sessizce yok saymak, elle
-        // cizimde ulasilamayacak bir sinir icin hata mesaji gostermekten iyi.
+        // Sinir backend'de de uygulanir; sessizce yok sayilir.
         if (yeni.length > MAKS_TALEP_NOKTASI) return;
         setNoktalar(yeni);
       },
@@ -183,8 +175,7 @@ export default function VatandasEkran() {
     setNoktalar([]);
     setCizimTamam(false);
     setKonumHatasi(null);
-    // Sekil secmek zaten "haritada isaretleyecegim" demektir; mobilde ayrica
-    // bir "Haritadan Isaretle" dugmesine basmak gereksiz bir adimdi.
+    // Sekil secmek zaten "haritada isaretleyecegim" demektir.
     if (mobil) {
       setFormAcik(false);
       setKonumKipi(true);
@@ -224,10 +215,8 @@ export default function VatandasEkran() {
     );
   };
 
-  /** "Neredeyim?": konumu YALNIZCA referans olarak gosterir - mavi nokta koyar
-   *  ve oraya ucar, ama secime/cizime hic dokunmaz. `konumumuKullan`'dan farki
-   *  budur: orada konum secimin KENDISI olur, burada kullanicinin nereye
-   *  isaret koyacagini kestirmesi icin bir dayanak noktasidir. */
+  /** "Neredeyim?": konumu YALNIZCA referans olarak gosterir (mavi nokta),
+   *  secime/cizime dokunmaz - `konumumuKullan`'dan farki budur. */
   const neredeyim = () => {
     setKonumHatasi(null);
     if (!navigator.geolocation) {
@@ -274,7 +263,7 @@ export default function VatandasEkran() {
     if (sekil === "LineString") {
       return { type: "LineString", coordinates: noktalar };
     }
-    // Halkayi backend kapatir; burada acik gonderilir.
+    // Halkayi backend kapatir.
     return { type: "Polygon", coordinates: [noktalar] };
   };
 
@@ -293,9 +282,8 @@ export default function VatandasEkran() {
           : `Lütfen haritada en az ${EN_AZ_NOKTA[sekil]} nokta işaretleyin`
       );
     }
-    // Cizim "Tamamla" ile kapatilmadan gonderilmez: yarim birakilmis bir hat
-    // ile bitirilmis bir hat ayni veriyi uretir, ama kullanicinin sekli
-    // bitirdigini onaylamasi tek adimda yanlis gonderimi engeller.
+    // Yarim birakilmis hat ile bitirilmis hat ayni veriyi uretir; "Tamamla"
+    // ile onay zorunlu tutulur.
     if (sekil !== "Point" && !cizimTamam) {
       return setHata(
         `Lütfen haritanın altındaki “Tamamla” ile ${
@@ -318,7 +306,7 @@ export default function VatandasEkran() {
       setBasari(true);
       talepleriYukle();
       // Mobilde form bir sheet: gonderim bitince kapanip yerini talep
-      // listesine birakir - kullanicinin bir sonraki sorusu "gitti mi" olur.
+      // listesine birakir.
       if (mobil) {
         setFormAcik(false);
         setListeSheetAcik(true);
@@ -342,12 +330,7 @@ export default function VatandasEkran() {
     }
   };
 
-  /* --- Iki kabugun paylastigi parcalar ---
-     JSX burada bir kez kurulur, asagida ya masaustu yan paneline ya da mobil
-     sheet'ine yerlestirilir. Bilesenlere bolup ~15 state degerini prop olarak
-     gecirmek yerine bu yol secildi: masaustu isaretlemesi aynen korunuyor ve
-     iki kabuk arasinda kopyalanan tek satir yok. */
-
+  /* Iki kabugun paylastigi parcalar; JSX burada bir kez kurulur. */
   const formIcerigi = (
           <form
             onSubmit={gonder}
@@ -388,8 +371,7 @@ export default function VatandasEkran() {
                 <option value="">Seçiniz…</option>
                 <TipSecenekleri turler={turKodlari()} />
               </select>
-              {/* Talebin nereye gidecegi SECIM ANINDA soylenir: vatandas
-                  "kime bildirdim" sorusunu gonderdikten sonra sormasin. */}
+              {/* Talebin nereye gidecegi SECIM ANINDA soylenir. */}
               {hedefDepartman && (
                 <p className="mt-1 text-xs text-emerald-700">
                   → {departmanAdi(departmanlar, hedefDepartman)}’ne iletilecek
@@ -455,9 +437,7 @@ export default function VatandasEkran() {
               )}
             </div>
 
-            {/* Konum: once NE BICIMDE isaretlenecegi secilir. Ucu de
-                haritaciligin standart sekilleridir (nokta/cizgi/poligon) ama
-                etiketler teknik adlarla degil ne ise yaradiklariyla yazilir. */}
+            {/* Konum: once NE BICIMDE isaretlenecegi secilir. */}
             <div>
               <label className={labelClass}>
                 Konum <span className="text-red-500">*</span>
@@ -486,9 +466,8 @@ export default function VatandasEkran() {
                 ))}
               </div>
 
-              {/* Sekil secimi haritayi kendisi acar (mobilde konum kipi),
-                  dolayisiyla ayri bir "Haritadan Isaretle" dugmesi yok.
-                  Geriye iki yolu ayiran ince bir "ya da" kalir. */}
+              {/* Sekil secimi haritayi kendisi acar, ayri bir "Haritadan
+                  Isaretle" dugmesi yok. */}
               <div className="my-2 flex items-center gap-2">
                 <span className="h-px flex-1 bg-slate-200" />
                 <span className="text-xs text-slate-400">ya da</span>
@@ -501,8 +480,6 @@ export default function VatandasEkran() {
                 disabled={konumAraniyor}
                 className="flex w-full items-center justify-center gap-2 border border-emerald-600 bg-emerald-50 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {/* GPS artisi: haritadaki "konumumu goster" kontroluyle ayni
-                    ikon, cunku ayni sey. */}
                 <IconKonum className="h-4 w-4" />
                 {konumAraniyor ? "Konum alınıyor…" : "Konumumu Kullan"}
               </button>
@@ -562,8 +539,8 @@ export default function VatandasEkran() {
           </form>
   );
 
-  /** Talep listesinin kendisi; masaustunde katlanabilir basligin altinda,
-   *  mobilde kendi sheet'inin govdesinde durur. */
+  /** Talep listesi; masaustunde katlanabilir baslik altinda, mobilde sheet
+   *  govdesinde. */
   const talepListesi =
     taleplerim.length === 0 ? (
       <p className="mt-2 text-xs text-slate-400">Henüz talep göndermediniz.</p>
@@ -580,9 +557,8 @@ export default function VatandasEkran() {
       </ul>
     );
 
-  /** Cizim araci: masaustunde ekranin alt-ortasinda serbest durur, mobilde
-   *  konum kipinin alt seridine gomulur. `gomulu` yalnizca kabugu degistirir,
-   *  icerideki kontroller iki yerde de aynidir. */
+  /** Cizim araci: masaustunde alt-ortada serbest durur, mobilde konum
+   *  kipinin alt seridine gomulur. `gomulu` yalnizca kabugu degistirir. */
   const cizimKontrolu = (gomulu: boolean) => {
     const govde = (
       <>
@@ -608,10 +584,7 @@ export default function VatandasEkran() {
             : `Haritaya ${gomulu ? "dokunarak" : "tıklayarak"} köşe ekleyin (en az ${EN_AZ_NOKTA[sekil]}).`}
         </p>
 
-        {/* Uc dugme personel konsolundaki `CizimPaneli` ile ayni: cizim
-            bitmis olsa bile ayni yerde ayni uc secenek durur. Tamamlanmis
-            cizimde dugmelerin tek bir "Duzenle"ye dusmesi, kullanicinin
-            ogrendigi yerlesimi her tamamlamada degistiriyordu. */}
+        {/* Uc dugme personel konsolundaki `CizimPaneli` ile ayni yerlesim. */}
         <div className="mt-2.5 flex gap-2">
           <button
             type="button"
@@ -629,9 +602,7 @@ export default function VatandasEkran() {
           <button
             type="button"
             onClick={() => {
-              // Tamamlanmis bir cizimde "Geri al" once cizimi yeniden acar:
-              // kose atmak zaten duzenlemektir, ayrica "Duzenle" demek
-              // gerekmesin.
+              // Tamamlanmis cizimde "Geri al" once cizimi yeniden acar.
               setCizimTamam(false);
               setNoktalar((n) => n.slice(0, -1));
             }}
@@ -670,9 +641,8 @@ export default function VatandasEkran() {
     );
   };
 
-  // Mobilde konum dugmesi haritanin kosesinde degil, arti'nin hemen ustunde
-  // duruyor; ikisi tek bir dikey yigin olsun diye kontrol gizlenip
-  // `konumTetikle` ile disaridan tetikleniyor.
+  // Mobilde konum dugmesi arti'nin hemen ustunde; kontrol gizlenip
+  // `konumTetikle` ile disaridan tetiklenir.
   const harita = (
     <KonumSecMap
       secili={konum}
@@ -709,17 +679,10 @@ export default function VatandasEkran() {
           <div className="absolute inset-0">{harita}</div>
 
           {konumKipi ? (
-            /* Konum isaretleme kipi: harita tam ekran, altta yalnizca
-               isaretlemeye ait kontroller. Form bu sirada kapalidir -
-               kucuk ekranda ikisi ayni anda kullanilamaz. */
+            /* Konum isaretleme kipi: harita tam ekran, form kapalidir. */
             <div className="guvenli-alt pointer-events-none absolute inset-x-0 bottom-0 z-40 px-3 pb-3">
-              {/* "Neredeyim?" haritanin uzerinde, panelin hemen ustunde durur:
-                  isaretleme sirasinda sorulan soru "ben neredeyim" oldugu icin
-                  cevap da haritanin uzerinde olmali. Salt ikon bir dugme (arti
-                  yigininda oldugu gibi) burada fark edilmiyordu - metin
-                  tasiyor. Sectigi/cizdigi seye DOKUNMAZ, yalnizca mavi bir
-                  referans noktasi koyar; bu yuzden "Konumumu Kullan"dan ayri
-                  bir dugmedir. */}
+              {/* "Neredeyim?" secime DOKUNMAZ, yalnizca mavi referans noktasi
+                  koyar - bu yuzden "Konumumu Kullan"dan ayri bir dugmedir. */}
               <div className="mb-2 flex justify-end">
                 <button
                   type="button"
@@ -743,10 +706,8 @@ export default function VatandasEkran() {
                         "Haritaya dokunarak konumu işaretleyin."
                       )}
                     </p>
-                    {/* Isaretlenen yeri ONAYLAYAN dugme. Cizimdeki "Tamamla"
-                        ile ayni yerde ve ayni dilde: isaretleme kipinden
-                        cikmanin olumlu yolu budur, "Forma Dön" ise vazgecmek.
-                        Isaret konmadan onaylanacak bir sey yok - kilitli. */}
+                    {/* Isaretlenen yeri ONAYLAYAN dugme; isaret konmadan
+                        kilitlidir. */}
                     <button
                       type="button"
                       onClick={konumKipiniKapat}
@@ -760,9 +721,8 @@ export default function VatandasEkran() {
                   cizimKontrolu(true)
                 )}
 
-                {/* "Forma Dön" ucu sekilde de aynidir ve HICBIR ZAMAN kilitli
-                    degildir: kip degistiren bir dugmenin cikisi, isaretleme
-                    yapilmadi diye kapanirsa kullanici kipte sikisir. */}
+                {/* "Forma Dön" HICBIR ZAMAN kilitli degildir, aksi halde
+                    kullanici kipte sikisir. */}
                 <button
                   type="button"
                   onClick={konumKipiniKapat}
@@ -777,8 +737,7 @@ export default function VatandasEkran() {
             </div>
           ) : (
             <>
-              {/* Sag alt dikey yigin: konum (ikincil, beyaz) ve onun altinda
-                  yeni talep (birincil, yesil) - basparmak menzilinde. */}
+              {/* Sag alt dikey yigin: konum (ikincil) + yeni talep (birincil). */}
               <div className="absolute bottom-24 right-4 z-30 flex flex-col items-center gap-3">
                 <button
                   type="button"
@@ -801,9 +760,7 @@ export default function VatandasEkran() {
                 </button>
               </div>
 
-              {/* Taleplerim: ekranin dibine yapisik ince bir serit yerine
-                  haritanin uzerinde yuzen bir kart - actigi sheet'le ayni
-                  dili konussun ve tutamagiyla "yukari cekilir" desin. */}
+              {/* Taleplerim: haritanin uzerinde yuzen bir kart. */}
               <button
                 type="button"
                 onClick={() => setListeSheetAcik(true)}
@@ -947,8 +904,7 @@ export default function VatandasEkran() {
           {harita}
 
           {/* Mobildeki ile ayni "Neredeyim?": isaret koymadan yalnizca mavi
-              referans noktasi. Haritanin kendi kose kontrolu konumu SECIME
-              cevirdigi icin ayri durur. */}
+              referans noktasi. */}
           <div className="pointer-events-none absolute right-3 top-3 z-10 flex justify-end">
             <button
               type="button"
@@ -961,10 +917,7 @@ export default function VatandasEkran() {
             </button>
           </div>
 
-          {/* Cizim araci: personel konsolundaki `CizimPaneli` ile ayni yerde
-              (ekranin alt-ortasi; sol panel acilip kapaninca yeri degismez)
-              ve ayni islerde - kose sayisi + anlik olcu, geri al/iptal ve
-              cizimi bitiren "Tamamla". */}
+          {/* Cizim araci: personel konsolundaki `CizimPaneli` ile ayni yerde. */}
           {sekil !== "Point" && cizimKontrolu(false)}
         </div>
       </div>
@@ -1014,17 +967,13 @@ interface TalepKartiProps {
 function TalepKarti({ talep, kaldiriliyor, onKaldir }: TalepKartiProps) {
   const p = talep.properties;
   const fotoSrc = fotoUrl(p.photo_url);
-  // Gorunum personel tarafiyla AYNI fonksiyondan gelir. Vatandas varlik
-  // listesini goremedigi icin olusan varligin durumu talep yanitinda tasinir
-  // (`asset_status`), boylece "Tamir Edildi" burada da gorunur. Alan her zaman
-  // dolu geldiginden ucuncu arguman `true`.
+  // Gorunum personel tarafiyla AYNI fonksiyondan gelir; `asset_status` API
+  // yanitinda tasindigi icin "Tamir Edildi" burada da gorunur.
   const gorunum = talepGorunumu(p.status, p.asset_status ?? undefined, true);
 
   return (
     <li className="relative border border-slate-200 bg-slate-50 p-2">
-      {/* Listeden dusurur, SILMEZ: kayit belediyede durmaya devam eder.
-          Onaylanmis bir talep gercekten silinseydi ondan olusan varlik ve
-          saha gorevi sahipsiz kalirdi. */}
+      {/* Listeden dusurur, SILMEZ: kayit belediyede durmaya devam eder. */}
       <button
         type="button"
         onClick={onKaldir}

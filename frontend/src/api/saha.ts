@@ -20,7 +20,7 @@ export function gorevlerim() {
   return istek<GorevFeatureCollection>("/saha/gorevlerim");
 }
 
-/** Giris yapan saha ekibinin yakinda tamamladigi gorevler ('Tamamlanan Ä°ÅŸler'). */
+/** Giris yapan saha ekibinin yakinda tamamladigi gorevler ("Tamamlanan İşler"). */
 export function tamamlananlarim() {
   return istek<GorevFeatureCollection>("/saha/tamamlananlarim");
 }

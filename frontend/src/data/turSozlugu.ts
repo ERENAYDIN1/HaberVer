@@ -13,28 +13,24 @@ import { GLIF_KITAPLIGI, VARSAYILAN_GLIF } from "./tipGlifleri";
 /**
  * Tur sozlugunun calisma zamani kaydi.
  *
- * Turler artik derleme zamani sabiti degil BACKEND VERISIDIR (`turler`
- * tablosu): admin arayuzden yeni bir tur ekleyebilsin diye. Ama sozlugu okuyan
- * her yer React degil - harita katmanlari, popup HTML'leri ve CSV disa aktarma
- * duz fonksiyonlar. Bu yuzden sozluk burada, modul duzeyinde tutulur; React
- * tarafi `useTurler()` ile ayni veriyi ceker ve YUKLENENE KADAR korumali
- * ekranlar cizilmez (auth/RequireRole). Boylece asagidaki fonksiyonlar
- * cagrildiklarinda sozluk her zaman doludur ve senkron kalabilirler.
+ * Turler BACKEND VERISIDIR (`turler` tablosu), ama sozlugu okuyan her yer
+ * React degil (harita katmanlari, popup HTML'leri, CSV disa aktarma). Bu
+ * yuzden sozluk burada modul duzeyinde tutulur; React tarafi `useTurler()` ile
+ * ayni veriyi ceker ve YUKLENENE KADAR korumali ekranlar cizilmez
+ * (auth/RequireRole) - asagidaki fonksiyonlar cagrildiklarinda sozluk her
+ * zaman dolu ve senkrondur.
  *
- * Bilinmeyen bir kod her zaman sessizce tolere edilir (ad = kodun kendisi,
- * renk notr gri): silinmis bir turun eski kaydi bir ekrani cokertmemeli.
- *
- * Sozluk TEKTIR ve alt kumesi yoktur: `turKodlari()` neyi donduruyorsa lejant,
- * filtre, vatandas talep formu ve envanter formu ayni listeyi gorur.
+ * Bilinmeyen kod sessizce tolere edilir (ad = kodun kendisi, renk notr gri).
+ * Sozluk TEKTIR ve alt kumesi yoktur: lejant, filtre, vatandas formu ve
+ * envanter formu ayni listeyi gorur.
  */
 
 let SOZLUK: Tur[] = [];
 let INDEKS = new Map<string, Tur>();
 let SURUM = 0;
 
-/** Sozluk her yazildiginda artan sayac. React tarafi bunu bir effect
- *  bagimliligi olarak kullanir: admin yeni bir tur eklediginde filtre
- *  kutucuklari kendini yeni ture gore tamamlayabilsin diye. */
+/** Sozluk her yazildiginda artan sayac; React tarafi bunu bir effect
+ *  bagimliligi olarak kullanir. */
 export function turSozluguSurumu(): number {
   return SURUM;
 }
@@ -53,8 +49,7 @@ export function tumTurler(): Tur[] {
   return SOZLUK;
 }
 
-/** Sozlukteki tum kodlar. Tur secilebilen ve turle suzulen her yer (lejant,
- *  filtre, talep formu, envanter formu) bunu okur. */
+/** Sozlukteki tum kodlar. */
 export function turKodlari(): AssetType[] {
   return SOZLUK.map((t) => t.kod);
 }
@@ -88,15 +83,13 @@ export function grupTurleri(grup: TipGrubu): AssetType[] {
 }
 
 /** Turun cizgi glifi (ham SVG icerigi). Glifi secilmemis ya da bilinmeyen bir
- *  tur genel "diğer" glifine duser - yeni tur eklemek cizim yapmayi
- *  gerektirmesin diye. */
+ *  tur genel "diğer" glifine duser. */
 export function turGlifi(kod: AssetType): string {
   const anahtar = INDEKS.get(kod)?.glif;
   return (anahtar && GLIF_KITAPLIGI[anahtar]) || GLIF_KITAPLIGI[VARSAYILAN_GLIF];
 }
 
-/** MapLibre `match` ifadesi icin kod->renk cifti listesi. Harita katmanlari
- *  sozluk yuklendikten sonra kuruldugu icin bu her cagrida taze uretilir. */
+/** MapLibre `match` ifadesi icin kod->renk cifti listesi. */
 export function turRenkCiftleri(): string[] {
   return SOZLUK.flatMap((t) => [t.kod, GRUP_RENGI[t.grup] ?? TIP_RENGI_VARSAYILAN]);
 }

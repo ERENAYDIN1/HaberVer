@@ -19,13 +19,10 @@ import { YAKALAR, YAKA_ETIKETLERI, type Yaka } from "../types/saha";
 import { inputClass, labelClass } from "../utils/formSiniflari";
 
 
-// Admin bu ekrandan personel (calisan), saha calisani veya baska admin olusturabilir.
 const OLUSTURULABILIR_ROLLER: UserRole[] = ["calisan", "saha_calisani", "admin"];
 
-/** Departmani ZORUNLU olan roller. Admin tum mudurlukleri gorur, vatandasin
- *  departmani yoktur; ikisinde de alan gosterilmez. Departmansiz bir personelin
- *  kapsami BOS olur - hesap acilir ama kullanici hicbir sey goremez, bu yuzden
- *  backend de (routers/users.py) ayni kurali uygular. */
+// Departmansiz bir personelin kapsami BOS olur (hesap acilir ama hicbir sey goremez);
+// backend (routers/users.py) ayni kurali uygular.
 const DEPARTMANLI_ROLLER: UserRole[] = ["calisan", "saha_calisani"];
 
 export default function PersonelYonetimi() {
@@ -36,20 +33,14 @@ export default function PersonelYonetimi() {
   const [email, setEmail] = useState("");
   const [parola, setParola] = useState("");
   const [rol, setRol] = useState<UserRole>("calisan");
-  // Yalnizca saha ekipleri icin: kadro yakasi ("" = konumdan turet).
   const [yaka, setYaka] = useState<Yaka | "">("");
-  // Yeni hesabin mudurlugu; departmanli rollerde zorunlu.
   const [departman, setDepartman] = useState("");
   const [hata, setHata] = useState<string | null>(null);
   const [basari, setBasari] = useState<string | null>(null);
   const [gonderiliyor, setGonderiliyor] = useState(false);
-  // Yakasi su an guncellenen kullanicinin id'si (select'i kilitlemek icin).
   const [yakaDegisen, setYakaDegisen] = useState<string | null>(null);
-  // Departmani su an guncellenen kullanicinin id'si.
   const [departmanDegisen, setDepartmanDegisen] = useState<string | null>(null);
-  // Aktifligi su an degisen kullanici + kapatma onayi bekleyen kullanici.
-  // Kapatma iki adimli: hesabi kesmek acik oturumlari da dusurur, geri
-  // alinabilir ama kullanici o an disari atilir - tek tikla olmamali.
+  // Kapatma iki adimli onay ister: acik oturumlari dusurup kullaniciyi disari atar.
   const [aktifDegisen, setAktifDegisen] = useState<string | null>(null);
   const [kapatmaOnayi, setKapatmaOnayi] = useState<string | null>(null);
 
@@ -60,7 +51,6 @@ export default function PersonelYonetimi() {
   };
   useEffect(yukle, []);
 
-  /** Mevcut bir saha ekibinin kadro yakasini degistirir ("" = konumdan turet). */
   const yakaDegistir = async (u: User, yeni: Yaka | "") => {
     setYakaDegisen(u.id);
     setHata(null);
@@ -82,9 +72,8 @@ export default function PersonelYonetimi() {
     }
   };
 
-  /** Mevcut bir personelin mudurlugunu degistirir. Acik oturumlari duser
-   *  (backend'de): kapsam degisince kullanicinin ekraninda duran eski listeler
-   *  bir sonraki tiklamada 404'lerle karsilasirdi. */
+  // Mudurluk degisince acik oturumlar backend'de dusurulur: kapsam degisince
+  // eski listeler bir sonraki tiklamada 404'lerle karsilasirdi.
   const departmanDegistir = async (u: User, yeni: string) => {
     if (!yeni || yeni === u.departman) return;
     setDepartmanDegisen(u.id);
@@ -107,8 +96,6 @@ export default function PersonelYonetimi() {
     }
   };
 
-  /** Hesabi acar/kapatir. Kapatma acik oturumlari da dusurdugu icin onaydan
-   *  gecer; acmak geri donusu olmayan bir sey yapmadigindan dogrudan calisir. */
   const aktifDegistir = async (u: User, aktif: boolean) => {
     setAktifDegisen(u.id);
     setHata(null);
@@ -231,8 +218,6 @@ export default function PersonelYonetimi() {
           </div>
         </div>
 
-        {/* Departman: kullanicinin gorebilecegi/yonetebilecegi tur kumesini
-            belirler ve otomatik atamada isin gidecegi ekibi suzer. */}
         {DEPARTMANLI_ROLLER.includes(rol) && (
           <div>
             <label className={labelClass} htmlFor="p-departman">
@@ -260,8 +245,6 @@ export default function PersonelYonetimi() {
           </div>
         )}
 
-        {/* Yaka yalnizca saha ekipleri icin anlamli: otomatik atamada ekip ile
-            isin yakasi ayni olmak zorunda (Bogaz'i gecen atama yapilmaz). */}
         {rol === "saha_calisani" && (
           <div>
             <label className={labelClass} htmlFor="p-yaka">
@@ -347,8 +330,6 @@ export default function PersonelYonetimi() {
                   </span>
                 </div>
               </div>
-              {/* Personelin mudurlugu buradan degistirilir. Bosaltilamaz:
-                  departmansiz bir personel hicbir sey goremezdi. */}
               {DEPARTMANLI_ROLLER.includes(u.role) && (
                 <div className="mt-1.5 flex items-center gap-2">
                   <label
@@ -374,8 +355,6 @@ export default function PersonelYonetimi() {
                 </div>
               )}
 
-              {/* Saha ekiplerinin kadro yakasi buradan degistirilir; otomatik
-                  atama yalnizca ayni yakadaki isleri yonlendirir. */}
               {u.role === "saha_calisani" && (
                 <div className="mt-1.5 flex items-center gap-2">
                   <label
@@ -401,9 +380,7 @@ export default function PersonelYonetimi() {
                 </div>
               )}
 
-              {/* Hesabi ac/kapat. Kendi hesabini kapatmak backend'de de
-                  engelli (kendini disari kilitleme); dugme o yuzden hic
-                  gosterilmez - reddedilecek bir islem sunmanin anlami yok. */}
+              {/* Kendi hesabini kapatmak backend'de de engelli; dugme o yuzden gosterilmez. */}
               {benim?.id !== u.id && (
                 <div className="mt-1.5 flex items-center gap-2">
                   {!u.is_active ? (
@@ -455,9 +432,7 @@ export default function PersonelYonetimi() {
   );
 }
 
-/** Departman rozeti: mudurlugun kendi rengini tasir. Renk YALNIZCA burada ve
- *  panellerde kullanilir - haritadaki isaretcilerin rengi tur grubundan gelir,
- *  iki renk sistemi bilincli olarak ayridir. */
+// Renk buradaki mudurluk rengidir; haritadaki isaretciler tur grubundan renk alir, ayri sistem.
 export function DepartmanRozeti({ ad, renk }: { ad: string; renk?: string }) {
   return (
     <span

@@ -3,10 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import AuthKabuk, { authButtonClass } from "../components/AuthKabuk";
 
-/** Backend'in `/api/auth/callback`den yonlendirdigi `?hata=` kodlari
- *  (`backend/app/routers/auth.py::_hata_yonlendir`) icin kullaniciya
- *  gosterilecek metin. Bilinmeyen/eksik bir kod jenerik mesaja duser -
- *  yeni bir kod eklenip burada unutulursa kullanici yine de bos kalmaz. */
+/** Backend'in `/api/auth/callback`den yonlendirdigi `?hata=` kodlari icin
+ *  kullaniciya gosterilecek metin. Bilinmeyen/eksik kod jenerik mesaja duser. */
 const HATA_MESAJLARI: Record<string, string> = {
   oturum:
     "Oturum kurulamadı. Tarayıcınız çerezleri engelliyor olabilir ya da geri tuşuyla eski bir giriş adımına dönülmüş olabilir. Aşağıdan tekrar deneyebilirsiniz.",
@@ -18,15 +16,10 @@ const HATA_MESAJLARI: Record<string, string> = {
   devre_disi: "Hesabınız devre dışı bırakılmış. Yöneticinizle iletişime geçin.",
 };
 
-/** TEK giris sayfasi ve ayni zamanda KACIS NOKTASI.
- *
- *  Normal akista bu sayfa hic gorulmez: korumali bir rotaya girildiginde
- *  RequireRole dogrudan Keycloak'a yonlendirir (rol token'dan geldigi icin
- *  "personel mi vatandas mi" diye onden sormak gereksiz). Buraya yalnizca iki
- *  yoldan gelinir: (1) otomatik yonlendirme dongude kaldi ya da callback
- *  kurtarilabilir bir hatayla geri dondu (`?hata=<kod>`), (2) kullanici eski
- *  bir baglantiyla/elle geldi. Bu yuzden sayfa ASLA kendiliginden
- *  yonlendirmez - dongunun durdugu yer burasidir. */
+/** Tek giris sayfasi ve ayni zamanda kacis noktasi: normalde RequireRole
+ *  dogrudan Keycloak'a yonlendirdigi icin bu sayfa gorulmez. Buraya yalnizca
+ *  yonlendirme dongude kalinca / hatali donuste (`?hata=`) ya da elle
+ *  gelinir; bu yuzden sayfa kendiliginden ASLA yonlendirmez. */
 export default function Giris() {
   const { girisYap, kayitOl } = useAuth();
   const [parametreler] = useSearchParams();

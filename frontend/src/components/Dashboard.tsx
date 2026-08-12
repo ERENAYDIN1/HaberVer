@@ -30,23 +30,19 @@ import {
   talepJsonIndir,
 } from "../utils/export";
 
-/* Renk rolleri - uygulamanin mevcut dilini korur.
-   Not: yesil/amber cifti renk korlugunde ayirt edilemeyecek kadar yakin
-   (dogrulayici: CVD ΔE 7.9), bu yuzden her yerde metin etiketiyle birlikte
-   kullanilir; renk tek basina anlam tasimaz. */
+/* Yesil/amber cifti renk korlugunde ayirt edilemez (CVD ΔE 7.9), bu yuzden
+   her yerde metin etiketiyle birlikte kullanilir. */
 const RENK = {
-  seri: "#059669", // tek hue - buyukluk karsilastirmasi
-  uyari: "#d97706", // bakim gerekli (durum rengi)
-  uyariTrack: "#fde8c8", // meter'in bos kismi: ayni ramp'in acik adimi
+  seri: "#059669",
+  uyari: "#d97706",
+  uyariTrack: "#fde8c8",
   ikincilMetin: "#52514e",
   soluk: "#898781",
 } as const;
 
 const BILINMIYOR = "__bilinmiyor__";
 
-/* Detay seviyesine gore ust seridin rengi/etiketi degisir; boylece genel
-   ozetten ilce/mahalle detayina inince gecis net anlasilir. Tam sinif adlari
-   (Tailwind JIT sablon dizgilerini yakalayamaz). */
+// Tam sinif adlari (Tailwind JIT sablon dizgilerini yakalayamaz).
 const SEVIYE_STIL = [
   { ad: "Genel Özet", serit: "bg-emerald-600", vurgu: "text-emerald-100" },
   { ad: "İlçe Detayı", serit: "bg-sky-600", vurgu: "text-sky-100" },
@@ -55,11 +51,7 @@ const SEVIYE_STIL = [
 
 interface DashboardProps {
   data?: AssetFeatureCollection;
-  /** Bekleyen/onaylanan/tamir/reddedilen goruntuye ayrilmis talepler
-   *  (App.tsx'teki `talepGorunumleriAlanda` ile ayni kaynak). Personel
-   *  degilse veya henuz yuklenmediyse "Talepler" sekmesi bos veri gosterir. */
   talepGorunumleri?: Record<TalepGorunumu, ReportFeature[]>;
-  /** Alan secimi aktifse baslikta belirtilir. */
   alanSecimiAktif?: boolean;
 }
 
@@ -68,9 +60,7 @@ interface Konumlu {
   koordinat: [number, number] | null;
 }
 
-/** Gorunen kayitlarin koordinatlarini tek istekte ilce/mahalleye cozumler.
- *  Sonuc, kayit id'sine gore bir haritaya donusturulur (sira bagimsiz).
- *  Koordinati olmayan kayitlar (nokta cozumlenememis talep) atlanir. */
+/** Gorunen kayitlarin koordinatlarini tek istekte ilce/mahalleye cozumler. */
 function useKonumHaritasi(kayitlar: Konumlu[]) {
   const konumlular = useMemo(
     () => kayitlar.filter((k): k is Konumlu & { koordinat: [number, number] } => k.koordinat !== null),
@@ -160,10 +150,7 @@ function KonumFiltresi({
   );
 }
 
-/** Yatay bar grafik govdesi - tur grubu/departman/talep durumu dagilimlari
- *  ayni gorseli kullanir. Baslik disaridan cizilir (bkz. `DagilimBarlari` /
- *  `TurDepartmanDagilimi`) ki tek grafik hem duz basliga hem toggle'li
- *  baslika oturabilsin. */
+/** Yatay bar grafik govdesi; baslik disaridan cizilir. */
 function DagilimGrafigi({
   veri,
   altYazi,
@@ -220,8 +207,7 @@ function DagilimGrafigi({
   );
 }
 
-/** Baslikli tek-kirilim grafik (orn. talep durum dagilimi) - toggle'i olmayan
- *  yerlerde `TurDepartmanDagilimi`'nin baslik+govde iskeletiyle ayni gorunur. */
+/** Baslikli tek-kirilim grafik (orn. talep durum dagilimi). */
 function DagilimBarlari({
   baslik,
   veri,
@@ -253,9 +239,7 @@ interface Kirilim {
   vurgu: number;
 }
 
-/** Ilce/mahalle konum kirilimi - satira tiklamak drill-down yapar. Hem
- *  varlik ("bakim") hem talep ("bekleyen") sekmesinde ayni gorseli kullanir;
- *  `vurguEtiket` ikincil sayinin ne oldugunu soyler (orn. "bakım"/"bekliyor"). */
+/** Ilce/mahalle konum kirilimi - satira tiklamak drill-down yapar. */
 function KonumKirilimi({
   baslik,
   kirilim,
@@ -364,8 +348,7 @@ function DisaAktar({
   );
 }
 
-/** Ust breadcrumb seridi - seviyeye gore rengi/etiketi degisir. İki sekme de
- *  aynisini kullanir; sag ustteki sayi/etiket disaridan verilir. */
+/** Ust breadcrumb seridi - seviyeye gore rengi/etiketi degisir. */
 function UstSerit({
   seviye,
   ilceFiltre,
@@ -439,9 +422,6 @@ export default function Dashboard({
 }: DashboardProps) {
   const [sekme, setSekme] = useState<OzetSekmesi>("varliklar");
 
-  // Talepler sekmesi vatandas/saha rolune hic ulasilamaz (Ozet modali zaten
-  // yalnizca personele acilir), ama talep verisi gelmemisse (hook devre disi)
-  // sekmeyi gostermek anlamsizdir.
   const talepVarMi = talepGorunumleri !== undefined;
 
   return (
@@ -559,7 +539,6 @@ function VarlikOzeti({
   const bakimGerekli = filtrelenmis.filter((f) => f.properties.status === "bakim_lazim").length;
   const bakimOrani = toplam === 0 ? 0 : Math.round((bakimGerekli / toplam) * 100);
 
-  // Departman dagilimi: "hangi mudurlugun ustunde kac is var".
   const departmanDagilimi = (departmanlar ?? [])
     .map((d) => ({
       anahtar: d.kod,
@@ -624,7 +603,6 @@ function VarlikOzeti({
           }}
         />
 
-        {/* Hero figur - gorunumdeki tek buyuk sayi */}
         <div className="mb-5">
           <p className="text-xs text-slate-500">
             {filtreAktif ? "Seçili konumdaki varlık" : "Toplam varlık"}
@@ -632,7 +610,6 @@ function VarlikOzeti({
           <p className="text-5xl font-semibold leading-tight text-slate-900">{toplam}</p>
         </div>
 
-        {/* Bakim orani - meter (dolgu severity, track ayni ramp'in acik adimi) */}
         <div className="mb-6">
           <div className="mb-1.5 flex items-baseline justify-between">
             <span className="text-xs text-slate-500">Bakım gerektiren</span>

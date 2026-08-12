@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-/** Sheet'in oturabilecegi kademeler: gorunur yuksekligin oranlari.
- *
- *  Iki kademe var cunku mobilde asil soru "panel mi harita mi" degil "ikisini
- *  nasil paylastiririm": yarim kademede kullanici listeyi okurken haritanin
- *  ust yarisini gormeye devam eder, tam kademede formu doldurur. Uc kademe
- *  denendiginde surukleme hedefleri birbirine cok yaklasiyordu. */
+/** Sheet'in oturabilecegi kademeler: gorunur yuksekligin oranlari. Yarim
+ *  kademede harita ust yaridan gorunmeye devam eder. Uc kademe denendiginde
+ *  surukleme hedefleri birbirine cok yaklasiyordu. */
 const KADEMELER = [0.5, 0.92] as const;
 
-/** Bu esigin altina surukleyip birakmak sheet'i kapatir. En dusuk kademenin
- *  biraz altinda: kullanici kapatmak icin ekranin dibine kadar inmek zorunda
- *  kalmasin, ama listeyi kucultmek isterken yanlislikla da kapatmasin. */
+/** Bu esigin altina surukleyip birakmak sheet'i kapatir. */
 const KAPATMA_ESIGI = 0.32;
 
 export interface SheetProps {
@@ -30,19 +25,19 @@ export interface SheetProps {
    *  yoneten tam panel bilesenleri icin degistirilebilir. */
   govdeSinifi?: string;
   /** Sheet'in altinda kalmasi gereken bosluk (px) - alt sekme cubugu gibi.
-   *  Kademe oranlari bu bosluk dusuldukten SONRAKI alana gore hesaplanir. */
+   *  Kademe oranlari bu bosluk dusuldukten sonraki alana gore hesaplanir. */
   altBosluk?: number;
-  /** Acik bir panelin UZERINE binen sheet (katman, menu). Kapatilinca alttaki
-   *  panel yerinde durmaya devam eder - kullanicinin acik listesi kaybolmaz. */
+  /** Acik bir panelin uzerine binen sheet (katman, menu); kapatilinca alttaki
+   *  panel yerinde kalir. */
   ustte?: boolean;
+  /** Panelin cikabilecegi en genis kademe. Varsayilan tam; "yarim" verilirse
+   *  sheet buyumez (tutamak dugmesi de gizlenir). */
+  enGenisKademe?: "yarim" | "tam";
 }
 
 /** Alttan cikan, kademeli ve suruklenebilir panel: mobilde haritanin yerini
- *  almaz, uzerine biner ve kullanici istedigi kadarini acar.
- *
- *  Kapaliyken hic monte edilmez; boylece her acilis kademe durumunu sifirdan
- *  kurar (bir onceki kullanimda tam acilmis olmasi, bir sonraki - belki cok
- *  kisa - icerik icin dogru kademe oldugu anlamina gelmez). */
+ *  almaz, uzerine biner. Kapaliyken hic monte edilmez, boylece her acilis
+ *  kademe durumunu sifirdan kurar. */
 export default function Sheet({ acik, ...props }: SheetProps) {
   if (!acik) return null;
   return <SheetGovde {...props} />;
@@ -59,23 +54,33 @@ function SheetGovde({
   govdeSinifi = "flex-1 overflow-y-auto overscroll-contain",
   altBosluk = 0,
   ustte,
+  enGenisKademe = "tam",
 }: Omit<SheetProps, "acik">) {
-  const [kademe, setKademe] = useState(baslangic === "tam" ? 1 : 0);
+  // Kullanilabilir kademeler tavana gore kirpilir; tek kademe kalirsa panel
+  // sabit yukseklikte olur (surukleyerek yalnizca kapatilabilir).
+  const kademeler =
+    enGenisKademe === "yarim" ? KADEMELER.slice(0, 1) : [...KADEMELER];
+  const enUst = kademeler.length - 1;
+  const [kademe, setKademe] = useState(
+    baslangic === "tam" ? Math.min(1, enUst) : 0
+  );
   const kutuRef = useRef<HTMLDivElement>(null);
   // Surukleme durumu ref'te tutulur: cizim sirasinda React state'ine
-  // DOKUNULMAZ (`useSekilDuzenleme`'deki taslak deseniyle ayni), yoksa her
-  // karede tum panel agaci - orn. 300 satirlik varlik listesi - yeniden
-  // cizilirdi. Kademe yalnizca birakma aninda islenir.
+  // dokunulmaz, yoksa her karede tum panel agaci yeniden cizilirdi. Kademe
+  // yalnizca birakma aninda islenir.
   const surukleRef = useRef<{ baslangicY: number; baslangicPx: number } | null>(
     null
   );
 
   /** Bir kademenin piksel karsiligi. Yuzde yerine piksel yazilir: yuzde degeri
-   *  mobil tarayicilarda adres cubugu gizlenip acildikca degisiyor ve panel
-   *  kullanici kaydirdikca "nefes aliyordu". */
+   *  adres cubugu gizlenip acildikca degisip panelin "nefes almasina" yol
+   *  aciyordu. */
   const kademePx = useCallback(
-    (i: number) => (window.innerHeight - altBosluk) * KADEMELER[i],
-    [altBosluk]
+    (i: number) =>
+      (window.innerHeight - altBosluk) *
+      kademeler[Math.min(Math.max(i, 0), kademeler.length - 1)],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [altBosluk, enGenisKademe]
   );
 
   // Cihaz donunce / klavye acilinca yukseklik yeniden hesaplanmali.
@@ -108,14 +113,12 @@ function SheetGovde({
     const s = surukleRef.current;
     if (!s || !kutuRef.current) return;
     const kullanilabilir = window.innerHeight - altBosluk;
-    // Asagi surukleme yuksekligi azaltir; ust sinir en genis kademedir.
     const yeni = Math.min(
-      kademePx(KADEMELER.length - 1),
+      kademePx(enUst),
       Math.max(0, s.baslangicPx - (e.clientY - s.baslangicY))
     );
     kutuRef.current.style.height = `${yeni}px`;
-    // Kapatma esigine inildiginde panel soluklasir: birakinca ne olacagini
-    // birakmadan once gostermek gerekiyor.
+    // Kapatma esigine inildiginde panel soluklasir.
     kutuRef.current.style.opacity =
       yeni < kullanilabilir * KAPATMA_ESIGI ? "0.6" : "1";
   };
@@ -139,7 +142,7 @@ function SheetGovde({
 
     let enYakin = 0;
     let enKucukFark = Infinity;
-    KADEMELER.forEach((_, i) => {
+    kademeler.forEach((_, i) => {
       const fark = Math.abs(kademePx(i) - yukseklik);
       if (fark < enKucukFark) {
         enKucukFark = fark;
@@ -152,14 +155,9 @@ function SheetGovde({
   return (
     <div
       ref={kutuRef}
-      // Haritanin uzerine biner ama onu KAPATMAZ: ustte kalan bosluktan harita
-      // gorunur ve dokunulabilir kalir - mobilde panelin tam ekran olmamasinin
-      // butun sebebi bu.
       className={`fixed inset-x-0 ${
         ustte ? "z-50" : "z-40"
       } flex flex-col overflow-hidden rounded-t-2xl border-t border-slate-200 bg-white shadow-[0_-8px_28px_-8px_rgba(15,23,42,0.35)] transition-[height] duration-200 ease-out`}
-      // Safe-area yalnizca konumda hesaba katilir; kademe oranlarindaki ~34px
-      // fark oturma noktasini gozle secilir olcude kaydirmiyor.
       style={{
         bottom: `calc(${altBosluk}px + env(safe-area-inset-bottom, 0px))`,
         height: kademePx(kademe),
@@ -167,9 +165,8 @@ function SheetGovde({
       role="dialog"
       aria-label={baslik}
     >
-      {/* Surukleme bolgesi: tutamak + baslik seridi. Govde degil BURASI
-          suruklenir - govde kaydirilabilir bir liste ve iki jest ayni yerde
-          olsaydi kullanici listeyi kaydirmaya calisirken paneli kapatirdi. */}
+      {/* Surukleme bolgesi: tutamak + baslik seridi, govde degil - govde
+          kaydirilabilir bir liste, ayni yerde olsalardi jestler catisirdi. */}
       <div
         onPointerDown={surukleBasla}
         onPointerMove={suruklerken}
@@ -177,14 +174,22 @@ function SheetGovde({
         onPointerCancel={surukleBitir}
         className={`shrink-0 touch-none border-b ${baslikSinifi}`}
       >
-        <button
-          type="button"
-          onClick={() => kademeyeOtur(kademe === 0 ? 1 : 0)}
-          aria-label={kademe === 0 ? "Paneli büyüt" : "Paneli küçült"}
-          className="flex w-full justify-center py-2.5"
-        >
-          <span className="h-1 w-10 rounded-full bg-slate-300" />
-        </button>
+        {/* Tek kademe kaldiysa tutamak dugme olmaktan cikar (tepki vermeyen
+            hedef olmasin). */}
+        {enUst === 0 ? (
+          <div className="flex w-full justify-center py-2.5">
+            <span className="h-1 w-10 rounded-full bg-slate-300" />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => kademeyeOtur(kademe === 0 ? 1 : 0)}
+            aria-label={kademe === 0 ? "Paneli büyüt" : "Paneli küçült"}
+            className="flex w-full justify-center py-2.5"
+          >
+            <span className="h-1 w-10 rounded-full bg-slate-300" />
+          </button>
+        )}
 
         <div className="flex items-center gap-2 px-4 pb-2.5">
           {ikon}

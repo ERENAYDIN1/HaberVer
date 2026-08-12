@@ -24,8 +24,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <AuthProvider>
           <Routes>
             <Route path="/giris" element={<Giris />} />
-            {/* Rol bazli giris sayfalari kalkti (tek kapi /giris); eski
-                baglantilar kirilmasin diye oraya yonlendiriliyor. */}
+            {/* Eski rol bazli giris baglantilari icin yonlendirme */}
             <Route
               path="/vatandas/giris"
               element={<Navigate to="/giris" replace />}

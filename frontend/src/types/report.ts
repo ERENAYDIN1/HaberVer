@@ -45,10 +45,8 @@ export function talepGorunumu(
  *  swatch'lari da buradan beslenir. */
 export const TALEP_DURUM_RENGI: Record<TalepGorunumu, string> = {
   beklemede: "#9333ea",
-  // Bakim lazim varlikla ayni amber: ikisi de acik is.
   onaylandi: "#f59e0b",
   reddedildi: "#e11d48",
-  // Kapanmis is icin notr gri: "artik is yok".
   tamir: "#64748b",
 };
 
@@ -70,17 +68,11 @@ export interface TalepGiysisi {
 }
 
 export const TALEP_GIYSISI: Record<TalepGorunumu, TalepGiysisi> = {
-  // Acik is: dolu amber halka, bakim lazim varlikla ayni giysi. Rozet YOK:
-  // halka ile "!" ayni kosula bagli iki isaretti ve ayni seyi iki kez soyleyip
-  // pini kalabalıklastiriyordu (varlik tarafinda da ayni sebeple kaldirildi).
-  // Halkasi olmayan gorunumlerde (tamir/reddedildi) rozet TEK isaret oldugu
-  // icin orada durmaya devam eder.
+  // Acik is: rozet YOK - halka ile "!" ayni seyi iki kez soyleyip pini
+  // kalabalıklastiriyordu.
   onaylandi: { halka: true, halkaKesikli: false, rozet: null, opaklik: 1 },
-  // Kapanmis is: halkasiz, sonuk, kucuk onay isareti.
   tamir: { halka: false, halkaKesikli: false, rozet: "onay", opaklik: 0.5 },
-  // Karar bekliyor: kesikli mor halka.
   beklemede: { halka: true, halkaKesikli: true, rozet: "soru", opaklik: 1 },
-  // Reddedildi: en sonuk, neredeyse arka planda.
   reddedildi: { halka: false, halkaKesikli: false, rozet: "carpi", opaklik: 0.38 },
 };
 
@@ -94,14 +86,10 @@ export const ROZETLI_GORUNUMLER = TALEP_GORUNUMLERI.filter(
 );
 
 /* --- Talep sekli ---------------------------------------------------------
- *
- * Vatandas artik yalnizca bir nokta isaretlemiyor: bir yol catlagi CIZGI, bir
- * cukur alani POLIGON olarak bildirilebilir. Bir yol catlagi nokta degildir ve
- * tek noktaya sikistirilinca sahadaki isin buyuklugu kayboluyordu.
- *
- * Onaydan olusan VARLIK yine noktadir (talebin temsil noktasi): envanter,
- * atama mesafesi ve harita isaretcisi tek nokta uzerinden calisir. Ham sekil
- * talep kaydinda bir belge olarak durur. */
+ * Vatandas nokta disinda CIZGI (yol catlagi) ve POLIGON (cukur alani) da
+ * bildirebilir. Onaydan olusan VARLIK yine noktadir (talebin temsil noktasi):
+ * envanter/atama/harita tek nokta uzerinden calisir, ham sekil talep
+ * kaydinda bir belge olarak durur. */
 
 export const TALEP_SEKILLERI = ["Point", "LineString", "Polygon"] as const;
 export type TalepSekilTipi = (typeof TALEP_SEKILLERI)[number];

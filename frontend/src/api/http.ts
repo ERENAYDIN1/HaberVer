@@ -1,12 +1,9 @@
 import { girisBaslat } from "../auth/token";
 
 /** Tum API modullerinin ortak fetch katmani: tek BASE_URL, tek hata okuma,
- *  tek 401 davranisi.
- *
- *  Kimlik `credentials: "include"` ile gonderilen httpOnly cookie'dedir;
- *  Authorization basligi yoktur. Bunun sarti API'nin uygulamayla ayni
- *  origin'de olmasi - bu yuzden BASE_URL goreli bir yoldur ("/api") ve
- *  Vite/reverse proxy istegi backend'e iletir. */
+ *  tek 401 davranisi. Kimlik `credentials: "include"` ile gonderilen httpOnly
+ *  cookie'dedir; bu yuzden BASE_URL goreli bir yoldur ("/api") ve API'nin
+ *  uygulamayla ayni origin'de olmasi gerekir. */
 
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 

@@ -16,10 +16,8 @@ export const ASSET_STATUS_LABELS: Record<AssetStatus, string> = {
   bakim_lazim: "Bakım Lazım",
 };
 
-/* Tur gruplari: onlarca tur icin onlarca ayirt edilebilir renk olmadigindan
- * renk grubu, glif turu anlatir. Gruplarin KENDISI burada sabittir (renk
- * paleti kodda yasar); bir turun hangi gruba dustugu ise sozluk verisidir ve
- * admin ekranindan degistirilebilir. */
+/* Tur gruplari: renk grubu, glif turu anlatir. Gruplarin KENDISI kodda
+ * sabittir; bir turun hangi gruba dustugu sozluk verisidir. */
 
 export const TIP_GRUPLARI = [
   "yesil",
@@ -54,21 +52,10 @@ export const TIP_GRUP_KISA: Record<TipGrubu, string> = {
 };
 
 /** Grup -> hex renk; harita, lejant ve bildirimler bu tek kaynaktan beslenir.
- *
- *  Tonlar birbirinden AYIRT EDILEBILIR olmak zorunda: `aydinlatma` eskiden
- *  gok mavisiydi (#0284c7) ve `altyapi`nin camgobegine 8 derece hue
- *  uzakliktaydi - bir aydinlatma diregi ile su hatti isaretcisi haritada ayni
- *  maviye dusuyordu. Su icin dogal renk camgobegi oldugundan tasinan taraf
- *  aydinlatma oldu (indigo).
- *
- *  `ulasim` ve `temizlik` gruplari ANLAM tarafindan dogdu: turleri baska bir
- *  mudurlugun renginde ciziliyordu (trafik levhasi Fen Isleri'nin turuncusuyla,
- *  cop kutusu Park ve Bahceler'in zumrut yesiliyle). Grup renkleri artik ait
- *  olduklari mudurlugun rozet rengiyle birebir ayni; lejantta baslik ile satir
- *  swatch'i tek bir sey soyler. Iki sistem yine de AYRIDIR (bkz. types/
- *  departman.ts): mudurluk veridir, palet kodda yasar - yeni acilan bir
- *  mudurlugun turleri mevcut bir gruptan renk alir, frontend derlemesi
- *  beklemez. */
+ *  Tonlar birbirinden AYIRT EDILEBILIR olmak zorunda (`aydinlatma` ve
+ *  `altyapi` eskiden neredeyse ayni maviydi). Grup rengi ayrica ait oldugu
+ *  mudurlugun rozet rengiyle birebir ayni tutulur (bkz. types/departman.ts),
+ *  ama iki sistem kaynak olarak ayridir - mudurluk veridir, palet kodda yasar. */
 export const GRUP_RENGI: Record<TipGrubu, string> = {
   yesil: "#059669",
   temizlik: "#4d7c0f",

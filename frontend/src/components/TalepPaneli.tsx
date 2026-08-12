@@ -68,9 +68,7 @@ function varlikSekmesi(g: TalepGorunumu): boolean {
   return g === "onaylandi" || g === "tamir";
 }
 
-/** Ham talep siralamasi. Varsayilan "en yeni": bekleyen talep kuyrugunda en
- *  taze sikayet ustte olmali. "En eski" bilincli olarak ikinci sirada - bir
- *  triyaj kuyrugunda en uzun bekleyeni bulmak da sik istenen bir sey. */
+/** Varsayilan "en yeni". */
 const TALEP_SIRALAMASI: readonly SiralamaSecenegi<ReportFeature>[] = [
   {
     deger: "yeni",
@@ -99,15 +97,9 @@ const TALEP_SIRALAMASI: readonly SiralamaSecenegi<ReportFeature>[] = [
   },
 ];
 
-/** Talepten olusan varliklarin siralamasi: ham talep listesiyle AYNI uc
- *  secenek (en yeni / en eski / ture gore).
- *
- *  "Ada göre" bilincli olarak YOK - bu kayitlarin adini da vatandas yaziyor
- *  (varlik talepten dogdugu icin adi talepten geliyor). Serbest metinde ortak
- *  bir adlandirma duzeni olmadigindan alfabetik siralama anlamli bir kumeleme
- *  uretmez, yalnizca karisik bir liste verir. "Bakım Lazım önce" de yok: bu
- *  sekmeler zaten duruma gore bolunmus (Onaylandı = bakim_lazim, Tamir Edildi
- *  = iyi), secenek tek gruplu bir listede hicbir sey degistirmezdi. */
+/** Talepten olusan varliklarin siralamasi. "Ada göre" bilincli olarak yok:
+ *  varlik adi vatandasin serbest metninden gelir, alfabetik siralama anlamli
+ *  bir kumeleme uretmez. */
 const TALEP_VARLIK_SIRALAMASI: readonly SiralamaSecenegi<AssetFeature>[] = [
   {
     deger: "yeni",
@@ -136,16 +128,9 @@ const TALEP_VARLIK_SIRALAMASI: readonly SiralamaSecenegi<AssetFeature>[] = [
   },
 ];
 
-/** "Onaylandı" sekmesine "Önce atanmamış" eklenir.
- *
- *  YALNIZCA o sekmeye: dort sekme icinde acik isi (`bakim_lazim`) listeleyen
- *  tek sekme orasi. "Tamir Edildi"de hepsi kapanmis, ham talep sekmelerinde
- *  ise ortada atanacak bir varlik yok - secenek secildiginde hicbir sey
- *  degistirmeyen olu bir satir olurdu.
- *
- *  Bu, "sekme degistirmek secenekleri degistirmemeli" ilkesinin bilincli
- *  istisnasi: ilkenin amaci ayni anlamdaki secenegin sekmeden sekmeye kaybolup
- *  gorunmemesiydi; burada secenek digerlerinde zaten ANLAMSIZ. */
+/** "Onaylandı" sekmesine "Önce atanmamış" eklenir - dort sekme icinde acik isi
+ *  (`bakim_lazim`) listeleyen tek sekme orasi, digerlerinde secenek anlamsiz
+ *  olurdu. */
 function talepVarlikSiralamasi(
   atanmamisIdler: ReadonlySet<string> | undefined,
   durum: TalepGorunumu
@@ -168,34 +153,24 @@ function talepVarlikSiralamasi(
 
 interface TalepPaneliProps {
   /** Alt sekme; App.tsx'te tutulur ki bildirimden gelen bir kayit dogru
-   *  sekmeyi acabilsin ve harita ne gosterecegini bilsin. */
+   *  sekmeyi acabilsin. */
   durum: TalepGorunumu;
   onDurumChange: (d: TalepGorunumu) => void;
-  /** Onay yeni bir varlik olusturunca ana listeyi tazelemek icin. */
   onVarlikOlustu?: () => void;
-  /** Yuklenen ham talepleri ust bilesene bildirir (haritada gosterilirler). */
   onTaleplerChange?: (talepler: ReportFeature[]) => void;
   seciliRaporId?: string | null;
   onRaporSec?: (id: string) => void;
-  /** Talepten olusan varliklar; App.tsx zaten tuttugu icin tekrar cekilmez. */
   talepVarlikSorgu: TalepVarlikSorguSonucu;
   seciliVarlikId?: string | null;
   onVarlikSec: (id: string) => void;
-  /** Saha ekipleri: varlik detayindan ekibe atama yapilabilsin diye. */
   ekipler?: EkipOzet[];
   onVarligaGit?: (asset: AssetFeature) => void;
-  /** Haritada bir alan (ilce/mahalle ya da cizilen poligon) seciliyse liste de
-   *  o sinirla daralir; yoksa null. Lejant sayaclariyla ayni olcut. */
+  /** Haritada bir alan seciliyse liste de o sinirla daralir; yoksa null. */
   alandaMi?: ((nokta: [number, number]) => boolean) | null;
-  /** Havuzda bekleyen varliklarin id'leri; "Onaylandı" sekmesinde "Önce
-   *  atanmamış" siralamasini acar (bkz. talepVarlikSiralamasi). */
   atanmamisIdler?: ReadonlySet<string>;
   /** Lejanttaki mudurluk alt-filtresiyle AYNI state'i okur (App.tsx). Yalnizca
-   *  "Onaylandı"/"Bekleyen" gorunumlerinde kisitlar, digerlerinde hep true
-   *  doner - lejant kutucugunu kapatinca bu panel de daralmali, aksi halde
-   *  filtre yalnizca sayaclari etkileyip listede "etkisiz" gorunur. */
+   *  "Onaylandı"/"Bekleyen" gorunumlerinde kisitlar. */
   mudurlukSecili?: (gorunum: TalepGorunumu, tur: AssetType) => boolean;
-  /** Mobil kabuk: arac cubugu dar ekranda daha sikisik dizilir. */
   mobil?: boolean;
 }
 
@@ -223,7 +198,6 @@ export default function TalepPaneli({
   const [duzenlenen, setDuzenlenen] = useState<AssetFeature | null>(null);
   const [detayAsset, setDetayAsset] = useState<AssetFeature | null>(null);
   const seciliVarlikRef = useRef<HTMLLIElement>(null);
-  // "Varlıklar" panelindekiyle ayni yonetim kumesi.
   const yonetim = useVarlikYonetimi({
     ekipler,
     onDuzenle: setDuzenlenen,
@@ -236,25 +210,22 @@ export default function TalepPaneli({
   const [islemdeki, setIslemdeki] = useState<string | null>(null);
 
   // Talep listesi react-query uzerinden gider: App'teki harita/lejant
-  // sorgulariyla ayni onbellegi paylasir, boylece onay/ret sonrasi hepsi
-  // birlikte tazelenir. Varlik listeleyen sekmelerde talep cekilmez.
+  // sorgulariyla ayni onbellegi paylasir. Varlik listeleyen sekmelerde talep
+  // cekilmez.
   const varlikListesi = varlikSekmesi(durum);
   const talepSorgu = useQuery({
     queryKey: ["reports", durum],
     queryFn: () => listReports(durum as ReportStatus),
     enabled: !varlikListesi,
   });
-  // Tip filtresi: AssetList'teki checkbox coklu secim acilirinin ayni deseni,
-  // ama haritayla PAYLASILMAYAN yerel bir state - bu panel talepleri/talepten
-  // dogan varliklari listeler, lejantin varlik katmani filtresiyle karismaz.
+  // Tip filtresi: haritayla paylasilmayan yerel bir state.
   const tumTurKodlari = turKodlari();
   const [tipler, setTipler] = useState<Record<AssetType, boolean>>(() =>
     hepsi(tumTurKodlari)
   );
   const tipDegistir = (t: AssetType) =>
     setTipler((onceki) => ({ ...onceki, [t]: !onceki[t] }));
-  // Yeni bir tur eklenirse kutucugu ACIK baslar (useKatmanlar'daki desenle
-  // ayni): eksik anahtar sessizce "gizli" anlamina gelmesin.
+  // Yeni bir tur eklenirse kutucugu acik baslar (eksik anahtar = gizli olmasin).
   useEffect(() => {
     setTipler((onceki) => {
       const eksik = tumTurKodlari.filter((t) => !(t in onceki));
@@ -264,8 +235,8 @@ export default function TalepPaneli({
   }, [tumTurKodlari.length]);
   const tipSuzgeciAktif = tumTurKodlari.some((t) => !tipler[t]);
 
-  // Alan + tip suzgeci uygulanmis liste memo'lanir: her render'da yeni bir
-  // dizi uretmek `onTaleplerChange` efektini surekli tetiklerdi.
+  // Memo'lanir: her render'da yeni bir dizi `onTaleplerChange` efektini
+  // surekli tetikler.
   const talepler = useMemo(() => {
     if (varlikListesi) return BOS_TALEPLER;
     const tumu = talepSorgu.data?.features ?? BOS_TALEPLER;
@@ -273,8 +244,7 @@ export default function TalepPaneli({
       if (tipSuzgeciAktif && !tipler[f.properties.type]) return false;
       if (mudurlukSecili && !mudurlukSecili(durum, f.properties.type)) return false;
       if (!alandaMi) return true;
-      // Alan suzgeci seklin temsil noktasina bakar: bir cizgi/alan talebi
-      // secili alana "girdi mi" sorusunun tek anlamli cevabi budur.
+      // Alan suzgeci seklin temsil noktasina bakar.
       const n = talepNoktasi(f);
       return n ? alandaMi(n) : false;
     });
@@ -287,26 +257,16 @@ export default function TalepPaneli({
     onTaleplerChangeRef.current = onTaleplerChange;
   });
 
-  // Yuklenen talepleri ust bilesene bildir (haritada gostermek/secmek icin).
-  //
-  // DIKKAT: buraya `talepler` gider, arama/siralama uygulanmis liste DEGIL.
-  // Arama yalnizca paneli suzer; haritada bir sorgu yaptigini sanan kullanici
-  // pinlerini kaybetmemeli (alan seciminde alinan kararla ayni).
+  // DIKKAT: buraya `talepler` gider, arama/siralama uygulanmis liste degil -
+  // haritada bir sorgu yaptigini sanan kullanici pinlerini kaybetmemeli.
   useEffect(() => {
     onTaleplerChangeRef.current?.(talepler);
   }, [talepler]);
 
-  // Arama + siralama. Iki liste (ham talep / talepten olusan varlik) ayni
-  // cubugu paylasir ama kendi secenek kumesini kullanir.
-  //
-  // Kapsam VERILMEZ, yani siralama dort alt-sekmede de ORTAKTIR. Bolge
-  // panelinden farkli olmasinin sebebi: oradaki iki sekme ayri kayit turleri
-  // (alan / cizgi), buradaki dordu ise ayni isin asamalari (bekleyen ->
-  // onayli -> tamir) ve ucu de ayni secenekleri gosteriyor. "Türe göre"
-  // secen biri kuyrugun tamamina ture gore bakmak istiyordur.
+  // Kapsam verilmez, yani siralama dort alt-sekmede de ortaktir (bekleyen ->
+  // onayli -> tamir ayni isin asamalaridir).
   const { arama, setArama, sira: hamSira, setSira } = useListeAraci("yeni");
-  // Arama yine de sekme degisince sifirlanir: listeyi GIZLEDIGI icin asili
-  // kalmasi "bu sekme bos" izlenimi veriyordu (siralama hicbir sey gizlemez).
+  // Arama sekme degisince sifirlanir (siralama sifirlanmaz).
   useAramaSifirla(setArama, durum);
 
   const varlikSiralamalari = useMemo(
@@ -314,12 +274,8 @@ export default function TalepPaneli({
     [atanmamisIdler, durum]
   );
   const aktifSecenekler = varlikListesi ? varlikSiralamalari : TALEP_SIRALAMASI;
-  /** Secili siralama aktif sekmede yoksa varsayilana duser.
-   *
-   *  "Önce atanmamış" yalnizca "Onaylandı"da var; oradan baska bir sekmeye
-   *  gecildiginde `hamSira` gecersiz kalir ve acilir BOS gorunurdu (deger
-   *  hicbir <option>'la eslesmiyor). Liste zaten ilk secenege duserdi, yani
-   *  acilir listenin gercek sirasini yanlis anlatirdi. */
+  /** Secili siralama aktif sekmede yoksa varsayilana duser ("Önce atanmamış"
+   *  yalnizca "Onaylandı"da var). */
   const sira = aktifSecenekler.some((s) => s.deger === hamSira)
     ? hamSira
     : aktifSecenekler[0].deger;
@@ -341,8 +297,7 @@ export default function TalepPaneli({
     [talepler, arama, sira]
   );
 
-  /** Onay/ret sonrasi uc durum sorgusu birden gecersiz kilinir: panel, harita,
-   *  lejant sayaclari ve bildirim zili tek hamlede tazelenir. */
+  /** Onay/ret sonrasi uc durum sorgusu birden gecersiz kilinir. */
   const talepleriTazele = () =>
     queryClient.invalidateQueries({ queryKey: ["reports"] });
 
@@ -374,8 +329,7 @@ export default function TalepPaneli({
     }
   };
 
-  /** Reddi geri al: talep "beklemede"ye doner. Alt sekme burada degistirilmez;
-   *  App'teki secim senkronu kaydi Bekleyen listesinde secili gosterir. */
+  /** Reddi geri al: talep "beklemede"ye doner. Alt sekme burada degistirilmez. */
   const geriAl = async (id: string) => {
     setIslemdeki(id);
     setIslemHatasi(null);
@@ -389,7 +343,6 @@ export default function TalepPaneli({
     }
   };
 
-  // Silme onayi satirin kendi icinde (SilOnayi) alinir.
   const sil = (asset: AssetFeature) => {
     deleteAsset.mutate(asset.properties.id, {
       onSuccess: () => {
@@ -403,8 +356,6 @@ export default function TalepPaneli({
     seciliVarlikRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [seciliVarlikId, seciliRaporId]);
 
-  // Talepten olusan varliklar iki sekmeye bolunur: hala bakim bekleyenler
-  // ("Onaylandı") ve tamir edilmis olanlar ("Tamir Edildi").
   const onayliVarliklar = talepVarlikSorgu.data?.features ?? [];
   const sekmeVarliklari = onayliVarliklar.filter(
     (a) =>
@@ -415,8 +366,6 @@ export default function TalepPaneli({
       (!mudurlukSecili || mudurlukSecili(durum, a.properties.type)) &&
       (!alandaMi || alandaMi(a.geometry.coordinates))
   );
-  // Arama/siralama sekme suzgecinin USTUNE gelir: sayac "kac tanesi
-  // gizlendi"yi dogru soylesin diye taban sekmenin kendi listesidir.
   const gosterilenVarliklar = useMemo(
     () =>
       suzVeSirala(
@@ -431,8 +380,6 @@ export default function TalepPaneli({
         varlikSiralamalari,
         sira
       ),
-    // `sekmeVarliklari` her render'da yeni bir dizi; icerigi degistiren
-    // girdilere baglanir.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       talepVarlikSorgu.data,
@@ -447,7 +394,6 @@ export default function TalepPaneli({
     ]
   );
 
-  // Iki bolum de ayni VarlikSatiri kurulumunu kullanir.
   const varlikSatiriRender = (asset: AssetFeature) => {
     const id = asset.properties.id;
     const secili = id === seciliVarlikId;
@@ -471,9 +417,11 @@ export default function TalepPaneli({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Alt sekmeler: esit genislikte ve kisa etiketli; tam etiketler
-          satirlarda/rozetlerde kullanilmaya devam eder. */}
-      <div className="grid grid-cols-4 gap-1 border-b border-slate-200 px-4 py-2">
+      <div
+        className={`grid grid-cols-4 gap-1 border-b border-slate-200 ${
+          mobil ? "px-3 py-1.5" : "px-4 py-2"
+        }`}
+      >
         {TALEP_GORUNUMLERI.map((d) => (
           <button
             key={d}
@@ -489,10 +437,11 @@ export default function TalepPaneli({
         ))}
       </div>
 
-      {/* Tip filtresi: coklu secim checkbox acilirinin ayni deseni
-          (bkz. AssetList), sekmelerin altinda - dort sekmenin de ortak
-          filtresidir. */}
-      <div className="flex gap-2 border-b border-slate-200 px-4 py-3">
+      <div
+        className={`flex border-b border-slate-200 ${
+          mobil ? "gap-1.5 px-3 py-1.5" : "gap-2 px-4 py-2"
+        }`}
+      >
         <TipCoktanSecici
           turler={tumTurKodlari}
           secili={tipler}
@@ -501,14 +450,13 @@ export default function TalepPaneli({
         />
       </div>
 
-      {/* Cubuk sekmelerin ALTINDA: sekme "hangi liste", cubuk "o listede ne
-          ariyorum" - okuma sirasi da bu. */}
       <ListeAraciCubugu
         mobil={mobil}
         arama={{
           deger: arama,
           onDegis: setArama,
           ipucu: "Başlık, açıklama veya tür ara…",
+          mobilIpucu: "Talep ara",
         }}
         siralama={{
           secenekler: aktifSecenekler,

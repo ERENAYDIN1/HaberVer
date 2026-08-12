@@ -18,13 +18,9 @@ interface TipSecenekleriProps {
 /**
  * Bir `<select>` icin gruplanmis tur `<option>`'lari.
  *
- * Gruplama MUDURLUGE goredir ("Park ve Bahçeler Müdürlüğü"), turun renk
- * grubuna degil: kullanicinin bir tur secerken sordugu soru "bu is kime
- * gidecek"tir, "haritada hangi renkle cizilecek" degil. Ayni kategorileme
- * lejantta ve yonetim ekraninda da kullanilir (`departmanTurGruplari`).
- *
- * Sozluk henuz gelmediyse gruplama yapilmaz, turler duz listelenir - bir an
- * "yönlendirilmemiş" baslikari gorunup sonra yerine oturmasindansa.
+ * Gruplama MUDURLUGE goredir, turun renk grubuna degil (ayni kategorileme
+ * lejantta ve yonetim ekraninda da kullanilir, `departmanTurGruplari`).
+ * Sozluk henuz gelmediyse gruplama yapilmaz, turler duz listelenir.
  */
 export default function TipSecenekleri({ turler }: TipSecenekleriProps) {
   const { data: departmanlar } = useDepartmanlar();

@@ -2,12 +2,7 @@ import type { ReactNode } from "react";
 
 import { IconLasso, IconPin, IconRoute, IconX } from "./icons";
 
-/** "Ekle" panelinin ilk adimi: ne eklenecegi secilir.
- *
- *  Uc secenek de sonunda haritaya bir sekil koyar; farklari sekil (nokta /
- *  alan / cizgi) ve olusan kayit turudur. Eskiden varlik dogrudan formla,
- *  bolge ve guzergah ise ust bardaki iki ayri dugmeyle acildigindan "yeni bir
- *  sey ekleme" isi ekranin uc ayri yerine dagilmisti. */
+/** "Ekle" panelinin ilk adimi: ne eklenecegi secilir. */
 
 export type EkleKipi = "varlik" | "alan" | "cizgi";
 
@@ -16,8 +11,6 @@ interface SecenekTanimi {
   etiket: string;
   aciklama: string;
   ikon: (p: { className?: string }) => ReactNode;
-  /** Kartin kendi rengi; haritada o kaydin ciziminde kullanilan renkle ayni
-   *  ailedendir (bolge mor, guzergah mavi, varlik zumrut). */
   renk: {
     kenar: string;
     zemin: string;
@@ -66,13 +59,10 @@ const SECENEKLER: SecenekTanimi[] = [
 ];
 
 interface Props {
-  /** Secili kip; hicbiri secili degilse secim ekrani gosterilir. */
   kip: EkleKipi | null;
   onKipSec: (kip: EkleKipi) => void;
-  /** Secimden geri donus (cizim modunu da kapatir). */
   onGeri: () => void;
   mobil: boolean;
-  /** Varlik formu; yalnizca `kip === "varlik"` iken cizilir. */
   form: ReactNode;
 }
 
@@ -114,8 +104,6 @@ export function EklePaneli({ kip, onKipSec, onGeri, mobil, form }: Props) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Secilen kip yapiskan bir seritte durur: kullanici hangi kipte
-          oldugunu ve nasil vazgececegini her an gorur. */}
       <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
         <span
           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded ${secili.renk.rozet}`}
@@ -146,9 +134,7 @@ export function EklePaneli({ kip, onKipSec, onGeri, mobil, form }: Props) {
             {form}
           </>
         ) : (
-          // Cizim haritada yapiliyor; panelde yalnizca ne beklendigi yazar.
-          // Nokta sayisi, olcu, "Geri al" ve "Tamamla" alt-ortadaki cizim
-          // panelindedir - iki yerde ayni kontrolu gostermemek icin.
+          // Cizim haritada yapilir; nokta sayisi/olcu/geri al/tamamla alt-ortadaki cizim panelindedir.
           <p className="border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">
             Haritada{" "}
             {kip === "alan"

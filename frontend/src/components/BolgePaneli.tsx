@@ -25,13 +25,8 @@ import {
 } from "../utils/listeAraci";
 import { IconCheck, IconLasso, IconRoute, IconUsers, IconX } from "./icons";
 
-/** Siralama secenekleri. Varsayilan "en yeni": panel bugune kadar backend ne
- *  dondururse o sirada listeliyordu.
- *
- *  "Büyükten küçüğe" bilincli olarak YOK: bir bolgenin m²'si ya da bir
- *  guzergahin metresi kaydi BULMAYA yaramiyor - personel bir kaydi adiyla,
- *  tarihiyle ya da atanip atanmadigiyla ariyor, "en buyuk alan hangisi" diye
- *  degil. Olcu zaten her kartin uzerinde yaziyor. */
+/** Varsayilan "en yeni". "Büyükten küçüğe" bilincli olarak yok: olcu bir kaydi
+ *  bulmaya yaramaz, zaten her kartin uzerinde yazar. */
 const BOLGE_SIRALAMASI: readonly SiralamaSecenegi<Bolge>[] = [
   {
     deger: "yeni",
@@ -44,16 +39,11 @@ const BOLGE_SIRALAMASI: readonly SiralamaSecenegi<Bolge>[] = [
     karsilastir: (a, b) => tariheGoreYeni(b.created_at, a.created_at),
   },
   {
-    // Ad burada ANLAMLI (talep panelinden farkli): bolge/guzergah adlarini
-    // vatandas degil personelin kendisi koyuyor, duzenli bir adlandirma
-    // duzeni oluyor.
     deger: "ad",
     etiket: "Ada göre (A-Z)",
     karsilastir: (a, b) => metinKarsilastir(a.ad, b.ad),
   },
   {
-    // Atanmamis kayitlar one gelir: "hangisi hala bir ekip bekliyor" bu
-    // panelde en sik sorulan islevsel soru.
     deger: "atanmamis",
     etiket: "Önce atanmamış",
     karsilastir: (a, b) => {
@@ -110,29 +100,22 @@ const TIP_GORUNUMU: Record<
 
 interface BolgePaneliProps {
   tip: BolgePanelTipi;
-  /** Atama listesini besleyen saha ekipleri. */
   ekipler?: EkipOzet[];
   /** Haritada gizlenmis bolgelerin id'leri (varsayilan: hepsi gorunur). */
   gizliler: Set<string>;
   onGorunurlukDegis: (id: string) => void;
-  /** Id'ler panelin kendi (tipe suzulmus) listesinden gecirilir; App'te ayri
-   *  bir kopya bayatlamasin ve diger turun gorunurlugu bozulmasin. */
   onTumunuGoster: (idler: string[]) => void;
   onTumunuGizle: (idler: string[]) => void;
   /** Bu turun harita katmani acik mi; kapaliyken panel uyari gosterir. */
   katmanAcik?: boolean;
   onKatmaniAc?: () => void;
   onBolgeyeGit: (bolge: Bolge) => void;
-  /** Sekil duzenleme harita uzerinde yapildigi icin App'e devredilir. */
   onSekilDuzenle?: (bolge: Bolge) => void;
   sekilDuzenlenenId?: string | null;
-  /** Haritada secili kayit: karti vurgular ve gorunur alana kaydirir. */
   seciliId?: string | null;
   onDetay?: (bolge: Bolge) => void;
-  /** Haritada bir alan (ilce/mahalle ya da cizilen poligon) seciliyse liste de
-   *  o sinirla daralir: kaydin koselerinden biri alanin icindeyse gorunur. */
+  /** Haritada bir alan seciliyse liste de o sinirla daralir. */
   alanda?: ((bolge: Bolge) => boolean) | null;
-  /** Mobil kabuk: arac cubugu dar ekranda daha sikisik dizilir. */
   mobil?: boolean;
 }
 
@@ -158,11 +141,9 @@ export default function BolgePaneli({
 }: BolgePaneliProps) {
   const queryClient = useQueryClient();
   const sorgu = useQuery({ queryKey: ["bolgeler"], queryFn: bolgeleriGetir });
-  // Yarim kalmis islemler HANGI SEKMEDE acildiklariyla birlikte tutulur ve
-  // yalnizca o sekmede okunur (`useListeAraci`'nin arama icin kullandigi
-  // kalibin aynisi). Sekme degisince bir sifirlama efekti calistirmak yerine
-  // deger okunurken suzuluyor: efekt bir kare gecikir ve o karede "Bölgeler"
-  // sekmesinde acilmis bir silme onayi "Güzergâhlar"da gorunurdu.
+  // Yarim kalmis islemler hangi sekmede acildiklariyla birlikte tutulur ve
+  // yalnizca o sekmede okunur - sekme gecisinde bir sekmede acik kalan silme
+  // onayi digerinde gorunmesin diye.
   const [duzenlemeDurumu, setDuzenlemeDurumu] = useState<{
     tip: BolgePanelTipi;
     duzenlenen: string | null;
@@ -173,8 +154,8 @@ export default function BolgePaneli({
   const duzenlenen = kendiSekmesi ? duzenlemeDurumu.duzenlenen : null;
   const silinecek = kendiSekmesi ? duzenlemeDurumu.silinecek : null;
   const hata = kendiSekmesi ? duzenlemeDurumu.hata : null;
-  /** Yarim kalmis islem durumunu gunceller; kayit her zaman AKTIF sekmeye
-   *  yazilir, boylece diger sekmenin durumu kendiliginden dusar. */
+  /** Yarim kalmis islem durumunu gunceller; kayit her zaman aktif sekmeye
+   *  yazilir. */
   const durumYaz = (
     yama: Partial<Omit<typeof duzenlemeDurumu, "tip">>
   ) =>
@@ -196,14 +177,10 @@ export default function BolgePaneli({
     seciliRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [seciliId]);
 
-  /** Bolge artik tekil bakim isiyle AYNI kotayi paylasiyor: bir bolgeyi atamak
-   *  ekibin yukunu degistirir, yani harita isaretcisi ve saha panosu da
-   *  tazelenmeli.
-   *
-   *  SOZ DONDURULUR ve `onSuccess`ten geri verilir: react-query boyle yapinca
+  /** Soz dondurulur ve `onSuccess`ten geri verilir: react-query boyle yapinca
    *  mutasyonu tazeleme bitene kadar "pending" sayar. Aksi halde `isPending`
-   *  yeni veriden once duser ve `EkipSecici` o pencerede hala ESKI atamayi
-   *  gorur - havuza yeni alinmis kayit "Zaten atalı" gorunurdu. */
+   *  yeni veriden once duser ve `EkipSecici` o pencerede hala eski atamayi
+   *  gorur. */
   const tazele = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ["bolgeler"] }),
@@ -238,11 +215,8 @@ export default function BolgePaneli({
     [sorgu.data, tip, alanda]
   );
 
-  // Arama + siralama; ikisi de YALNIZCA paneli etkiler, harita katmani tam
-  // kalir (varlik/talep panellerindeki kararla ayni).
-  //
-  // Kapsam `tip`tir: "Bölgeler" ve "Güzergâhlar" ayni bileseni paylasir ama
-  // ayri listelerdir. Arama sekme degisince sifirlanir, siralama sekme basina
+  // Arama + siralama yalnizca paneli etkiler, harita katmani tam kalir.
+  // Kapsam `tip`tir: arama sekme degisince sifirlanir, siralama sekme basina
   // hatirlanir (bkz. useListeAraci).
   const { arama, setArama, sira, setSira } = useListeAraci("yeni", tip);
 
@@ -251,8 +225,6 @@ export default function BolgePaneli({
       suzVeSirala(
         bolgeler,
         arama,
-        // Atanan ekip de aranir: "Ahmet'in bolgesi hangisiydi" bu panelde ada
-        // gore aramak kadar sik sorulan bir soru.
         (b) => aramaMetni(b.ad, b.aciklama, b.worker_ad),
         BOLGE_SIRALAMASI,
         sira
@@ -262,10 +234,16 @@ export default function BolgePaneli({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 border-b border-slate-200 px-3.5 py-2.5">
-        <p className="text-xs text-slate-500">{gorunum.aciklama}</p>
+      <div
+        className={`shrink-0 border-b border-slate-200 ${
+          mobil ? "px-3 py-1.5" : "px-3.5 py-2.5"
+        }`}
+      >
+        {!mobil && <p className="text-xs text-slate-500">{gorunum.aciklama}</p>}
         {bolgeler.length > 0 && (
-          <div className="mt-2 flex items-center gap-3 text-xs">
+          <div
+            className={`flex items-center gap-3 text-xs ${mobil ? "" : "mt-2"}`}
+          >
             <button
               onClick={() => onTumunuGoster(bolgeler.map((b) => b.id))}
               className="font-medium text-emerald-700 hover:underline"
@@ -300,12 +278,15 @@ export default function BolgePaneli({
         )}
       </div>
 
-      {/* Bos listede cubuk hic cizilmez: siralanacak bir sey yokken "En yeni"
-          acilirı gostermek anlamsiz. */}
       {bolgeler.length > 0 && (
         <ListeAraciCubugu
           mobil={mobil}
-          arama={{ deger: arama, onDegis: setArama, ipucu: "Ad, açıklama veya ekip ara…" }}
+          arama={{
+            deger: arama,
+            onDegis: setArama,
+            ipucu: "Ad, açıklama veya ekip ara…",
+            mobilIpucu: tip === "alan" ? "Bölge ara" : "Güzergâh ara",
+          }}
           siralama={{ secenekler: BOLGE_SIRALAMASI, deger: sira, onDegis: setSira }}
           sayac={{
             gorunen: gosterilen.length,
@@ -333,8 +314,6 @@ export default function BolgePaneli({
             ikon={gorunum.ikon}
             renk={gorunum.renk}
             bolgeler={gosterilen}
-            // Sayac basliktaki hapta duruyor: arama aktifken suzulmus sayiyi
-            // degil TOPLAMI gostermeli, yoksa "3 kayit var" sanilir.
             toplam={bolgeler.length}
             bos={`"${arama.trim()}" aramasına uyan kayıt yok.`}
             render={(b) => (
@@ -498,9 +477,9 @@ const BolgeKarti = forwardRef<HTMLLIElement, KartProps>(function BolgeKarti(
   const { data: departmanlar } = useDepartmanlar();
   const kaydinDepartmani = departmanBul(departmanlar, bolge.departman);
   const [atamaAcik, setAtamaAcik] = useState(false);
-  // Ekip mesafesi kaydin temsil noktasindan olculur: cizgide hattin ortasi
-  // (nokta ortalamasi L seklinde bir rotada hattin disina duser), alanda en
-  // buyuk parcanin merkezi - haritadaki etiketle ayni nokta.
+  // Ekip mesafesi temsil noktasindan olculur: cizgide hattin ortasi (nokta
+  // ortalamasi L seklinde bir rotada disina duser), alanda en buyuk parcanin
+  // merkezi.
   const merkez = useMemo<[number, number]>(
     () =>
       alan
@@ -540,8 +519,6 @@ const BolgeKarti = forwardRef<HTMLLIElement, KartProps>(function BolgeKarti(
             </p>
           )}
           <p className="mt-1 flex flex-wrap items-center gap-1">
-            {/* Mudurluk rozeti: admin butun mudurluklerin kayitlarini bir arada
-                gorur, hangi kaydin kime ait oldugu okunabilir olmali. */}
             {kaydinDepartmani ? (
               <span
                 className="inline-flex items-center px-1.5 py-0.5 text-[11px] font-medium"
@@ -594,7 +571,6 @@ const BolgeKarti = forwardRef<HTMLLIElement, KartProps>(function BolgeKarti(
           >
             {duzenleniyor ? "Kapat" : "Düzenle"}
           </button>
-          {/* Sekil harita uzerinde duzenlenir; kayit yerinde guncellenir. */}
           {onSekilDuzenle && (
             <button
               onClick={onSekilDuzenle}
@@ -617,10 +593,8 @@ const BolgeKarti = forwardRef<HTMLLIElement, KartProps>(function BolgeKarti(
         </span>
       </div>
 
-      {/* Ekip secimi karti buyuttugu icin katlanmis durur: kart listesinin asil
-          isi "ne var"i okutmak, atama nadir bir islemdir (SahaEkipleri
-          panosundaki "Taşı" dugmesiyle ayni tercih). Acilinca varlik detayiyla
-          AYNI secici gelir - alan/guzergah da bir gorevdir. */}
+      {/* Ekip secimi katlanmis durur: kart listesinin asil isi "ne var"i
+          okutmak, atama nadir bir islemdir. */}
       {onAta && (
         <div className="border-t border-slate-100 px-2.5 py-2">
           <button

@@ -30,14 +30,12 @@ import {
 } from "../utils/geo";
 import { BOS_GEOJSON } from "../utils/geojson";
 import { haritayaKapaliAttributionEkle } from "../utils/haritaAttribution";
-// Isaretci goruntuleri (pin/glif/halka/rozet) ve stil ifadeleri.
 import {
   TALEP_OPAKLIK_IFADESI,
   gorunumFiltresi,
   tipIkonlariniHazirla,
   tipRengiIfadesi,
 } from "../utils/haritaIkonlari";
-// Kaynak/katman tanimlari. Olay baglama ve veri yazma burada kalir.
 import {
   ATAMA_KAYMASI,
   ATAMA_RENGI,
@@ -64,7 +62,6 @@ import {
   secilenAlanKatmanlari,
   varlikKatmanlari,
 } from "../utils/haritaKatmanlari";
-// Popup/marker HTML uretimi.
 import {
   EKIP_VARSAYILAN_RENK,
   bolgePopupIcerigi,
@@ -83,21 +80,16 @@ import {
   maskeKaynagiHazirla,
 } from "../utils/istanbulMaskesi";
 
-/* Isaretci gorsel dili - her bilgiyi ayri bir tasiyici anlatir:
- *   RENK          -> tur grubu (types/asset.ts GRUP_RENGI)
- *   SEKIL         -> kaynak: daire = envanter varligi, pin = vatandas talebi
- *   HALKA + ROZET -> is durumu: amber "!" acik is, mor kesikli "?" karar bekliyor,
- *                    halkasiz + sonuk = kapanmis (tamir "✓" / red "✕")
- *   GLIF          -> tur ikonu (data/tipGlifleri.ts) */
+/* Isaretci gorsel dili: RENK = tur grubu, SEKIL = kaynak (daire = envanter,
+ * pin = vatandas talebi), HALKA+ROZET = is durumu, GLIF = tur ikonu. */
 
-/** Secime ucarken kullanilan zoom/sure: zoom ayni, haritadan secimde ucus
- *  daha kisa surer (kullanici zaten hedefe bakiyor). */
+/** Haritadan secimde ucus daha kisa surer (kullanici zaten hedefe bakiyor). */
 const SECIM_UCUS_HARITADAN = { zoom: 12.5, duration: 1500 };
 const SECIM_UCUS_LISTEDEN = { zoom: 12.5, duration: 2000 };
 const UCUS_SURESI_VARSAYILAN = 1600;
 
-/** Bolge/guzergah ad+olcu etiketleri bu zoom'un altinda hic cizilmez: uzakta
- *  onlarca etiket ust uste binip haritayi kirletiyordu. Degeri buradan ayarla. */
+/** Bolge/guzergah ad+olcu etiketleri bu zoom'un altinda cizilmez: uzakta
+ *  onlarca etiket ust uste biner. */
 const BOLGE_ETIKET_MINZOOM = 13;
 
 const IKON_KATMAN_YERLESIMI: Record<string, unknown> = {
@@ -107,16 +99,14 @@ const IKON_KATMAN_YERLESIMI: Record<string, unknown> = {
 };
 
 /** Pin ailesi (pin, glif, halka, rozet): ucu koordinata otursun diye alttan
- *  cakili, hepsi ayni viewBox'i kullanir. Olcek, pinin bas capi varlik
- *  dairesinin capina esit olacak sekilde secildi (bas capi = 19.2 birim). */
+ *  cakili, hepsi ayni viewBox'i kullanir. */
 const PIN_KATMAN_YERLESIMI: Record<string, unknown> = {
   ...IKON_KATMAN_YERLESIMI,
   "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.48, 16, 1.03],
   "icon-anchor": "bottom",
 };
 
-/** Secili talebin altina cizilen koyu pin: normalden ~1.22 kat buyuk, arkadan
- *  tasarak kontur etkisi verir. */
+/** Secili talebin altina cizilen koyu pin, normalden buyuk (kontur etkisi icin). */
 const PIN_SECIM_YERLESIMI: Record<string, unknown> = {
   ...PIN_KATMAN_YERLESIMI,
   "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.59, 16, 1.26],
@@ -145,62 +135,46 @@ export type UcusHedefi =
 
 interface MapViewProps {
   assets?: AssetFeatureCollection;
-  /** "Talepler" sekmesi aktifken gosterilen talep noktalari. */
   reports?: ReportFeatureCollection;
-  /** Secili talep: haritada vurgulanir ve popup'i acilir. */
   seciliTalepId?: string | null;
   onTalepSec?: (id: string) => void;
   seciliId: string | null;
   onVarlikSec: (id: string) => void;
   /** Bos bir alana tiklaninca (koordinati forma doldurmak icin). */
   onHaritaTikla: (koordinat: { longitude: number; latitude: number }) => void;
-  /** Alan secim modu: tiklamalar poligon kosesi olarak toplanir. */
   cizimModu: boolean;
   cizimNoktalari: [number, number][];
   onCizimNokta: (nokta: [number, number]) => void;
   cizimRengi: string;
-  /** Tamamlanmis, haritada duran alan secimleri. */
   tamamlananAlanlar: TamamlananAlan[];
-  /** Mesafe olcum modu: tiklamalar cizgiye nokta olarak eklenir. */
   olcumModu: boolean;
   olcumNoktalari: [number, number][];
   onOlcumNokta: (nokta: [number, number]) => void;
   aktifStilId: HaritaStilId;
   /** Verildiginde harita bu hedefe ucar (ilce secimi, arama sonucu vb.). */
   ucusHedefi?: UcusHedefi | null;
-  /** Popup'in TEK islem dugmesi. Duzenleme, atama, reddi geri alma vb. acilan
-   *  detay modalinin isidir (bkz. haritaPopup.ts::detayDugmesi). */
+  /** Popup'in TEK islem dugmesi; duzenleme/atama vb. acilan detay modalinin
+   *  isidir (bkz. haritaPopup.ts::detayDugmesi). */
   onVarlikDetay?: (id: string) => void;
   onTalepDetay?: (id: string) => void;
-  /** Gorunen alani bildirir (konum aramasini onceliklendirmek icin). */
   onGorunumDegisti?: (bounds: [[number, number], [number, number]]) => void;
   /** Harita kurulunca/yikilinca instance'i disari verir. Stil onizlemeleri ana
-   *  haritanin kadrajini React state'ine ugramadan takip etmek icin kullanir. */
+   *  haritanin kadrajini React state'ine ugramadan takip eder. */
   onHaritaHazir?: (map: maplibregl.Map | null) => void;
-  /** Canli saha ekibi konumlari (personel gorunumu). */
   ekipler?: EkipGorevleri[];
-  /** Departman kodu -> ad + renk. Ekip pinleri bagli olduklari mudurlugun
-   *  rengiyle cizilir; verilmezse hepsi varsayilan indigo olur. */
+  /** Departman kodu -> ad + renk; verilmezse ekip pinleri varsayilan indigo olur. */
   ekipDepartmanlari?: EkipDepartmanBilgisi;
-  /** Ekip popup'indaki bir is satirina tiklaninca ilgili varligin id'siyle. */
   onEkipGorevSec?: (assetId: string) => void;
-  /** Ayni popup'taki bolge/guzergah satirina tiklaninca kaydin id'siyle.
-   *  Gorev tek kavram oldugu icin satirlar ayni listede durur, yalnizca
-   *  actiklari detay farklidir. */
   onEkipBolgeSec?: (bolgeId: string) => void;
-  /** Haritada gosterilecek kaydedilmis bolgeler/guzergahlar. */
   bolgeler?: Bolge[];
   onBolgeDetay?: (id: string) => void;
   seciliBolgeId?: string | null;
   onBolgeSec?: (id: string) => void;
-  /** Adi harita etiketi uzerinden degistirir. Verilmezse etiketler salt
-   *  okunurdur; donen soz reddedilirse etiket eski ada doner. */
+  /** Adi harita etiketi uzerinden degistirir; donen soz reddedilirse etiket eski ada doner. */
   onBolgeAdDegis?: (id: string, ad: string) => void | Promise<void>;
-  /** Sekli duzenlenen bolge: kalici katmandan cikarilir, koseleri suruklenir. */
   sekilDuzenleme?: SekilDuzenleme | null;
   onSekilDegis?: (noktalar: [number, number][][]) => void;
-  /** Bolge dolgusu tiklamayi yakalasin mi. "Ekle" formu acikken kapatilir ki
-   *  genis bir bolgenin uzerine varlik konabilsin. */
+  /** "Ekle" formu acikken kapatilir ki genis bir bolgenin uzerine varlik konabilsin. */
   bolgeTiklanabilir?: boolean;
 }
 
@@ -242,12 +216,14 @@ export default function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
-  /** Acik popup'in turu. Ayni anda tek popup gosterilir ama her secim yalnizca
-   *  kendi popup'ini kapatabilir; yoksa bolge secilirken varlik seciminin
-   *  temizlenmesi yeni acilan popup'i aninda kapatirdi. */
+  /** Acik popup'in turu: her secim yalnizca kendi popup'ini kapatabilir,
+   *  yoksa bolge secilirken varlik seciminin temizlenmesi yeni acilan
+   *  popup'i aninda kapatirdi. */
   const popupTuruRef = useRef<"varlik" | "talep" | "bolge" | null>(null);
+  /** Bolge popup'i tiklama aninda acildigi icin varlik/talep gibi kaynak
+   *  koleksiyonda aranamaz; bu ref eslesmeyi tasir. */
+  const popupBolgeIdRef = useRef<string | null>(null);
   const hazirRef = useRef(false);
-  /** Aktif cizimin alan etiketi ve tamamlanan alanlarin kalici etiketleri. */
   const cizimEtiketRef = useRef<maplibregl.Marker | null>(null);
   const tamamlananEtiketleriRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const bolgeEtiketleriRef = useRef<Map<string, maplibregl.Marker>>(new Map());
@@ -260,18 +236,12 @@ export default function MapView({
   /** Suruklerken canli guncellenen taslak geometri; React state yerine burada
    *  tutulur, surukleme bitince tek seferde yukari bildirilir. */
   const sekilTaslakRef = useRef<[number, number][][]>([]);
-  /** Canli ekip konumlari; DOM marker olduklari icin stil degisiminden etkilenmez. */
   const ekipMarkerlariRef = useRef<Map<string, maplibregl.Marker>>(new Map());
-  /** Harita ornegi STATE olarak da tutulur (ref'in yaninda): ekip marker'lari
-   *  katman degil DOM marker oldugu icin `kaynaklariHazirla` onlari yeniden
-   *  kurmaz, senkronlari yalnizca kendi effect'inde olur. O effect sadece
-   *  `ekipler` degisince calissaydi, harita yeniden kuruldugunda (StrictMode'un
-   *  cift mount'u, kapsayicinin yeniden monte olmasi) marker'lar yeni haritaya
-   *  hic eklenmez, veri bir sonraki kez DEGISENE kadar eski/eksik kalirdi -
-   *  katmani kapatip acmak da tam olarak bunu, yani prop kimligini
-   *  degistirdigi icin duzeltiyordu. */
+  /** STATE olarak da tutulur: ekip marker'lari DOM marker oldugu icin
+   *  `kaynaklariHazirla` onlari yeniden kurmaz. Harita yeniden kurulunca
+   *  (StrictMode cift mount vb.) bu state degismezse marker'lar yeni haritaya
+   *  hic eklenmez. */
   const [haritaOrnegi, setHaritaOrnegi] = useState<maplibregl.Map | null>(null);
-  /** Istanbul il siniri: bir kez getirilir, stil degisiminde maskeye tekrar uygulanir. */
   const istanbulSiniriRef = useRef<[number, number][][] | null>(null);
 
   // Ilk render'daki stil, harita bir kez kurulurken kullanilir.
@@ -309,9 +279,7 @@ export default function MapView({
   const onTalepDetayRef = useRef(onTalepDetay);
   const onEkipGorevSecRef = useRef(onEkipGorevSec);
   const onEkipBolgeSecRef = useRef(onEkipBolgeSec);
-  /** Cizim/olcum sirasinda son bilinen fare konumu (elastik cizgi icin). */
   const sonFareRef = useRef<[number, number] | null>(null);
-  /** Son secim haritadan mi yapildi: flyTo zoom/suresi buna gore secilir. */
   const sonSecimHaritadanRef = useRef(false);
   useEffect(() => {
     onVarlikSecRef.current = onVarlikSec;
@@ -346,9 +314,9 @@ export default function MapView({
   });
 
   // Katman dinleyicileri sabit referansta tutulur ki stil degisiminde
-  // map.off/map.on ile guvenle yeniden baglanabilsinler. Ayni nokta birden
-  // fazla katmanda cizildigi icin (daire + glif + rozet) tek tiklama birden
-  // cok handler tetikler; son islenen DOM olayi tutularak tekrar elenir.
+  // map.off/map.on ile yeniden baglanabilsinler. Ayni nokta birden fazla
+  // katmanda cizildigi icin tek tiklama birden cok handler tetikler; son
+  // islenen DOM olayi tutularak tekrar elenir.
   const sonIslenenAssetsOlayiRef = useRef<MouseEvent | null>(null);
   const sonIslenenReportsOlayiRef = useRef<MouseEvent | null>(null);
   const assetsTiklandiRef = useRef((e: maplibregl.MapLayerMouseEvent) => {
@@ -371,8 +339,6 @@ export default function MapView({
       onTalepSecRef.current?.(id);
     }
   });
-  /** Bolge/guzergaha tiklaninca secer ve popup acar - alanlar da birer
-   *  isaretci gibi davranir. */
   const sonIslenenBolgeOlayiRef = useRef<MouseEvent | null>(null);
   const bolgeTiklandiRef = useRef((e: maplibregl.MapLayerMouseEvent) => {
     if (cizimModuRef.current || olcumModuRef.current) return;
@@ -393,16 +359,10 @@ export default function MapView({
     const popup = new maplibregl.Popup({
       offset: 8,
       closeButton: true,
-      // ANCHOR SABIT ("bottom", varlik/talep/ekip popup'lariyla ayni): anchor
-      // verilmezse MapLibre onu HER konum guncellemesinde popup'in olculen
-      // yuksekligine ve ekranda kalan bosluga gore yeniden secer. Harita
-      // kaydirilirken popup ekranin ust bandina girip cikarken anchor
-      // `bottom` <-> `top` arasinda takla atiyor, translate yuzdesi
-      // (-50%,-100%) <-> (-50%,0) olarak degisiyor ve popup kendi yuksekligi
-      // kadar ZIPLIYORDU. Diger uc popup'ta anchor zaten sabitti; zilayan tek
-      // popup'in bu olmasinin sebebi buydu.
+      // ANCHOR SABIT: verilmezse MapLibre popup ekranin ust bandina girip
+      // cikarken anchor'i `bottom`<->`top` arasinda degistirir ve popup kendi
+      // yuksekligi kadar ZIPLAR.
       anchor: "bottom",
-      // Kapatma carpisinin olcusu index.css'teki `.bolge-popup` kuralinda.
       className: "bolge-popup",
     })
       .setLngLat(e.lngLat)
@@ -410,9 +370,8 @@ export default function MapView({
       .addTo(map);
     popupRef.current = popup;
     popupTuruRef.current = "bolge";
+    popupBolgeIdRef.current = bolge.id;
     const el = popup.getElement();
-    // Sekil duzenleme "Detay" modalinin icindedir (BolgeDetayModal): popup her
-    // kayit turunde tek dugme gosterir.
     el?.querySelector(".popup-detay-btn")?.addEventListener("click", () => {
       onBolgeDetayRef.current?.(bolge.id);
     });
@@ -420,18 +379,13 @@ export default function MapView({
 
   // Popup metnini keskin tutar: MapLibre CSS pikseline yuvarlar, kesirli DPR'de
   // (%125/%150) bu kesirli bir cihaz pikseline denk gelip yaziyi bulaniklastirir.
-  // Her karede translate degerinin PIKSEL kismini cihaz piksel izgarasina
-  // oturtur.
+  // Her karede translate'in PIKSEL kismini cihaz piksel izgarasina oturtur.
   //
-  // YUZDE KISMI KORUNUR: MapLibre popup'i `translate(-50%,-100%) translate(Xpx,Ypx)`
-  // gibi BILESIK bir transform ile konumlandirir - ilk translate anchor'i
-  // (popup'in hangi kosesinin koordinata oturdugunu), ikincisi ekran konumunu
-  // tasir. Burada `getComputedStyle` okunursa tarayici bileseni tek bir
-  // matrise COZER; yuzde kismi piksele donusup inline stile gomulur ve
-  // MapLibre bir sonraki karede kendi bilesigini yeniden yazinca deger iki
-  // durum arasinda gidip gelir (goze carpan bir titreme/ziplama). Bu yuzden
-  // ham inline deger okunur ve yalnizca `...px` sayilari yuvarlanir; yuzdeler
-  // metinde oldugu gibi birakilir.
+  // YUZDE KISMI KORUNUR: transform `translate(-50%,-100%) translate(Xpx,Ypx)`
+  // gibi BILESIK. `getComputedStyle` okunursa tarayici bunu tek matrise cozup
+  // yuzdeyi piksele gomer, sonraki karede MapLibre kendi bilesigini yeniden
+  // yazinca deger iki durum arasinda gidip gelir (titreme). Bu yuzden ham
+  // inline deger okunur, yalnizca `...px` sayilari yuvarlanir.
   const popupHizalaRef = useRef(() => {
     const el = popupRef.current?.getElement() as HTMLElement | undefined;
     if (!el) return;
@@ -520,25 +474,18 @@ export default function MapView({
     if (map) dinamikUygula(map);
   });
 
-  /** Alan buyuklugu etiketi icin stillenmis DOM elemani.
-   *
-   *  `harita-etiket` sinifi metin netligini tasir: MapLibre marker'i
-   *  `translate(-50%,-50%)` ile konumlandirdigi icin TEK sayili bir genislik/
-   *  yukseklik yarim piksele duser ve metin bulaniklasir - ekip popup'indaki
-   *  sorunun aynisi (bkz. index.css). */
+  /** `harita-etiket` sinifi metin netligini tasir: MapLibre marker'i
+   *  `translate(-50%,-50%)` ile konumlandirdigi icin TEK sayili genislik/
+   *  yukseklik yarim piksele duser ve metin bulaniklasir (bkz. index.css). */
   function etiketElemaniOlustur(): HTMLDivElement {
     const el = document.createElement("div");
     el.className = "harita-etiket";
     return el;
   }
 
-  /** Aktif cizimin/olcumun (fare dahil) canli olcu etiketi.
-   *
-   *  Iki arac da ayni etiketi kullanir: alan cizerken m²/ha/km², mesafe
-   *  olcerken m/km. **Etiket cizim surerken IMLECI izler** - uzun bir hatta
-   *  orta nokta, buyuk bir alanda agirlik merkezi imlecin cok gerisinde kalir
-   *  ve buyuyen sayiyi okumak icin goz geriye kaymak zorunda kalirdi. Fare
-   *  bilinmiyorsa (imlec haritanin disinda) etiket sekle oturur. */
+  /** Etiket cizim surerken IMLECI izler - orta nokta/agirlik merkezi imlecin
+   *  gerisinde kalip goz geriye kaymak zorunda kalirdi. Fare bilinmiyorsa
+   *  (haritanin disinda) etiket sekle oturur. */
   function cizimEtiketiUygula(map: maplibregl.Map) {
     const cizimAcik = cizimModuRef.current;
     const olcumAcik = olcumModuRef.current;
@@ -549,7 +496,6 @@ export default function MapView({
         : [];
     const fare = noktalar.length > 0 ? sonFareRef.current : null;
     const izlenen = fare ? [...noktalar, fare] : noktalar;
-    // Alanda en az bir ucgen, hatta en az bir kenar olmali.
     const yeter = cizimAcik ? izlenen.length >= 3 : izlenen.length >= 2;
 
     if ((!cizimAcik && !olcumAcik) || !yeter) {
@@ -588,7 +534,6 @@ export default function MapView({
     cizimEtiketRef.current.getElement().textContent = metin;
   }
 
-  /** Tamamlanmis alanlarin kalici olcu etiketlerini senkronlar. */
   function tamamlananEtiketleriUygula(map: maplibregl.Map) {
     const guncelIdler = new Set<string>();
 
@@ -596,7 +541,6 @@ export default function MapView({
       guncelIdler.add(alan.id);
       const buyukluk = alanEtiketi(cokHalkaliAlanM2(alan.noktalar));
       const metin = alan.etiket ? `${alan.etiket} Â· ${buyukluk}` : buyukluk;
-      // Cok parcali alanlarda etiket en buyuk parcanin ustune konur.
       const merkez = enBuyukHalkaMerkezi(alan.noktalar);
 
       let marker = tamamlananEtiketleriRef.current.get(alan.id);
@@ -619,20 +563,15 @@ export default function MapView({
     }
   }
 
-  /** Haritada CIZILECEK bolge/guzergah listesi: sekli duzenlenen kayit disarida
-   *  birakilir - o kayit `sekil-duzenleme` kaynaginda taslak olarak cizilir ve
-   *  ikisi ust uste binmemelidir.
-   *
-   *  Tek yerde durmasi sart: etiketler `zoomend`ten de tazeleniyor ve orada ham
-   *  liste kullanilirsa (eskiden oyleydi) duzenlemeye girerken yapilan ucus
-   *  `zoomend` tetikleyip silinen etiketi geri getiriyordu. */
+  /** Sekli duzenlenen kayit disarida birakilir (kendi `sekil-duzenleme`
+   *  kaynaginda taslak olarak cizilir, ikisi ust uste binmemeli). Tek yerde
+   *  durmasi sart: `zoomend`te ham liste kullanilsaydi duzenlemeye girerken
+   *  yapilan ucus silinen etiketi geri getirirdi. */
   function cizilecekBolgeler(): Bolge[] {
     const duzenlenenId = sekilDuzenlemeRef.current?.id;
     return (bolgelerRef.current ?? []).filter((b) => b.id !== duzenlenenId);
   }
 
-  /** Kaydedilmis bolgeleri/guzergahlari cizer. Anlik alan seciminden ayri
-   *  kaynak/katman kullanir (kesik cizgili kenarlik + ad etiketi). */
   function bolgeleriUygula(map: maplibregl.Map) {
     const source = map.getSource(BOLGE_SOURCE_ID) as
       | maplibregl.GeoJSONSource
@@ -657,9 +596,7 @@ export default function MapView({
       properties: { id: bolge.id, renk: bolge.renk },
     }));
 
-    // Guzergahin BASLANGIC ucu ayri bir nokta olarak isaretlenir. Hat boyunca
-    // dizilen oklar yonu soyler, ama "ekip nereden baslayacak" sorusunun
-    // cevabi dogrudan gorunmeli: yol tarifi tam bu noktaya gider.
+    // Guzergahin BASLANGIC ucu ayri bir nokta olarak isaretlenir.
     for (const bolge of liste) {
       if (bolge.tip !== "cizgi") continue;
       features.push({
@@ -671,12 +608,14 @@ export default function MapView({
 
     source.setData({ type: "FeatureCollection", features });
     bolgeEtiketleriUygula(map, liste);
+
+    // Sekil artik cizilmiyorsa (katman kapatildi, filtre disladi, kayit
+    // silindi) popup'i da kapat.
+    const acikId = popupBolgeIdRef.current;
+    if (acikId && !liste.some((b) => b.id === acikId)) popupKapat(["bolge"]);
   }
 
-  /** Her bolgenin ad + olcu (+ atanan ekip) etiketi. Ad kismi yetkili
-   *  kullanicilar icin etiket uzerinde duzenlenebilir. Uzaklastikca onlarca
-   *  etiket ust uste binip haritayi kirletiyordu: BOLGE_ETIKET_MINZOOM
-   *  altinda hicbiri cizilmez, yalnizca sekil/cizgi kalir. */
+  /** BOLGE_ETIKET_MINZOOM altinda hicbir etiket cizilmez, yalnizca sekil/cizgi kalir. */
   function bolgeEtiketleriUygula(map: maplibregl.Map, liste: Bolge[]) {
     const guncelIdler = new Set<string>();
     const gorunur = map.getZoom() >= BOLGE_ETIKET_MINZOOM;
@@ -702,8 +641,8 @@ export default function MapView({
         (olcu ? ` · ${olcu}` : "") +
         (bolge.worker_ad ? ` · ${bolge.worker_ad}` : "") +
         (bolge.tamamlandi_at ? " · ✓" : "");
-      // Cizgide etiket hattin uzunlugunun ortasina konur: nokta ortalamasi
-      // L/kavisli guzergahlarda cizginin hic gecmedigi bir yere duserdi.
+      // Cizgide etiket hattin uzunlugunun ortasina konur (nokta ortalamasi
+      // L/kavisli guzergahlarda cizginin hic gecmedigi bir yere duserdi).
       const merkez = cizgi
         ? cizgiOrtaNoktasi(bolge.noktalar[0])
         : enBuyukHalkaMerkezi(bolge.noktalar);
@@ -712,7 +651,6 @@ export default function MapView({
       if (!marker) {
         marker = new maplibregl.Marker({
           element: bolgeEtiketiElemani(bolge.id),
-          // Guzergah etiketi hattin ustunde durur, alan etiketi ortalanir.
           anchor: cizgi ? "bottom" : "center",
           offset: cizgi ? [0, -5] : [0, 0],
         })
@@ -723,7 +661,6 @@ export default function MapView({
         marker.setLngLat(merkez);
       }
       const el = marker.getElement();
-      // Renk seridi kayitli bolgeyi anlik secim etiketinden ayirir.
       el.style.borderLeft = `3px solid ${bolge.renk}`;
       const adEl = el.querySelector<HTMLElement>("[data-rol=ad]");
       const ekEl = el.querySelector<HTMLElement>("[data-rol=ek]");
@@ -741,9 +678,8 @@ export default function MapView({
     }
   }
 
-  /** Bolge etiketi: ad / olcu-ekip / kalem dugmesi. Kapsayici
-   *  `pointer-events:none` kalir ki etiket altindaki alana yapilan tiklamayi
-   *  yutmasin; yalnizca ad metni ve kalem olay alir. */
+  /** Kapsayici `pointer-events:none` kalir ki etiket altindaki alana yapilan
+   *  tiklamayi yutmasin; yalnizca ad metni ve kalem olay alir. */
   function bolgeEtiketiElemani(id: string): HTMLDivElement {
     const el = etiketElemaniOlustur();
     el.style.display = "flex";
@@ -776,9 +712,8 @@ export default function MapView({
       kalem.textContent = "✎";
       kalem.title = "Adı değiştir";
       kalem.setAttribute("aria-label", "Adı değiştir");
-      // Dolgu ve satir yuksekligi CIFT: flex satirinda ortalanan bir kutu tek
-      // olcude olursa yarim piksele oturup metni bulaniklastirir (bkz. index.css
-      // `.harita-etiket`).
+      // Dolgu ve satir yuksekligi CIFT: tek olcude olursa yarim piksele oturup
+      // metni bulaniklastirir (bkz. index.css `.harita-etiket`).
       kalem.style.cssText =
         "pointer-events:auto; cursor:pointer; border:0; background:transparent; " +
         "color:#fff; opacity:0.6; padding:0 2px; font-size:11px; line-height:16px;";
@@ -796,8 +731,8 @@ export default function MapView({
     return el;
   }
 
-  /** Etiketin ad kismini metin girdisine cevirir: Enter/odak kaybi kaydeder,
-   *  Esc vazgecer. Ad iyimser yazilir, istek reddedilirse geri alinir. */
+  /** Enter/odak kaybi kaydeder, Esc vazgecer. Ad iyimser yazilir, istek
+   *  reddedilirse geri alinir. */
   function bolgeAdiDuzenle(el: HTMLElement, id: string) {
     const degistir = onBolgeAdDegisRef.current;
     const adEl = el.querySelector<HTMLElement>("[data-rol=ad]");
@@ -862,8 +797,8 @@ export default function MapView({
     girdi.addEventListener("blur", () => kapat(true));
   }
 
-  /** Taslagin derin kopyasi: yukari bildirilen deger, surukleme sirasinda
-   *  mutasyona ugrayan ref ile ayni diziyi paylasmamali. */
+  /** Derin kopya: yukari bildirilen deger, surukleme sirasinda mutasyona
+   *  ugrayan ref ile ayni diziyi paylasmamali. */
   function sekilTaslakKopyasi(): [number, number][][] {
     return sekilTaslakRef.current.map((halka) =>
       halka.map((n) => [n[0], n[1]] as [number, number])
@@ -874,7 +809,6 @@ export default function MapView({
     onSekilDegisRef.current?.(sekilTaslakKopyasi());
   }
 
-  /** Taslak geometriyi haritada gosterir. */
   function sekilUygula(map: maplibregl.Map) {
     const source = map.getSource(SEKIL_SOURCE_ID) as
       | maplibregl.GeoJSONSource
@@ -917,9 +851,8 @@ export default function MapView({
     });
   }
 
-  /** Tutamaklari kurar: her kosede suruklenebilir nokta, her kenar ortasinda
-   *  yeni kose ekleyen "+". Sayilari her eklemede degistigi icin fark tutmak
-   *  yerine tamami yeniden kurulur (nokta sayisi sinirli, maliyeti onemsiz). */
+  /** Her eklemede fark tutmak yerine tamami yeniden kurulur (nokta sayisi
+   *  sinirli, maliyeti onemsiz). */
   function sekilTutamaklariUygula(map: maplibregl.Map) {
     for (const marker of sekilTutamaklariRef.current.values()) marker.remove();
     sekilTutamaklariRef.current.clear();
@@ -984,7 +917,6 @@ export default function MapView({
     });
   }
 
-  /** Il sinirini maske kaynagina uygular (bkz. utils/istanbulMaskesi.ts). */
   function maskeUygula(map: maplibregl.Map) {
     istanbulMaskesiUygula(map, istanbulSiniriRef.current);
   }
@@ -997,14 +929,9 @@ export default function MapView({
     );
   }
 
-  /** Talepler iki kaynaga birden yazilir:
-   *
-   *  - `reports`: her kayit NOKTA geometrisiyle (seklin temsil noktasi). Pin,
-   *    glif, halka, rozet ve secim katmanlarinin tamami bu kaynagi okur, yani
-   *    cizgi/alan destegi o zincire hic dokunmadi.
-   *  - `talep-sekil`: yalnizca cizgi/alan kayitlarinin HAM SEKLI.
-   *
-   *  Ayrim, "isin yeri" ile "isin buyuklugu"nu ayri sorular olarak tutar. */
+  /** Talepler iki kaynaga birden yazilir: `reports` her kayit NOKTA
+   *  geometrisiyle (seklin temsil noktasi, pin/glif/halka/rozet zinciri
+   *  bunu okur), `talep-sekil` yalnizca cizgi/alan kayitlarinin HAM SEKLI. */
   function reportsUygula(map: maplibregl.Map) {
     const noktaSource = map.getSource(REPORTS_SOURCE_ID) as
       | maplibregl.GeoJSONSource
@@ -1013,9 +940,8 @@ export default function MapView({
       | maplibregl.GeoJSONSource
       | undefined;
 
-    // Sekli duzenlenen talep kendi taslak kaynaginda cizilir (bkz.
-    // sekilDuzenlemeTaslagiUygula); burada atlanir - bolgelerdeki
-    // `duzenlenenId` filtresiyle ayni kural, cift isaretci olmasin diye.
+    // Sekli duzenlenen talep kendi taslak kaynaginda cizilir, burada atlanir
+    // (bolgelerdeki `duzenlenenId` filtresiyle ayni kural).
     const duzenlenenId = sekilDuzenlemeRef.current?.id;
     const kayitlar = (reportsRef.current?.features ?? []).filter(
       (f) => f.properties.id !== duzenlenenId
@@ -1088,7 +1014,6 @@ export default function MapView({
     dinamikUygula(map);
   }
 
-  /** Tamamlanmis alan secimlerini haritada kalici gosterir. */
   function tamamlananUygula(map: maplibregl.Map) {
     const source = map.getSource(TAMAMLANAN_SOURCE_ID) as
       | maplibregl.GeoJSONSource
@@ -1135,8 +1060,7 @@ export default function MapView({
     dinamikUygula(map);
   }
 
-  /** Fareyi izleyen elastik cizgi + kapanis kenari onizlemesi. Yalnizca fare
-   *  hareket ettikce calisir, React state'e dokunmaz. */
+  /** Yalnizca fare hareket ettikce calisir, React state'e dokunmaz. */
   function dinamikUygula(map: maplibregl.Map) {
     const source = map.getSource(DINAMIK_SOURCE_ID) as
       | maplibregl.GeoJSONSource
@@ -1166,7 +1090,6 @@ export default function MapView({
           properties: { tip: "kapanis", renk },
         });
         if (fare) {
-          // Imlecin oldugu yere kadar canli dolgu onizlemesi.
           features.push({
             type: "Feature",
             geometry: {
@@ -1191,12 +1114,12 @@ export default function MapView({
     cizimEtiketiUygula(map);
   }
 
-  /** Acik popup verilen turlerden birine aitse kapatir; degilse dokunmaz. */
   function popupKapat(turler: ("varlik" | "talep" | "bolge")[]) {
     if (!popupTuruRef.current || !turler.includes(popupTuruRef.current)) return;
     popupRef.current?.remove();
     popupRef.current = null;
     popupTuruRef.current = null;
+    popupBolgeIdRef.current = null;
   }
 
   function secimUygula(map: maplibregl.Map) {
@@ -1223,6 +1146,7 @@ export default function MapView({
       .addTo(map);
     popupRef.current = popup;
     popupTuruRef.current = "varlik";
+    popupBolgeIdRef.current = null;
     konumSatiriDoldur(popup, secili);
     popup
       .getElement()
@@ -1230,16 +1154,10 @@ export default function MapView({
       ?.addEventListener("click", () => onVarlikDetayRef.current?.(secili.properties.id));
   }
 
-  /** Secili bolgeyi belirgin kenarlikla isaretler. Acik popup'a normalde
-   *  dokunmaz: bolge popup'i tiklama aninda acilir, secim efekti onu
-   *  kapatmamali.
-   *
-   *  ISTISNA sekli duzenlenen kayittir: o kayit `bolgeleriUygula` tarafindan
-   *  kalici kaynaktan cikarilir (duzenleme taslagi haritadaki tek gorsel
-   *  olsun diye), bu yuzden secim kenarligi ve popup'i da bastirilir -
-   *  duzenleme "Git" ile secimi de tasidigindan, aksi halde eski popup
-   *  duzenleme tutamaklarinin ustunde acik kalirdi (talep tarafindaki
-   *  `secimTalepUygula` ile ayni kural). */
+  /** Secim efekti normalde acik popup'a dokunmaz. ISTISNA sekli duzenlenen
+   *  kayittir: o kayit kalici kaynaktan cikarildigi icin secim kenarligi ve
+   *  popup'i da bastirilir, aksi halde eski popup duzenleme tutamaklarinin
+   *  ustunde acik kalirdi (talep tarafindaki `secimTalepUygula` ile ayni kural). */
   function secimBolgeUygula(map: maplibregl.Map) {
     if (!map.getLayer("bolge-secili")) return;
     const id = seciliBolgeIdRef.current;
@@ -1251,12 +1169,9 @@ export default function MapView({
     if (!id || duzenleniyor) popupKapat(["bolge"]);
   }
 
-  /** Secili talebi vurgular ve popup acar. Sekli duzenlenen kayit HARIC: o
-   *  kayit `reportsUygula` tarafindan kaynaktan tamamen cikarilir (duzenleme
-   *  taslagi haritada tek gorsel olsun diye), bu yuzden ayni kaydin secim
-   *  halkasi/popup'i da burada bastirilir - aksi halde secim onceden
-   *  yapilmis oldugundan (duzenleme "Git" ile secimi de tasir) eski pin
-   *  popup'i duzenleme tutamaklarinin ustunde acik kalirdi. */
+  /** Sekli duzenlenen kayit HARIC: o kayit kaynaktan tamamen cikarilir, bu
+   *  yuzden secim halkasi/popup'i da burada bastirilir (aksi halde eski pin
+   *  popup'i duzenleme tutamaklarinin ustunde acik kalirdi). */
   function secimTalepUygula(map: maplibregl.Map) {
     if (!map.getLayer("reports-selected")) return;
     const id = seciliTalepIdRef.current;
@@ -1288,16 +1203,14 @@ export default function MapView({
       .addTo(map);
     popupRef.current = popup;
     popupTuruRef.current = "talep";
-    // Onay/ret, "Varlığı Yönet" ve "Reddi Geri Al" talep detay modalindedir:
-    // popup her kayit turunde yalnizca kaydin kartini acar.
+    popupBolgeIdRef.current = null;
     popup
       .getElement()
       ?.querySelector(".popup-detay-btn")
       ?.addEventListener("click", () => onTalepDetayRef.current?.(secili.properties.id));
   }
 
-  /** Bir katmana tiklama + imlec dinleyicilerini baglar. Once `off` cagrilir:
-   *  stil degisiminde ayni dinleyici iki kez kayitli kalmasin. */
+  /** Once `off` cagrilir: stil degisiminde ayni dinleyici iki kez kayitli kalmasin. */
   function katmanBagla(
     map: maplibregl.Map,
     katman: string,
@@ -1311,13 +1224,13 @@ export default function MapView({
     map.on("mouseleave", katman, fareCiktiRef.current);
   }
 
-  /** Kaynak/katmanlari kurar: ilk yuklemede ve her stil degisiminden sonra. */
+  /** Ilk yuklemede ve her stil degisiminden sonra cagrilir. */
   function kaynaklariHazirla(map: maplibregl.Map) {
     // Maske en altta eklenir ki varlik/cizim katmanlarini ortmesin.
     maskeKaynagiHazirla(map);
 
-    // Talep sekilleri en altta: isin BUYUKLUGUNU anlatan baglam katmanidir,
-    // uzerindeki varlik daireleri ve talep pinleri isin KENDISIDIR.
+    // Talep sekilleri en altta: isin BUYUKLUGUNU anlatir, uzerindeki daireler/
+    // pinler isin KENDISIDIR.
     talepSekilKatmanlari(map);
     varlikKatmanlari(map);
     talepKatmanlari(map);
@@ -1372,16 +1285,9 @@ export default function MapView({
         });
         katmanBagla(map, "assets-icon", assetsTiklandiRef.current);
 
-        // "Bakim lazim" durumunun TEK gorsel isareti amber halkadir
-        // (`assets-durum`). Ayrica bir "!" rozeti de basiliyordu; ayni kosula
-        // bagli iki isaret ayni seyi iki kez soyleyip isaretciyi
-        // kalabalıklastiriyordu, rozet kaldirildi.
-        //
-        // Aktif bir goreve bagli varliklarin sag-alt kosesinde kucuk bir
-        // nokta: saha ekibi pininin rengiyle ayni aile (ATAMA_RENGI), "bir
-        // ekiple iliskili" anlamini haritanin baska bir yerinden odunc alir.
-        // BURADA (assets-icon ile ayni asenkron blokta) eklenir ki z-sirada
-        // glif katmaniyla ayni seviyede kalsin.
+        // Aktif bir goreve bagli varliklarin sag-alt kosesinde kucuk bir nokta
+        // (ATAMA_RENGI, saha ekibi piniyle ayni aile). BURADA (assets-icon ile
+        // ayni asenkron blokta) eklenir ki z-sirada glif katmaniyla ayni seviyede kalsin.
         if (!map.getLayer("assets-atama")) {
           map.addLayer({
             id: "assets-atama",
@@ -1409,8 +1315,7 @@ export default function MapView({
           filter: ["==", ["get", "id"], ""],
           layout: { "icon-image": "talep-pin-secim", ...PIN_SECIM_YERLESIMI },
         });
-        // Durum halkasi pinin arkasinda: amber dolu = acik is, mor kesikli =
-        // karar bekliyor. Kapanmis gorunumlerde halka cizilmez.
+        // Kapanmis gorunumlerde halka cizilmez.
         map.addLayer({
           id: "reports-halka",
           type: "symbol",
@@ -1426,8 +1331,6 @@ export default function MapView({
           },
           paint: { "icon-opacity": TALEP_OPAKLIK_IFADESI as never },
         });
-        // Talep pini: dolgu varliklarla ayni tur rengi, damla sekli kaydin
-        // vatandastan geldigini anlatir.
         map.addLayer({
           id: "reports-pin",
           type: "symbol",
@@ -1438,7 +1341,6 @@ export default function MapView({
           },
           paint: { "icon-opacity": TALEP_OPAKLIK_IFADESI as never },
         });
-        // Tur glifi pinle ayni viewBox'ta basilir, boylece icon-offset gerekmez.
         map.addLayer({
           id: "reports-icon",
           type: "symbol",
@@ -1449,7 +1351,6 @@ export default function MapView({
           },
           paint: { "icon-opacity": TALEP_OPAKLIK_IFADESI as never },
         });
-        // Durum rozeti en ustte, pinin sag-ust omzunda.
         map.addLayer({
           id: "reports-rozet",
           type: "symbol",
@@ -1466,10 +1367,7 @@ export default function MapView({
           },
           paint: { "icon-opacity": TALEP_OPAKLIK_IFADESI as never },
         });
-        // Pinin sag-alt omzunda kucuk bir nokta: onaydan dogan varlik aktif
-        // bir goreve bagliysa. `assets-atama` ile ayni fikir, ayni renk ve
-        // AYNI KOSE (bkz. haritaIkonlari.ts::talepAtamaSvg) - daire ve pin
-        // ayni sozlugu konussun diye.
+        // `assets-atama` ile ayni renk ve AYNI KOSE (bkz. haritaIkonlari.ts::talepAtamaSvg).
         map.addLayer({
           id: "reports-atama",
           type: "symbol",
@@ -1482,7 +1380,7 @@ export default function MapView({
           paint: { "icon-opacity": TALEP_OPAKLIK_IFADESI as never },
         });
         // Halka tiklamaya baglanmaz: genis bir alan kapladigi icin bos harita
-        // tiklamasini (koordinat secimini) yutardi.
+        // tiklamasini yutardi.
         for (const katman of [
           "reports-pin",
           "reports-icon",
@@ -1494,6 +1392,7 @@ export default function MapView({
         // Secim katmani asenkron eklendi: bu arada yapilmis secimin filtresi
         // kaybolmasin diye tekrar uygulanir.
         secimTalepUygula(map);
+
       }
     });
   }
@@ -1590,10 +1489,8 @@ export default function MapView({
   }, [aktifStilId]);
 
   // --- Tur sozlugu degisince renk ifadesini ve glifleri tazele ---
-  // Ikisi de katmanlar kurulurken sozlukten URETILIYOR (bkz. tipRengiIfadesi /
-  // tipIkonlariniHazirla), yani admin calisirken yeni bir tur eklerse ya da bir
-  // turun grubunu/glifini degistirirse harita bir sonraki stil degisimine kadar
-  // bayat kalirdi. Sozluk pratikte nadiren degistigi icin ucuz bir effect.
+  // Ikisi de katmanlar kurulurken sozlukten URETILIYOR; admin yeni tur
+  // eklerse harita bir sonraki stil degisimine kadar bayat kalirdi.
   const sozlukSurumu = turSozluguSurumu();
   useEffect(() => {
     const map = mapRef.current;
@@ -1684,9 +1581,8 @@ export default function MapView({
   }, [seciliBolgeId]);
 
   // --- Sekil duzenleme: taslak degisince cizimi ve tutamaklari yenile ---
-  // `bolgeleriUygula`/`reportsUygula` da cagrilir: duzenlenen kayit (bolge ya
-  // da talep, hangisiyse) kalici katmandan cikarilir, duzenleme bitince geri
-  // konur - cift isaretci (kalici pin + duzenleme taslagi ustuste) olmasin.
+  // `bolgeleriUygula`/`reportsUygula` da cagrilir: duzenlenen kayit kalici
+  // katmandan cikarilir, cift isaretci olmasin.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !hazirRef.current) return;
@@ -1740,7 +1636,6 @@ export default function MapView({
         const el = document.createElement("div");
         ekipMarkerGuncelle(el, e, renk);
         const popup = new maplibregl.Popup({
-          // Pin (30px) + ucu (7px) kadar yukarida acilir, isaretciyi ortmez.
           offset: 42,
           closeButton: true,
           anchor: "bottom",
@@ -1755,8 +1650,7 @@ export default function MapView({
           if (!kapsayici || kapsayici.dataset.gorevBagli) return;
           kapsayici.dataset.gorevBagli = "1";
           kapsayici.addEventListener("click", (ev) => {
-            // Tekil is -> varlik detayi, bolge/guzergah -> bolge detayi. Ikisi
-            // ayni listede oldugu icin tek dinleyici iki oznitelige de bakar.
+            // Tekil is -> varlik detayi, bolge/guzergah -> bolge detayi.
             const hedef = (ev.target as HTMLElement | null)?.closest<HTMLElement>(
               "[data-gorev-asset],[data-gorev-bolge]"
             );

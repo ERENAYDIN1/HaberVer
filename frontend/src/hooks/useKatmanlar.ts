@@ -12,9 +12,7 @@ import { TALEP_GORUNUMLERI, type TalepGorunumu } from "../types/report";
 /** Haritanin katman gorunurlugu ve alt-filtreleri.
  *
  *  Tek kaynak kurali: tur/durum filtresi burada bir kez yasar, hem lejant
- *  kutucuklari hem panel acilirlari ayni state'i yazar. Bu iki yuzey tekrar
- *  ayrilmamali - eskiden panel backend sorgusunu daraltiyordu ve lejanttan
- *  baska bir tur acmak haritaya hicbir sey eklemiyordu (veri hic gelmemisti).
+ *  kutucuklari hem panel acilirlari ayni state'i yazar.
  *
  *  Iki yazma bicimi:
  *    * `*Degistir(anahtar)` - lejant: tek kutucugu tersler (coklu secim).
@@ -199,23 +197,6 @@ export function useKatmanlar() {
     setKatmanVarlikDurumlari(yalnizca(ASSET_STATUSES, durum));
   }, []);
 
-  /** Departman filtresi AYRI BIR STATE DEGILDIR: bir departman = bir tur
-   *  kumesi, o yuzden secim mevcut tur kutucuklarina yazilir. Boylece lejant,
-   *  panel acilirlari, harita ve dashboard tek kaynaktan beslenmeye devam
-   *  eder; paralel bir filtre olsaydi ikisinin celistigi durumlar cikardi
-   *  ("Departman: Fen İşleri" ama "Tür: ağaç" gibi).
-   *
-   *  `turler` bos/null ise tum turler acilir ("Tüm departmanlar"). */
-  const departmanTurleriniSec = useCallback((turler: readonly AssetType[] | null) => {
-    setKatmanTurleri((onceki) => {
-      const kodlar = turKodlari();
-      const yeni = Object.fromEntries(
-        kodlar.map((t) => [t, turler ? turler.includes(t) : true])
-      ) as Record<AssetType, boolean>;
-      return kodlar.every((t) => onceki[t] === yeni[t]) ? onceki : yeni;
-    });
-  }, []);
-
   // --- Sekme -> katman senkronu icin gereken hedefli yazicilar ---
   /** Bir ana katmani acar; zaten acikken ayni nesneyi birakir. */
   const katmaniAc = useCallback((anahtar: KatmanAnahtari) => {
@@ -270,7 +251,6 @@ export function useKatmanlar() {
     katmanDurumuDegistir,
     ekipDepartmaniDegistir: ekipDepartmani.degistir,
     panelDurumuSec,
-    departmanTurleriniSec,
     katmaniAc,
     yalnizVarlikVeyaTalep,
     talepDurumunuSec,

@@ -36,9 +36,8 @@ export function myReports() {
   return istek<ReportFeatureCollection>("/reports/mine");
 }
 
-/** Vatandas talebi KENDI LISTESINDEN kaldirir. Kayit silinmez: onaylanmis bir
- *  talep gercekten silinseydi ondan olusan varlik, saha atamasi ve audit log
- *  sahipsiz kalirdi. Personel tarafi bu islemden etkilenmez. */
+/** Vatandas talebi KENDI LISTESINDEN kaldirir; kayit silinmez (onaylanmis bir
+ *  talep gercekten silinseydi ondan olusan varlik/atama/log sahipsiz kalirdi). */
 export function hideReport(id: string) {
   return istek<ReportFeature>(`/reports/${id}`, { method: "DELETE" });
 }

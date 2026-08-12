@@ -152,13 +152,9 @@ function DepartmanRozet({
   );
 }
 
-/** Ekip secim etiketi: dolu kuyruk + karsi yaka + BASKA DEPARTMAN uyarisi.
- *
- *  Elle atama UC KISITTAN DA muaftir (yetki personeldedir), ama personel ne
- *  yaptigini gormeli: otomatik dagitimin asla yapmayacagi bir atamayi elle
- *  yaptigini bilerek yapsin. Bu yuzden dolu ekip `disabled` DEGILDIR -
- *  engellemek arayuzun backend'in izin verdigi bir isi yasaklamasi olurdu
- *  (bkz. EkipSecici, ayni karar). */
+/** Ekip secim etiketi: dolu kuyruk + karsi yaka + baska departman uyarisi.
+ *  Elle atama uc kisittan da muaftir; dolu ekip bu yuzden `disabled` degildir,
+ *  yalnizca uyarilir (bkz. EkipSecici, ayni karar). */
 function ekipSecenegi(
   e: EkipGorevleri,
   hedefYaka: string | null,
@@ -181,33 +177,20 @@ function ekipSecenegi(
   );
 }
 
-/** Departman baglami: isin departmani TURUNDEN turetilir (ayri bir alan degil,
- *  iki yerde tutulan bilgi tutarsizlasirdi), ekibinki `users.departman`'dan
- *  gelir. Tek nesne olarak gecirilir - dort bilesene iki ayri prop eklemenin
- *  okunurluk faydasi yok. */
+/** Departman baglami: isin departmani turunden turetilir, ekibinki
+ *  `users.departman`'dan gelir. Tek nesne olarak gecirilir. */
 export interface DepBaglami {
   esleme: TurDepartmanEslemesi;
   adlar: Record<string, string>;
-  /** Mudurluk rozet renkleri; haritadaki ekip pinleriyle AYNI renk sozlugu
-   *  (`departmanlar.renk`) - panodaki bir ekibi haritada bulmak renkten
-   *  gecmeli. */
+  /** Mudurluk rozet renkleri; haritadaki ekip pinleriyle ayni renk sozlugu. */
   renkler: Record<string, string>;
 }
 
-/** Bir ekibin altindaki tek gorev satiri: baska ekibe tasi ya da havuza al.
- *
- *  Islem acilirI SATIR ACILINCA gorunur. Eskiden her gorevin altinda kalici
- *  bir <select> duruyordu; uc ekip x uc gorev = dokuz acilir, pano "ne var"
- *  yerine "ne yapabilirim" gibi okunuyordu. Islem nadir, okuma sik. */
-/** Bir ekibin uzerindeki gorev bolgesi / guzergah satiri. Tekil bakim isiyle
- *  ayni listede durur (ayni kota) ve artik AYNI islemi paylasir: baska ekibe
- *  tasi / havuza al (`BolgeGorevSatiri`nin backend'i `BolgePaneli` ile ayni
- *  uc, `POST /bolgeler/{id}/ata`) - "iki yerde ayni islem" artik gecerli
- *  degil, cunku bolge/guzergah tek ekrana kadar bu panoda hic yoktu. Govdeye
- *  tiklamak detay acar (`onBolgeDetay`), sag ustteki "Tasi" ayri bir hedeftir.
- *  Rozet "alan"/"güzergâh" der ki yuk cubugundaki sayinin nereden geldigi
- *  okunabilsin. Departman bilgisi `BolgeGorevOzet`'te yok, bu yuzden
- *  `ekipSecenegi` burada yalniz karsi-yaka uyarisi verir. */
+/** Bir ekibin uzerindeki gorev bolgesi / guzergah satiri: tekil bakim isiyle
+ *  ayni listede durur (ayni kota) ve ayni tasi/havuza-al islemini paylasir
+ *  (`POST /bolgeler/{id}/ata`). Govdeye tiklamak detay acar, sag ustteki
+ *  "Tasi" ayri bir hedeftir. Departman bilgisi `BolgeGorevOzet`'te yok, bu
+ *  yuzden `ekipSecenegi` burada yalniz karsi-yaka uyarisi verir. */
 function BolgeGorevSatiri({
   gorev,
   digerEkipler,
@@ -441,14 +424,11 @@ function EkipKarti({
   const dolu = ekip.aktif_gorev >= MAKS_AKTIF_GOREV;
   const diger = tumEkipler.filter((e) => e.id !== ekip.id);
 
-  // Ekip pini haritada mudurlugun rengiyle cizilir; kart da ayni rengi tasir
-  // ki panodaki bir ekip haritada renkten bulunabilsin.
+  // Ekip pini haritada mudurlugun rengiyle cizilir; kart da ayni rengi tasir.
   const renk = (ekip.departman && dep.renkler[ekip.departman]) || "#4338ca";
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      {/* Acik baslik + solda mudurluk rengi seridi: kart artik iki farkli
-          zemin (koyu bant + gri liste) tasimiyor, ic ice gorunmuyor. */}
       <div
         className="flex items-center gap-2.5 border-b border-slate-200 px-3 py-2.5"
         style={{ borderLeft: `3px solid ${renk}` }}
@@ -473,8 +453,6 @@ function EkipKarti({
             <YakaRozet yaka={ekip.yaka} />
           </p>
         </div>
-        {/* Yuk: segmentli cubuk + sayi. Cubuk "kac is daha alir"i sayidan once
-            okutur; dolu ekip kirmiziya doner. */}
         <span className="flex shrink-0 items-center gap-1.5">
           <span className="flex gap-0.5">
             {Array.from({ length: MAKS_AKTIF_GOREV }, (_, i) => (
@@ -500,9 +478,8 @@ function EkipKarti({
         </span>
       </div>
 
-      {/* Tekil bakim isleri ve bolge/guzergahlar AYNI listede: ucu de ayni
-          kotayi paylasan gorevlerdir, yuk cubugundaki sayi ikisini birden
-          sayiyor - ayri kutularda gostermek o sayiyi acıklanamaz kilardi. */}
+      {/* Tekil bakim isleri ve bolge/guzergahlar ayni listede: ucu de ayni
+          kotayi paylasan gorevlerdir. */}
       {ekip.gorevler.length === 0 && (ekip.bolge_gorevleri?.length ?? 0) === 0 ? (
         <p className="px-3 py-3 text-center text-xs text-slate-400">
           Aktif görev yok.
@@ -537,11 +514,9 @@ function EkipKarti({
   );
 }
 
-/** Ekipler mudurluk mudurluk gruplanir: pano "kim var" sorusuna once
- *  ORGUTLENMEYLE cevap verir, cunku otomatik atama da departman kisitiyla
- *  calisir - bir mudurlugun tek ekibi doluysa isin neden havuzda beklediği
- *  ancak boyle gorunur. Baslik dili BolgePaneli'ndeki bolum baslıklarıyla
- *  ayni: renkli seritli ad + sayac hapi. */
+/** Ekipler mudurluk mudurluk gruplanir: otomatik atama da departman kisitiyla
+ *  calistigindan bir mudurlugun tek ekibi doluysa isin neden havuzda beklediği
+ *  ancak boyle gorunur. */
 function DepartmanBolumu({
   ad,
   renk,
@@ -572,8 +547,6 @@ function DepartmanBolumu({
     <section>
       <div className="mb-1.5 flex items-center gap-2">
         <span className="h-4 w-1 rounded-full" style={{ background: renk }} />
-        {/* Adin tamami, normal yazim: "PARK VE BAHÇELER MÜDÜRLÜĞÜ" gibi uzun
-            bir Turkce ad buyuk harfle okunmuyordu. */}
         <p className="min-w-0 truncate text-[13px] font-bold" style={{ color: renk }}>
           {ad}
         </p>
@@ -644,8 +617,6 @@ function HavuzSatiri({
             <span className="text-slate-500">{turAdi(varlik.type)}</span>
             <KaynakRozet source={varlik.source} />
             <YakaRozet yaka={varlik.yaka} />
-            {/* Isin hangi mudurlugu bekledigi: otomatik atama yalnizca o
-                mudurlugun ekiplerine bakar. */}
             <DepartmanRozet
               departman={dep.esleme[varlik.type] ?? null}
               adlar={dep.adlar}
@@ -696,7 +667,6 @@ function HavuzGrup({
   onVarlikDetay?: (assetId: string) => void;
 }) {
   if (varliklar.length === 0) return null;
-  // Kaynaga gore ayirt edici vurgu: kayitli=slate, talep=amber.
   const vurgu =
     kaynak === "ihbar"
       ? { cizgi: "bg-amber-400", rozet: "bg-amber-100 text-amber-700" }
@@ -732,9 +702,7 @@ function HavuzGrup({
   );
 }
 
-/** Saha ekibi yonetim panosunun disa acik proplari. Ikisi de opsiyoneldir:
- *  pano baska bir baglamda (callback'siz) da kullanilabilir olsun diye -
- *  mevcut cagrı yerinde (App.tsx) her zaman gecirilir. */
+/** Saha ekibi yonetim panosunun disa acik proplari. Ikisi de opsiyoneldir. */
 export interface SahaEkipleriProps {
   /** Bir gorev/havuz satirinin govdesine tiklaninca varligin detayini acar. */
   onVarlikDetay?: (assetId: string) => void;
@@ -750,10 +718,8 @@ export default function SahaEkipleri({
 }: SahaEkipleriProps = {}) {
   const queryClient = useQueryClient();
   const [durum, setDurum] = useState<{ ok: boolean; metin: string } | null>(null);
-  // Havuz filtresi: tipe gore daraltma + bekleme sirasina gore siralama.
   const [havuzTip, setHavuzTip] = useState<AssetType | "hepsi">("hepsi");
   const [havuzSira, setHavuzSira] = useState<HavuzSira>("eski");
-  // Otomatik atama kurallarinin uzun aciklamasi katlanmis baslar.
   const [kuralAcik, setKuralAcik] = useState(false);
 
   const { data: departmanlar } = useDepartmanlar();
@@ -767,8 +733,8 @@ export default function SahaEkipleri({
     [esleme, departmanlar]
   );
 
-  // Tazeleme ana yolu canli kanal (SSE, bkz. useCanliGuncelleme); asagidaki
-  // periyot yalnizca kanal olurse devreye giren yedektir.
+  // Tazeleme ana yolu canli kanal (SSE); asagidaki periyot yalnizca kanal
+  // olursa devreye giren yedektir.
   const ekipSorgu = useQuery({
     queryKey: ["saha", "ekip-gorevleri"],
     queryFn: ekipGorevleri,
@@ -796,8 +762,6 @@ export default function SahaEkipleri({
               ? "Görev bölgesi/güzergâh ilgili ekibe taşındı."
               : "Görev bölgesi/güzergâhın ataması kaldırıldı.";
       setDurum({ ok: true, metin });
-      // Ekip yukleri, gorev listeleri ve havuz birlikte degisir; bolge/guzergah
-      // ise BolgePaneli'nin de okudugu ["bolgeler"] sorgusundan gelir.
       queryClient.invalidateQueries({ queryKey: ["saha"] });
       if (v.tip === "bolge-ata") {
         queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
@@ -822,9 +786,8 @@ export default function SahaEkipleri({
 
   const ekipler = ekipSorgu.data ?? [];
   const havuz = havuzSorgu.data ?? [];
-  /** Ekipler mudurluge gore gruplanir; sozluk sirasi korunur, departmani
-   *  olmayanlar en sona ayri bir bolume duser (atama kisiti onlara isi
-   *  otomatik goturmez, gorunur olmalilar). */
+  /** Ekipler mudurluge gore gruplanir; departmani olmayanlar en sona ayri bir
+   *  bolume duser. */
   const bolumler = useMemo(() => {
     const gruplar = new Map<string, EkipGorevleri[]>();
     for (const e of ekipSorgu.data ?? []) {
@@ -841,7 +804,7 @@ export default function SahaEkipleri({
         renk: d.renk,
         ekipler: gruplar.get(d.kod)!,
       }));
-    // Sozlukte olmayan kodlar (silinmis/bilinmeyen departman) da kaybolmasin.
+    // Sozlukte olmayan kodlar da kaybolmasin.
     for (const [kod, liste] of gruplar) {
       if (kod && !sirali.some((s) => s.anahtar === kod)) {
         sirali.push({ anahtar: kod, ad: kod, renk: "#64748b", ekipler: liste });
@@ -857,7 +820,6 @@ export default function SahaEkipleri({
     }
     return sirali;
   }, [ekipSorgu.data, departmanlar]);
-  // Once tip filtresi, sonra bekleme sirasina gore siralama uygulanir.
   const havuzFiltreli = havuz
     .filter((h) => havuzTip === "hepsi" || h.type === havuzTip)
     .slice()

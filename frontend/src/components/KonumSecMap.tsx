@@ -40,14 +40,10 @@ export interface HaritaAlani {
   id: string;
   noktalar: [number, number][][];
   renk: string;
-  /** Alanin ustunde gosterilecek etiket (orn. bolge adi). */
   etiket?: string;
   cizgi?: boolean;
-  /** Kenarlik kesikli mi cizilsin (varsayilan: evet).
-   *
-   *  Iki ayri sey ayni haritada duruyor: KESIKLI = ekibe atanmis gorev bolgesi
-   *  ("burayi tara"), DUZ = isin kendisinin sekli ("catlak bu hat boyunca").
-   *  Ayrimi renk tasiyamaz - bolgenin rengini personel seciyor. */
+  /** Kenarlik kesikli mi cizilsin (varsayilan: evet): KESIKLI = ekibe atanmis
+   *  gorev bolgesi, DUZ = isin kendi sekli. */
   kesikli?: boolean;
 }
 
@@ -60,22 +56,16 @@ const CIZIM_SOURCE_ID = "talep-cizimi";
  *  daha uzaktan gosteriyor, ekip kendi bolgesinin adini once gormeli. */
 const ALAN_ETIKET_MINZOOM = 12.5;
 
-/** Vatandasin elle cizdigi cizgi/alan.
- *
- *  Bilincli olarak `CizimPaneli`'nin tam arac setinden AYRI: orada renk paleti,
- *  cok alanli secim ve olcum modu var; vatandas formunda bunlarin hepsi
- *  gurultudur. Buradaki etkilesim tek cumleyle anlatilabilir - "tikladikca
- *  kose ekle". Ortak olan yalnizca `utils/geo.ts`'teki hesaplardir. */
+/** Vatandasin elle cizdigi cizgi/alan. `CizimPaneli`'nin tam arac setinden
+ *  bilincli olarak AYRI (renk paleti, cok alanli secim, olcum modu yok) -
+ *  ortak olan yalnizca `utils/geo.ts`'teki hesaplardir. */
 export interface CizimAyari {
   tip: "LineString" | "Polygon";
   noktalar: [number, number][];
   onDegis: (noktalar: [number, number][]) => void;
   /** Cizim rengi (vatandas ekraninda tur grubunun rengi). */
   renk: string;
-  /** Kullanici "Tamamla" dedi: sekil dondurulur - tiklama artik kose EKLEMEZ,
-   *  fareyi izleyen onizleme parcalari cizilmez, alan kapali gosterilir.
-   *  Cizimin bittigi bir an olmali; aksi halde formu doldururken haritaya
-   *  degen her tiklama sekli sessizce buyutuyordu. */
+  /** Kullanici "Tamamla" dedi: sekil dondurulur, tiklama artik kose eklemez. */
   tamamlandi?: boolean;
 }
 
@@ -87,19 +77,16 @@ interface KonumSecMapProps {
   cizim?: CizimAyari | null;
   /** Harita bu hedefe ucar; `anahtar` her degistiginde tetiklenir. */
   ucus?: { anahtar: string; merkez: [number, number]; zoom?: number } | null;
-  /** Salt-okunur isaretler (orn. saha calisaninin gorev pinleri). */
   isaretler?: HaritaIsaret[];
-  /** Salt-okunur alanlar/cizgiler (orn. ekibe atanmis gorev bolgesi). */
   alanlar?: HaritaAlani[];
   /** Kullanicinin kendi (canli) konumu - ayirt edici mavi nokta. */
   benimKonumum?: [number, number] | null;
   /** false ise haritaya tiklayarak konum secme kapatilir (salt goruntuleme). */
   tiklanabilir?: boolean;
   /** "Konumumu goster" dugmesi haritanin kendi kosesinde mi dursun, yoksa
-   *  gizlenip ebeveyn kendi dugmesini mi cizsin (vatandas: arti'nin ustunde).
-   *  Gizli kipte tetikleme `konumRef` ile yapilir. */
+   *  gizlenip ebeveyn kendi dugmesini mi cizsin. Gizli kipte tetikleme
+   *  `konumRef` ile yapilir. */
   konumDugmesi?: "harita" | "gizli";
-  /** Gizli kipte dugmeyi disaridan tetiklemek icin: `.current()` cagrilir. */
   konumRef?: React.MutableRefObject<(() => void) | null>;
 }
 
@@ -124,7 +111,7 @@ export default function KonumSecMap({
   const benimMarkerRef = useRef<maplibregl.Marker | null>(null);
   const alanEtiketleriRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   /** Cizim sirasinda son bilinen fare konumu: elastik cizgi ve anlik olcu
-   *  bunun uzerinden hesaplanir. Fare haritadan cikinca null'a doner. */
+   *  bundan hesaplanir. */
   const sonFareRef = useRef<[number, number] | null>(null);
   /** Cizimin anlik olcusunu (m / m²) haritada gosteren DOM marker. */
   const olcuEtiketiRef = useRef<maplibregl.Marker | null>(null);
@@ -140,18 +127,9 @@ export default function KonumSecMap({
     cizimRef.current = cizim;
   });
 
-  /** Cizim taslagini haritaya yazar.
-   *
-   *  Sekil, imlecin O ANDA durdugu yere kadar cizilmis gibi gosterilir
-   *  (`CizimPaneli`'ndeki personel cizimiyle ayni dil): son koseden fareye
-   *  uzanan elastik bir cizgi, alanlarda imlecten ilk koseye kesikli kapanis
-   *  kenari ve fareyi de iceren canli dolgu onizlemesi. Halka KAPATILMAZ;
-   *  "burasi henuz kapanmadi ama kapanacak" bilgisi duz bir kenarla
-   *  anlatilamaz.
-   *
-   *  Fare bilinmiyorsa (dokunmatik cihaz, imlec haritanin disinda) sekil
-   *  yalnizca gercek koselerden cizilir - elastik parca hicbir zaman
-   *  gonderilecek veriye karismaz. */
+  /** Cizim taslagini haritaya yazar: son koseden fareye uzanan elastik
+   *  cizgi, alanlarda imleci de iceren canli dolgu onizlemesi. Elastik parca
+   *  hicbir zaman gonderilecek veriye karismaz. */
   function cizimiUygula(map: maplibregl.Map) {
     const source = map.getSource(CIZIM_SOURCE_ID) as
       | maplibregl.GeoJSONSource
@@ -162,15 +140,13 @@ export default function KonumSecMap({
     const noktalar = c?.noktalar ?? [];
     const renk = c?.renk ?? "#059669";
     const tamam = !!c?.tamamlandi;
-    // Elastik uc yalnizca cizim baslamissa anlamlidir: tek nokta bile
-    // konmadan fareyi izleyen bir cizgi "cizim basladi" yanilgisi verirdi.
-    // Tamamlanmis sekilde hic cizilmez - artik eklenecek bir kose yok.
+    // Elastik uc yalnizca en az bir kose konduktan sonra ve tamamlanmamis
+    // sekilde cizilir.
     const fare = c && !tamam && noktalar.length > 0 ? sonFareRef.current : null;
     const ozellik = { renk };
     const features: GeoJSON.Feature[] = [];
 
-    // Tamamlanan alanin kapanis kenari da gercek kenardir: kesikli onizleme
-    // yerine duz hatta doner.
+    // Tamamlanan alanin kapanis kenari duz hatta doner.
     const hat =
       tamam && c?.tip === "Polygon" && noktalar.length >= 3
         ? [...noktalar, noktalar[0]]
@@ -194,8 +170,7 @@ export default function KonumSecMap({
     }
 
     if (c?.tip === "Polygon") {
-      // Dolgu ve kapanis kenari fareyi de sayar: alanin nereye varacagi
-      // tiklamadan once gorunur.
+      // Dolgu ve kapanis kenari fareyi de sayar.
       const halka = fare ? [...noktalar, fare] : noktalar;
       if (halka.length >= 3) {
         features.push({
@@ -204,8 +179,8 @@ export default function KonumSecMap({
           properties: ozellik,
         });
       }
-      // Kapanis kenari yalnizca cizim SURERKEN kesikli bir onizlemedir;
-      // tamamlanan alanda gercek hattin parcasi olarak yukarida cizildi.
+      // Tamamlanan alanda kapanis kenari gercek hattin parcasi olarak
+      // yukarida zaten cizildi.
       if (!tamam && halka.length >= 2) {
         features.push({
           type: "Feature",
@@ -229,10 +204,8 @@ export default function KonumSecMap({
     olcuEtiketiUygula(map);
   }
 
-  /** Cizimin anlik olcusu (cizgide uzunluk, alanda yuzolcum) haritanin
-   *  uzerinde, seklin ustunde durur. Yan paneldeki sayiyla ayni degerdir ama
-   *  kullanicinin gozu cizerken haritada: olcuyu okumak icin bakisini
-   *  bolmemeli. */
+  /** Cizimin anlik olcusunu (cizgide uzunluk, alanda yuzolcum) haritanin
+   *  uzerinde gosterir; kullanicinin gozu cizerken haritada kalsin diye. */
   function olcuEtiketiUygula(map: maplibregl.Map) {
     const c = cizimRef.current;
     const noktalar = c?.noktalar ?? [];
@@ -252,10 +225,8 @@ export default function KonumSecMap({
       ? mesafeEtiketi(toplamMesafeMetre(izlenen))
       : alanEtiketi(poligonAlaniM2(izlenen));
 
-    // CIZERKEN etiket IMLECI izler: uzun bir hatta orta nokta imlecin cok
-    // gerisinde kalir ve buyuyen sayiyi okumak icin goz geriye kaymak zorunda
-    // kalirdi. Cizim bitince (fare yok / tamamlandi) sekle geri oturur:
-    // cizgide hattin ortasina, alanda agirlik merkezine.
+    // Cizerken etiket imleci izler (uzun hatta orta nokta cok geride
+    // kalirdi); cizim bitince sekle geri oturur.
     const kip = fare ? "imlec" : cizgi ? "cizgi" : "alan";
     const konum = fare
       ? fare
@@ -268,13 +239,11 @@ export default function KonumSecMap({
       olcuEtiketiRef.current?.remove();
       const el = document.createElement("div");
       el.dataset.kip = kip;
-      // Ana haritadaki etiketlerle AYNI sinif: metin netligi kurallari orada
-      // (bkz. index.css `.harita-etiket`).
+      // Ana haritadaki etiketlerle ayni sinif (bkz. index.css `.harita-etiket`).
       el.className = "harita-etiket";
       olcuEtiketiRef.current = new maplibregl.Marker({
         element: el,
-        // Imleci izlerken etiket imlecin sag-altinda durur: artı imlecin
-        // ucunu ve bir sonraki tiklanacak yeri kapatmasin.
+        // Imleci izlerken sag-altta durur ki artının ucunu kapatmasin.
         anchor: kip === "imlec" ? "top-left" : cizgi ? "bottom" : "center",
         offset: kip === "imlec" ? [14, 12] : cizgi ? [0, -6] : [0, 0],
       })
@@ -315,8 +284,8 @@ export default function KonumSecMap({
     for (const a of liste) {
       if (!a.etiket || !etiketGorunur) continue;
       guncel.add(a.id);
-      // Guzergah etiketi hattin uzunlugunun ortasina konur: nokta ortalamasi
-      // kavisli bir hatta cizginin hic gecmedigi bir yere duserdi.
+      // Guzergah etiketi hattin uzunlugunun ortasina konur (nokta ortalamasi
+      // kavisli hatta yanlis yere duserdi).
       const merkez = a.cizgi
         ? cizgiOrtaNoktasi(a.noktalar[0])
         : enBuyukHalkaMerkezi(a.noktalar);
@@ -359,8 +328,8 @@ export default function KonumSecMap({
     });
     mapRef.current = map;
 
-    // Il sinirini getirip maskeyi doldurur. Harita yuklenmesi ile sinir istegi
-    // yarisabildigi icin iki taraf da hazir olunca ayni fonksiyon cagrilir.
+    // Il sinirini getirip maskeyi doldurur; harita ve sinir istegi yarisabilir,
+    // ikisi de hazir olunca ayni fonksiyon cagrilir.
     let sinirHalkalari: [number, number][][] | null = null;
     let stilYuklendi = false;
     const maskeUygula = () => {
@@ -373,7 +342,7 @@ export default function KonumSecMap({
       stilYuklendi = true;
       maskeUygula();
 
-      // Alan/cizgi katmani maskeden sonra eklenir ki maske onu ortmesin.
+      // Maskeden sonra eklenir ki maske onu ortmesin.
       if (!map.getSource(ALAN_SOURCE_ID)) {
         map.addSource(ALAN_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
         map.addLayer({
@@ -383,8 +352,8 @@ export default function KonumSecMap({
           filter: ["!=", ["geometry-type"], "LineString"],
           paint: { "fill-color": ["get", "renk"], "fill-opacity": 0.14 },
         });
-        // Kesikli ve duz kenarlik iki ayri katman: `line-dasharray` veriye
-        // bagli bir ifade kabul etmiyor, ayrimi filtre tasiyor.
+        // Kesikli/duz iki ayri katman: `line-dasharray` veriye bagli ifade
+        // kabul etmiyor.
         map.addLayer({
           id: "salt-alan-yol",
           type: "line",
@@ -406,8 +375,7 @@ export default function KonumSecMap({
         });
       }
 
-      // Cizim katmani en ustte: kullanicinin o an cizdigi sey, altindaki her
-      // seyden once okunmali.
+      // Cizim katmani en ustte.
       if (!map.getSource(CIZIM_SOURCE_ID)) {
         map.addSource(CIZIM_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
         map.addLayer({
@@ -417,9 +385,8 @@ export default function KonumSecMap({
           filter: ["==", ["geometry-type"], "Polygon"],
           paint: { "fill-color": ["get", "renk"], "fill-opacity": 0.18 },
         });
-        // Gercek hat: yalnizca kullanicinin tikladigi koseler. Onizleme
-        // parcalari (elastik/kapanis) bilincli olarak DISARIDA - kalinlik ve
-        // opaklik farki "bu kismi henuz onaylamadin"i anlatan tek isaret.
+        // Gercek hat: yalnizca tiklanmis koseler (elastik/kapanis onizlemesi
+        // disarida, kalinlik farkiyla ayrisir).
         map.addLayer({
           id: "cizim-yol",
           type: "line",
@@ -433,7 +400,6 @@ export default function KonumSecMap({
           layout: { "line-cap": "round", "line-join": "round" },
           paint: { "line-color": ["get", "renk"], "line-width": 3 },
         });
-        // Son koseden fare imlecine uzanan elastik cizgi.
         map.addLayer({
           id: "cizim-elastik",
           type: "line",
@@ -463,9 +429,7 @@ export default function KonumSecMap({
           type: "circle",
           source: CIZIM_SOURCE_ID,
           filter: ["==", ["geometry-type"], "Point"],
-          // Personel konsoluyla ayni tutamak dili (`utils/haritaKatmanlari.ts`
-          // ::cizimKatmanlari): kucuk, ici cizim rengiyle DOLU, ince beyaz
-          // cerceveli. Iki ekranda ayni sey ayni gorunmeli.
+          // Personel konsoluyla ayni tutamak dili (haritaKatmanlari.ts::cizimKatmanlari).
           paint: {
             "circle-radius": 5,
             "circle-color": ["get", "renk"],
@@ -487,17 +451,14 @@ export default function KonumSecMap({
         // Sinir gelmezse maske bos kalir, harita yine calisir.
       });
 
-    // Haritadaki konum butonu: bulunan konuma isaretci koyar. Gizli kipte
-    // kontrol yine kurulur (konum mantigi tek yerde kalsin) ama haritanin
-    // kosesine eklenmez; ebeveyn `konumRef` ile tetikler.
+    // Gizli kipte kontrol yine kurulur ama haritanin kosesine eklenmez;
+    // ebeveyn `konumRef` ile tetikler.
     const geolocate = new maplibregl.GeolocateControl({
       positionOptions: { enableHighAccuracy: true },
       trackUserLocation: false,
       showAccuracyCircle: false,
     });
     map.addControl(geolocate, "bottom-right");
-    // Gizli kipte kontrol haritada durur (trigger() eklenmis olmasini
-    // gerektirir) ama gorunmez; dugmeyi ebeveyn cizer.
     if (konumDugmesiRef.current === "gizli") {
       map.getContainer()
         .querySelector(".maplibregl-ctrl-geolocate")
@@ -506,7 +467,6 @@ export default function KonumSecMap({
     }
     if (konumRef) konumRef.current = () => geolocate.trigger();
 
-    // Etiketler ALAN_ETIKET_MINZOOM esiginde gorunur/gizlenir olmali.
     map.on("zoomend", () => alanlariUygula(map));
     geolocate.on("geolocate", (e) => {
       const p = e as unknown as { coords: GeolocationCoordinates };
@@ -514,22 +474,20 @@ export default function KonumSecMap({
         Number(p.coords.longitude.toFixed(6)),
         Number(p.coords.latitude.toFixed(6)),
       ];
-      // Cizim kipinde "konumum" bir kose ekler: kullanici cizgiyi/alani
-      // durdugu yerden baslatabilsin.
+      // Cizim kipinde "konumum" bir kose ekler.
       const c = cizimRef.current;
       if (c?.tamamlandi) return;
       if (c) {
         c.onDegis([...c.noktalar, nokta]);
         return;
       }
-      // Salt-okunur haritada (saha ekrani) dugme yalnizca konuma ucar,
-      // isaretci koymaz: orada secilecek bir yer yok.
+      // Salt-okunur haritada dugme yalnizca konuma ucar, isaretci koymaz.
       if (!tiklanabilirRef.current) return;
       onSecRef.current(nokta);
     });
 
-    // Acilista cihaz konumuna yalnizca merkezlenir, isaretci konmaz; izin
-    // verilmezse Istanbul merkezinde kalir.
+    // Acilista cihaz konumuna yalnizca merkezlenir; izin verilmezse Istanbul
+    // merkezinde kalir.
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) =>
@@ -539,8 +497,7 @@ export default function KonumSecMap({
       );
     }
 
-    // Fare hareketi cizimi canli tutar: React state'e dokunulmaz, yalnizca
-    // kaynak yeniden yazilir (her piksel hareketinde render tetiklenmesin).
+    // React state'e dokunulmaz; her piksel hareketinde render tetiklenmesin.
     map.on("mousemove", (e) => {
       if (!cizimRef.current) return;
       sonFareRef.current = [
@@ -549,7 +506,6 @@ export default function KonumSecMap({
       ];
       cizimiUygula(map);
     });
-    // Imlec haritadan cikinca onizleme donar kalmasin.
     map.on("mouseout", () => {
       if (!sonFareRef.current) return;
       sonFareRef.current = null;
@@ -562,9 +518,8 @@ export default function KonumSecMap({
         Number(e.lngLat.lng.toFixed(6)),
         Number(e.lngLat.lat.toFixed(6)),
       ];
-      // Cizim kipindeyken tiklama kose EKLER; nokta secimi devre disidir.
-      // Tamamlanmis sekilde tiklama hicbir sey yapmaz: sekil dondu, nokta
-      // secimine de dusmemeli (talebin geometrisi cizim olarak kalir).
+      // Cizim kipindeyken tiklama kose ekler; tamamlanmis sekilde hicbir
+      // sey yapmaz.
       const c = cizimRef.current;
       if (c?.tamamlandi) return;
       if (c) {
@@ -574,7 +529,6 @@ export default function KonumSecMap({
       onSecRef.current(nokta);
     });
 
-    // Temizlikte kullanilacak koleksiyon burada yakalanir (lint kurali).
     const alanEtiketleri = alanEtiketleriRef.current;
     return () => {
       markerRef.current?.remove();
@@ -587,30 +541,24 @@ export default function KonumSecMap({
       mapRef.current = null;
       if (konumRef) konumRef.current = null;
     };
-    // Harita bir kez kurulur; degisen degerler ref'lerle yonetilir.
   }, []);
 
-  // Salt-okunur alanlar degisince katmani guncelle.
   useEffect(() => {
     const map = mapRef.current;
     if (map) alanlariUygula(map);
   }, [alanlar]);
 
-  // Cizim taslagi degisince (kose eklendi/geri alindi/mod degisti) yeniden ciz.
   useEffect(() => {
     const map = mapRef.current;
     if (map) cizimiUygula(map);
   }, [cizim]);
 
-  // Cizim kipinde imlec artiya doner: haritanin "simdi tiklanacak" oldugunu
-  // metin okumadan anlatan tek isaret.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     map.getCanvas().style.cursor = cizim && !cizim.tamamlandi ? "crosshair" : "";
   }, [cizim]);
 
-  // Salt-okunur isaretler (gorev pinleri) degisince yeniden kurulur.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -621,7 +569,6 @@ export default function KonumSecMap({
         .addTo(map);
       if (i.popupHtml) {
         marker.setPopup(
-          // Sabit anchor: harita kaydirilirken popup karsi tarafa atlamasin.
           new maplibregl.Popup({
             offset: 24,
             closeButton: true,
@@ -642,7 +589,6 @@ export default function KonumSecMap({
     });
   }, [isaretler]);
 
-  // Kullanicinin kendi konumu: ayirt edici mavi nokta.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -665,9 +611,8 @@ export default function KonumSecMap({
     }
   }, [benimKonumum]);
 
-  // Secili konum degisince isaretciyi guncelle. Cizim kipinde tek nokta
-  // isaretcisi gizlenir: sekil zaten cizim katmaninda gorunuyor, iki ayri
-  // "secili yer" gostergesi karisiklik yaratirdi.
+  // Cizim kipinde tek nokta isaretcisi gizlenir: sekil zaten cizim
+  // katmaninda gorunuyor.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -685,7 +630,6 @@ export default function KonumSecMap({
     }
   }, [secili, cizim]);
 
-  // Disaridan gelen ucus hedefine git.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ucus) return;

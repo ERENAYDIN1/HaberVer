@@ -1,22 +1,18 @@
 import { GRUP_RENGI, TIP_GRUPLARI, type AssetType, type TipGrubu } from "./asset";
 
 /** Bir belediye mudurlugu. Sozluk BACKEND'DEN gelir (`departmanlar` tablosu),
- *  burada sabitlenmez: bir belediye orgutlenmesini degistirdiginde frontend
- *  yeniden derlenmemeli. */
+ *  burada sabitlenmez. */
 export interface Departman {
   kod: string;
   ad: string;
   aciklama: string | null;
   /** Rozet/panel rengi. Harita isaretcilerini DOGRUDAN etkilemez - onlarin
-   *  rengi tur grubundan gelir (`GRUP_RENGI`); iki sistem ayridir cunku
-   *  mudurluk veridir, palet kodda yasar. Yine de ayni renk olmalari beklenir:
-   *  lejantta mudurluk basliginin altinda baska bir mudurlugun rengiyle cizilen
-   *  bir tur satiri haritanin sifresini bozar (bkz. `grupUyumsuzlugu`). */
+   *  rengi tur grubundan gelir (`GRUP_RENGI`); ayni renk olmalari beklenir
+   *  ama kaynaklari ayridir (bkz. `grupUyumsuzlugu`). */
   renk: string;
   aktif: boolean;
-  /** Listeleme sirasi (kucukten buyuge). Mudurluk lejantta ve tur
-   *  acilirlarinda ANA BASLIK oldugu icin bu, kullanicinin gordugu duzendir;
-   *  triyaj kovasi ("Çözüm Merkezi") buyuk bir degerle en altta durur. */
+  /** Listeleme sirasi (kucukten buyuge); triyaj kovasi ("Çözüm Merkezi")
+   *  buyuk bir degerle en altta durur. */
   sira: number;
 }
 
@@ -41,9 +37,7 @@ export interface EslemeYaniti {
   esleme: TurDepartmanEslemesi;
 }
 
-/** Departman sozlugu + esleme uzerinde calisan kucuk yardimcilar. Hepsi
- *  "veri henuz yuklenmedi" durumunu sessizce tolere eder (undefined doner),
- *  cunku bu bilgi bir ekranin cizilmesini engellemeyecek kadar ikincildir. */
+/** "Veri henuz yuklenmedi" durumunu sessizce tolere eder (undefined doner). */
 export function departmanBul(
   departmanlar: readonly Departman[] | undefined,
   kod: string | null | undefined
@@ -79,23 +73,16 @@ export function departmanTurleri(
 
 /** Bir mudurluk ve kapsadigi turler. */
 export interface DepartmanTurGrubu {
-  /** `null` = hicbir mudurluge yonlendirilmemis turler. Pratikte bos kalir
-   *  (backend her ture bir mudurluk zorunlu kilar), ama bir yonlendirme satiri
-   *  elle silinirse tur lejanttan/acilirdan DUSMEMELI. */
+  /** `null` = hicbir mudurluge yonlendirilmemis turler; boyle bir tur
+   *  lejanttan/acilirdan DUSMEMELI. */
   departman: Departman | null;
   turler: AssetType[];
 }
 
-/**
- * Turleri MUDURLUK MUDURLUK gruplar - lejantin, tur acilirlarinin ve yonetim
- * ekraninin ORTAK kategorilemesi. Baslik "bu is kime gidiyor"u anlatir; bir
- * turun haritada hangi renkle cizildigi ayri bir sistemdir (`GRUP_RENGI`) ve
- * ikisi bilincli olarak ortusmez.
- *
- * Sozluk (departman listesi ya da esleme) henuz yuklenmediyse `null` doner:
- * cagiran taraf duz bir liste cizer. Yoksa ilk karede her tur "yonlendirilmemis"
- * gorunur, sonra yerine otururdu.
- */
+/** Turleri MUDURLUK MUDURLUK gruplar - lejantin, tur acilirlarinin ve yonetim
+ * ekraninin ORTAK kategorilemesi. Sozluk henuz yuklenmediyse `null` doner
+ * (duz liste cizilir) - yoksa ilk karede her tur "yonlendirilmemis" gorunup
+ * sonra yerine oturur. */
 export function departmanTurGruplari(
   departmanlar: readonly Departman[] | undefined,
   esleme: TurDepartmanEslemesi | undefined,
@@ -118,10 +105,8 @@ export function departmanTurGruplari(
   return gruplar;
 }
 
-/** Bir mudurlugun rozet renginin karsiligi olan gorsel grup. Palet ile
- *  mudurluk renkleri birebir ortustugu icin (bkz. `Departman.renk`) eslesme
- *  RENKTEN kurulur: yeni bir mudurluk paletten bir renk secince turleri de
- *  kendiliginden dogru grupla acilir. Karsiligi yoksa `undefined`. */
+/** Bir mudurlugun rozet renginin karsiligi olan gorsel grup; eslesme RENKTEN
+ *  kurulur (bkz. `Departman.renk`). Karsiligi yoksa `undefined`. */
 export function departmanGrubu(
   departman: Departman | undefined | null
 ): TipGrubu | undefined {
@@ -131,10 +116,8 @@ export function departmanGrubu(
 }
 
 /** Bir tur haritada mudurlugunden BASKA bir renkle mi cizilecek? Dondurulen
- *  metin uyari kutusunda gosterilir; uyum varsa `null`.
- *
- *  Kural zorlanmaz, yalnizca gorunur kilinir: palet kodda sabit oldugu icin
- *  yeni bir mudurluk renginin karsiligi olan bir grup her zaman olmayabilir. */
+ *  metin uyari kutusunda gosterilir; uyum varsa `null`. Kural zorlanmaz,
+ *  yalnizca gorunur kilinir. */
 export function grupUyumsuzlugu(
   grup: TipGrubu,
   departman: Departman | undefined | null
@@ -144,19 +127,12 @@ export function grupUyumsuzlugu(
   return `Bu türün harita rengi ${departman.ad} başlığından farklı olacak.`;
 }
 
-/**
- * Lejantin ISIMLENDIREBILECEGI mudurlukler.
+/** Lejantin ISIMLENDIREBILECEGI mudurlukler - burada kisitlanan sozluk degil
+ * LEJANT: departmani olan personel yalnizca kendi mudurlugunun kayitlarini
+ * gorur, geri kalan basliklar hep bos cikardi.
  *
- * Sozlugun kendisi giris yapmis herkese aciktir (vatandas formu bile "bu talep
- * Fen İşleri'ne iletilecek" yazabilmek icin okur) - burada kisitlanan sozluk
- * degil LEJANT. Lejant bir orgut semasi degil, kullanicinin KENDI haritasinin
- * anahtaridir: departmani olan personel yalnizca kendi mudurlugunun kayitlarini
- * gorebildigi icin geri kalan basliklar hep bos cikiyor, sadece diger
- * mudurluklerin adlarini iliskilendiriyordu.
- *
- * `kendiDepartmani` NULL = sinirsiz (admin) ve bos kume ile ayni sey degildir -
- * `Kapsam` bagimliligindaki (backend) ayrimin frontend karsiligi.
- */
+ * `kendiDepartmani` NULL = sinirsiz (admin), bos kumeyle ayni sey degil -
+ * backend'deki `Kapsam` ayriminin frontend karsiligi. */
 export function lejantDepartmanlari(
   departmanlar: readonly Departman[] | undefined,
   kendiDepartmani: string | null | undefined
@@ -165,15 +141,10 @@ export function lejantDepartmanlari(
   return departmanlar.filter((d) => d.kod === kendiDepartmani);
 }
 
-/**
- * Lejantta gosterilebilecek turler. Yalnizca mudurluk basliklarini elemek
- * yetmez: kapsam disi turler o zaman "Henüz Yönlendirilmemiş" kovasina duser
- * ve lejant kullanicinin hic goremeyecegi turleri saymaya devam ederdi.
- *
- * Yonlendirmesi olmayan turler bilincli olarak DUSER: onlar hicbir kapsama
- * girmez, yalnizca admin gormeli. Esleme henuz yuklenmediyse daraltma yapilmaz
- * (tam liste doner) - o kare zaten gruplanmadan, duz liste olarak cizilir.
- */
+/** Lejantta gosterilebilecek turler. Mudurluk basliklarini elemek yetmez:
+ * kapsam disi turler yoksa "Henüz Yönlendirilmemiş" kovasina dusup lejantta
+ * kalirdi. Yonlendirmesi olmayan turler bilincli olarak DUSER (yalnizca admin
+ * gormeli). Esleme henuz yuklenmediyse daraltma yapilmaz. */
 export function lejantTurleri(
   turler: readonly AssetType[],
   esleme: TurDepartmanEslemesi | undefined,

@@ -33,23 +33,13 @@ import { GlifIkonu, IconPlus, IconTrash, IconX } from "./icons";
 
 /** Müdürlük ve tür sözlüğünün yönetimi (yalnızca admin).
  *
- *  Iki sozluk de VERIDIR, kod degil: bir belediye orgutlenmesini ya da takip
- *  ettigi varlik cesitlerini degistirdiginde migration yazilmasin, burada bir
- *  satir degissin diye. Tur kodu `assets.type`/`reports.type` icinde yasadigi
- *  icin sonradan degistirilemez - ekran bunu acikca soyler.
+ *  HER SEY TASLAKTIR, "Kaydet"e kadar hicbir sey yazilmaz: bu ekrandaki tek
+ *  bir yanlis tiklama o an sistemi kullanan herkesin ne gorebildigini degistirir.
  *
- *  HER SEY TASLAKTIR, "Kaydet"e kadar hicbir sey yazilmaz. Gerekce: bu ekranda
- *  yapilan tek bir yanlis tiklama (bir turu yanlis mudurluge yollamak, bir
- *  mudurlugu pasife almak) o an sistemi kullanan herkesin ne gorebildigini
- *  degistirir. Once tum degisiklikler bir arada gorulur, sonra uygulanir.
- *
- *  Renk grubu ile departman AYNI SEY DEGILDIR - grup gorsel dil (haritada
- *  hangi renkle cizilecek), departman is akisidir (kime dusecek) - ama
- *  RENKLERI ortusur: lejantta mudurluk basligi ile tur satirinin swatch'i ayni
- *  seyi soylemeli. Bu yuzden grup BU EKRANDA SORULMAZ, mudurlugun renginden
- *  turetilir ve yonlendirme degisince onu izler; yeni mudurluk formu da rengi
- *  paletten sectirir. Ayrisma yalnizca palette karsiligi olmayan ozel bir
- *  mudurluk renginde olusur ve uyari olarak gosterilir. */
+ *  Grup rengi BU EKRANDA SORULMAZ, mudurlugun renginden turetilir ve
+ *  yonlendirme degisince onu izler - lejantta baslik ve swatch ayni seyi
+ *  soylemeli. Ayrisma yalnizca palette karsiligi olmayan ozel bir mudurluk
+ *  renginde olusur ve uyari olarak gosterilir. */
 
 type Sekme = "departmanlar" | "turler";
 
@@ -60,7 +50,6 @@ interface Taslak {
   yeniTurler: TurCreateInput[];
   turDuzenleme: Record<string, TurUpdateInput>;
   silinenTurler: string[];
-  /** Mevcut turlerin yeniden yonlendirilmesi (yeni turler kendi kaydinda). */
   esleme: TurDepartmanEslemesi;
 }
 
@@ -76,9 +65,8 @@ const BOS_TASLAK: Taslak = {
 
 const KOD_DESENI = /^[a-z][a-z0-9_]{1,31}$/;
 
-/** `duzenleme` icindeki alanlari `orijinal`le karsilastirir, orijinaliyle
- *  ayni kalan alanlari atar. A -> B -> A yapip hic kaydetmeden geri donen bir
- *  degisiklik boylece "bekleyen degisiklik" olarak gorunmeye devam etmez. */
+// A -> B -> A yapip kaydetmeden geri donen bir degisiklik "bekleyen" gorunmesin diye
+// orijinaliyle ayni kalan alanlar elenir.
 function fark<T extends Record<string, unknown>>(
   orijinal: T | undefined,
   duzenleme: Partial<T>
@@ -90,9 +78,6 @@ function fark<T extends Record<string, unknown>>(
   return sonuc;
 }
 
-/** `kayit`tan bir Partial cikarir, `duzenleme`yi uygular ve orijinaliyle ayni
- *  kalan alanlari eleyerek haritaya yazar; sonuc bossa anahtari tamamen
- *  siler. */
 function haritayaYaz<U extends Record<string, unknown>, T extends { kod: string } & U>(
   harita: Record<string, Partial<U>>,
   kayitlar: T[] | undefined,
@@ -111,8 +96,7 @@ const inputClass =
   "w-full border border-slate-300 bg-white px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none";
 const etiketClass = "text-[11px] font-medium text-slate-500";
 
-/** Turkce bir addan kod uretir. Kod sonradan degistirilemedigi icin admin'in
- *  onu elle yazmasi beklenmemeli; yine de duzenlenebilir birakilir. */
+// Turkce bir addan kod uretir; admin elle de duzenleyebilir.
 function koda(ad: string): string {
   const harita: Record<string, string> = {
     ç: "c", ğ: "g", ı: "i", ö: "o", ş: "s", ü: "u", â: "a", î: "i", û: "u",
@@ -179,7 +163,6 @@ export default function DepartmanYonetimi() {
     return [...mevcut, ...yeniler];
   }, [turler, taslak]);
 
-  /** Bir turun (taslak dahil) hangi mudurluge gittigi. */
   const turunDepartmani = (kod: AssetType): string => {
     const yeni = taslak.yeniTurler.find((t) => t.kod === kod);
     if (yeni) return yeni.departman;
@@ -222,9 +205,8 @@ export default function DepartmanYonetimi() {
     return satirlar;
   }, [taslak, departmanlar, turler, departmanAdlari]);
 
-  /** Kaydetmeyi engelleyen tutarsizliklar. Kod cakismasi ve mudurluksuz tur
-   *  gibi hatalar sunucuya gitmeden once yakalanir: 409/422 mesajlari yerine
-   *  ilgili satirin yaninda okunur bir uyari cikar. */
+  // Kaydetmeyi engelleyen tutarsizliklar; sunucuya gitmeden once yakalanip
+  // 409/422 yerine ilgili satirin yaninda okunur bir uyari olarak gosterilir.
   const engeller = useMemo<string[]>(() => {
     const liste: string[] = [];
     const kodlar = new Set<string>();
@@ -246,8 +228,6 @@ export default function DepartmanYonetimi() {
       if (!KOD_DESENI.test(t.kod)) liste.push(`Geçersiz tür kodu: “${t.kod}”`);
       if (!t.departman) liste.push(`“${t.ad || t.kod}” için müdürlük seçilmedi`);
     }
-    // Silinen bir mudurluge hala tur yonlendirilmis olabilir; sunucu bunu
-    // reddederdi, ama sebebini burada soylemek daha anlasilir.
     for (const t of etkinTurler) {
       const hedef = turunDepartmani(t.kod);
       if (hedef && !departmanAdlari.has(hedef)) {
@@ -260,11 +240,8 @@ export default function DepartmanYonetimi() {
   const degisiklikVar = degisiklikler.length > 0;
 
   // --- Kaydetme ------------------------------------------------------------
-  /** Adimlar SIRALI ve bagimliliklarina gore dizilir: once eklemeler (yeni tur
-   *  yeni mudurlugu bulabilsin), sonra guncellemeler/yonlendirme, en sonda
-   *  silmeler (silinen sey hala bir yerden referans alinmasin). Bir adim
-   *  patlarsa devam edilmez - sonraki adimlar zaten bu adimin sonucuna
-   *  dayaniyor olabilir; taslak da temizlenmez ki yapilan is kaybolmasin. */
+  // Adimlar bagimliliga gore sirali: once eklemeler, sonra guncelleme/yonlendirme,
+  // en sonda silmeler. Bir adim patlarsa devam edilmez, taslak temizlenmez.
   const kaydet = async () => {
     setKaydediliyor(true);
     setHata(null);
@@ -406,7 +383,6 @@ export default function DepartmanYonetimi() {
         )}
       </div>
 
-      {/* Degisiklik ozeti: "Kaydet"e basmadan once ne olacaginin tam listesi. */}
       {(degisiklikVar || engeller.length > 0) && (
         <div className="max-h-40 overflow-y-auto border-t border-slate-200 bg-slate-50 px-4 py-2">
           {engeller.map((e) => (
@@ -461,8 +437,6 @@ export default function DepartmanYonetimi() {
 interface TurlerSekmesiProps {
   turler: Tur[];
   departmanlar: Departman[];
-  /** Sunucuda KAYITLI olan kodlar; taslakta eklenenler bundan ayrilir (kodu
-   *  hala degistirilebilir olanlar onlardir). */
   kayitliKodlar: Set<string>;
   turunDepartmani: (kod: string) => string;
   onDuzenle: (kod: string, data: TurUpdateInput) => void;
@@ -472,11 +446,8 @@ interface TurlerSekmesiProps {
   onEkle: (tur: TurCreateInput) => void;
 }
 
-/** Turler MUDURLUK MUDURLUK listelenir, renk grubuna gore degil: bu ekranin
- *  sorusu "hangi is kime gidiyor"dur. Renk grubu turun kendi satirinda (glif
- *  cercevesi + acilir ayrintida) durmayi surdurur - gorsel dil kaybolmaz, ana
- *  kategori olmaktan cikar. Ayni kategorileme lejantta ve tur acilirlarinda da
- *  kullanilir (`departmanTurGruplari`). */
+// Turler MUDURLUK MUDURLUK listelenir (renk grubuna gore degil): bu ekranin sorusu
+// "hangi is kime gidiyor"dur. Ayni kategorileme lejantta da kullanilir (`departmanTurGruplari`).
 function TurlerSekmesi({
   turler,
   departmanlar,
@@ -488,7 +459,6 @@ function TurlerSekmesi({
   onSil,
   onEkle,
 }: TurlerSekmesiProps) {
-  // Hangi mudurlugun altindaki "yeni tur" formu acik (kod ya da null).
   const [formDepartmani, setFormDepartmani] = useState<string | null>(null);
 
   const bolumler = departmanlar.map((d) => ({
@@ -510,8 +480,7 @@ function TurlerSekmesi({
           ? onDuzenle(tur.kod, data)
           : onYeniDuzenle(tur.kod, data)
       }
-      // Renk grubu YONLENDIRMEYI IZLER: bir tur baska mudurluge tasindiginda
-      // haritadaki rengi de oraya gecer, ayrica secilmesi gerekmez.
+      // Renk grubu yonlendirmeyi izler: tur baska mudurluge tasininca rengi de gecer.
       onYonlendir={(hedef) => {
         const grup = departmanGrubu(departmanlar.find((d) => d.kod === hedef));
         if (kayitliKodlar.has(tur.kod)) {
@@ -569,8 +538,6 @@ function TurlerSekmesi({
             <ul className="divide-y divide-slate-100">{kapsam.map(satir)}</ul>
           )}
 
-          {/* Yeni tur DOGRUDAN mudurlugun altina eklenir: yonlendirme turun bir
-              ozelligidir ve ayri bir adimda secilmesi unutulabilir bir seydi. */}
           {formDepartmani === departman.kod ? (
             <YeniTurFormu
               departmanlar={departmanlar}
@@ -595,8 +562,6 @@ function TurlerSekmesi({
         </section>
       ))}
 
-      {/* Yonlendirmesi silinmis turler ekrandan DUSMEMELI: buradan bir
-          mudurluge cekilebilsinler. */}
       {artan.length > 0 && (
         <section className="mb-4 overflow-hidden rounded-lg border border-amber-300">
           <header className="bg-amber-50 px-3 py-2">
@@ -641,8 +606,6 @@ function TurSatiri({
   const onerilenGrup = departmanGrubu(hedefDepartman);
 
   return (
-    // Acik satir kendi zeminini ve mudurluk renginde bir kenar seridini alir:
-    // acilir panelin hangi ture ait oldugu ve nerede bittigi okunabilsin.
     <li
       className={`transition ${
         acik ? "bg-slate-50" : yeni ? "bg-emerald-50" : ""
@@ -664,8 +627,6 @@ function TurSatiri({
         >
           <span className="flex items-center gap-1.5 text-sm text-slate-800">
             <span className="min-w-0 truncate">{tur.ad}</span>
-            {/* Kapali satirda da gorunsun: ayrisma ancak acilirsa fark
-                edilseydi, kimse acmadigi icin hic fark edilmezdi. */}
             {uyari && (
               <span title={uyari} className="shrink-0 text-xs text-amber-600">
                 ⚠
@@ -684,9 +645,6 @@ function TurSatiri({
             {tur.kod}
           </span>
         </button>
-        {/* Turu BASKA bir mudurluge tasima. Satir zaten kendi mudurlugunun
-            bolumunde duruyor; bu acilir "kime gitsin" sorusunun tek yaniti,
-            secim degisince satir digerinin altina tasinir. */}
         <select
           value={hedef}
           title="Türü başka bir müdürlüğe taşı"
@@ -711,8 +669,6 @@ function TurSatiri({
         </button>
       </div>
 
-      {/* Ayrinti paneli bir KART: kendi cercevesi, zemini ve basligi var ki
-          alttaki tur satirlariyla karismasin. */}
       {acik && (
         <div className="px-3 pb-3">
           <div
@@ -778,8 +734,6 @@ function YeniTurFormu({
   onVazgec,
 }: {
   departmanlar: Departman[];
-  /** Verilirse form bu mudurlugun altinda acilmistir: hedef sabittir ve
-   *  acilir yerine bir rozet gosterilir (bir eksik secim daha kalmasin). */
   sabitDepartman?: Departman;
   onEkle: (tur: TurCreateInput) => void;
   onVazgec: () => void;
@@ -792,9 +746,7 @@ function YeniTurFormu({
 
   const hedefDepartman =
     sabitDepartman ?? departmanlar.find((d) => d.kod === departman);
-  // Grup HEDEF MUDURLUKTEN turetilir (renk eslesmesi uzerinden), sorulmaz:
-  // turun haritadaki rengi her zaman gittigi mudurlugun rengidir. Mudurlugun
-  // rengi palette yoksa `diger`e duser ve altta uyari cikar.
+  // Grup hedef mudurlukten turetilir; mudurlugun rengi palette yoksa `diger`e duser.
   const etkinGrup = departmanGrubu(hedefDepartman) ?? "diger";
   const uyari = grupUyumsuzlugu(etkinGrup, hedefDepartman);
 
@@ -886,10 +838,7 @@ function YeniTurFormu({
   );
 }
 
-/** Grup rengi ile mudurluk rengi ayristiginda cikan amber serit. Kural
- *  ZORLANMAZ (palet kodda sabit, mudurluk veridir - her renge karsilik gelen
- *  bir grup olmayabilir), ama ayrisma sessizce olmamali: bedeli lejantta
- *  gorunur ve kullanici bunu ancak haritayi okuyamadiginda fark eder. */
+// Grup rengi ile mudurluk rengi ayristiginda cikan amber uyari (kural zorlanmaz).
 function RenkUyarisi({ mesaj, onDuzelt }: { mesaj: string; onDuzelt?: () => void }) {
   return (
     <p className="col-span-2 flex items-center gap-2 border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
@@ -907,8 +856,7 @@ function RenkUyarisi({ mesaj, onDuzelt }: { mesaj: string; onDuzelt?: () => void
   );
 }
 
-/** Glif kitapligindan secim. Yeni bir tur eklemek SVG yazmayi degil hazir bir
- *  cizimi secmeyi gerektirsin diye - kitaplik `data/tipGlifleri.ts`'te. */
+// Glif kitapligindan secim (`data/tipGlifleri.ts`); yeni tur SVG yazmadan glif secer.
 function GlifSecici({
   secili,
   onSec,
@@ -1118,10 +1066,8 @@ function YeniDepartmanFormu({
         </label>
         <label className="col-span-2">
           <span className={etiketClass}>Başlık rengi</span>
-          {/* Palet ONCE gelir: paletten secilen renk, bu mudurluge eklenecek
-              turlerin harita rengiyle birebir ayni olur (yeni tur formu grubu
-              renkten turetir). Serbest secici duruyor ama o yolda lejantta
-              baslik ile satir ayrisir. */}
+          {/* Paletten secilen renk, bu mudurluge eklenecek turlerin harita rengiyle
+              birebir ayni olur; serbest renkte lejantta baslik/satir ayrisabilir. */}
           <div className="mt-0.5 flex flex-wrap items-center gap-1">
             {TIP_GRUPLARI.map((g) => (
               <button

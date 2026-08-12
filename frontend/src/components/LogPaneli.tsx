@@ -33,12 +33,10 @@ const ACTION_STIL: Record<
   bolge_assigned: { ikon: IconUsers, rozet: "bg-indigo-100 text-indigo-700" },
 };
 
-/** Backend ileride yeni bir islem turu eklerse (frontend guncellenmeden once)
- *  panel cokmesin: bilinmeyen tur notr bir rozetle, ham adiyla gosterilir. */
+/** Bilinmeyen islem turu icin notr rozet (backend yeni tur eklerse panel cokmesin). */
 const VARSAYILAN_STIL = { ikon: IconHistory, rozet: "bg-slate-100 text-slate-600" };
 
-/** Sistem genelindeki islem gecmisi: varlik ekleme/guncelleme/silme, durum
- *  degisimi, talep onay/ret, personel ekleme - kim, ne zaman, ne yapti. */
+/** Sistem genelindeki islem gecmisi. */
 export default function LogPaneli() {
   const { data, isLoading, isError, error, refetch, isFetching } = useLogs();
 

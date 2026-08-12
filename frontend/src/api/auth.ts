@@ -3,13 +3,11 @@ import type { Yaka } from "../types/saha";
 import { istek } from "./http";
 
 /** Parola ile giris/kayit ucu KALMADI: ikisi de Keycloak'in kendi ekraninda
- *  yapiliyor (bkz. auth/token.ts::girisBaslat / kayitBaslat). Backend'de kalan
- *  kimlik uclari yalnizca oturumu okumak ve kapatmak icin. */
+ *  yapiliyor (bkz. auth/token.ts::girisBaslat / kayitBaslat). */
 
 /** Acilista oturumu geri yuklemek icin cagrilir. `oturumKontrolu: false`:
- *  oturum yoksa 401 beklenen durumdur - AuthContext kullaniciyi null birakir,
- *  RequireRole giris akisini baslatir; buradan yonlendirme yapmak acilista
- *  gereksiz bir tam sayfa gecisi olurdu. */
+ *  oturum yoksa 401 beklenen durumdur, RequireRole giris akisini kendisi
+ *  baslatir. */
 export function me() {
   return istek<User>("/auth/me", { oturumKontrolu: false });
 }
@@ -61,9 +59,6 @@ export function updateUserYaka(user_id: string, yaka: Yaka | null) {
   });
 }
 
-/** Admin: hesabi acar/kapatir. Kapatmak yalnizca bir bayrak degildir - hesap
- *  Keycloak'ta da devre disi birakilir ve ACIK OTURUMLARI ANINDA DUSER, yani
- *  ele gecirilmis bir hesabi kesmenin yoludur (bkz. crud/user.py::set_active). */
 export function updateUserDepartman(user_id: string, departman: string) {
   return istek<User>(`/users/${user_id}`, {
     method: "PATCH",
@@ -71,6 +66,8 @@ export function updateUserDepartman(user_id: string, departman: string) {
   });
 }
 
+/** Kapatmak Keycloak'ta da hesabi devre disi birakir ve ACIK OTURUMLARI
+ *  ANINDA DUSER (bkz. crud/user.py::set_active). */
 export function updateUserAktif(user_id: string, is_active: boolean) {
   return istek<User>(`/users/${user_id}`, {
     method: "PATCH",

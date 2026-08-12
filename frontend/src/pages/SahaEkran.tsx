@@ -54,8 +54,7 @@ import { kacis } from "../utils/html";
 
 const GOREV_RENGI = "#d97706"; // amber - "iş bekliyor"
 
-/** Isin buyuklugu: cizgide hattin uzunlugu, alanda yuzolcum. Nokta islerde
- *  null - pin zaten tek noktayi gosteriyor, olculecek bir sey yok. */
+/** Isin buyuklugu: cizgide uzunluk, alanda yuzolcum; nokta islerde null. */
 function sekilOlcusu(sekil: ReturnType<typeof gorevSekli>): string | null {
   if (!sekil) return null;
   return sekil.tip === "LineString"
@@ -63,9 +62,8 @@ function sekilOlcusu(sekil: ReturnType<typeof gorevSekli>): string | null {
     : alanEtiketi(poligonAlaniM2(sekil.halkalar[0]));
 }
 
-/** Duyuru serididin basligi. Iki yon ayni seritte birikebilir (personel bir isi
- *  alip yerine baskasini verebilir); baslik o yuzden hangi olaydan kac tane
- *  oldugunu soyler, tek yon varsa onu adiyla anlatir. */
+/** Duyuru seridinin basligi: iki yon (atanan/geri alinan) ayni seritte
+ *  birikebilir, baslik hangisinden kac tane oldugunu soyler. */
 function duyuruBasligi(isler: YeniGorevBildirimi[]): string {
   const alinan = isler.filter((i) => i.yon === "kaldirildi").length;
   const verilen = isler.length - alinan;
@@ -87,10 +85,8 @@ function yolTarifiAc(lng: number, lat: number) {
   );
 }
 
-/** Bolge/guzergahin yol tarifi hedefi. Alanda en buyuk halkanin merkezi -
- *  haritadaki ad etiketinin durdugu nokta, ekip "adin yazdigi yere" yonlensin.
- *  Guzergahta hattin ORTASI degil BASI: bir hat bastan sona yurunur, ortasina
- *  birakilan ekip isin yarisini geride birakmis olur. */
+/** Bolge/guzergahin yol tarifi hedefi. Alanda en buyuk halkanin merkezi;
+ *  guzergahta hattin ORTASI degil BASI - hat bastan sona yurunur. */
 function bolgeHedefi(bolge: Bolge): [number, number] {
   return bolge.tip === "alan"
     ? enBuyukHalkaMerkezi(bolge.noktalar)
@@ -111,31 +107,24 @@ export default function SahaEkran() {
     zoom?: number;
   } | null>(null);
   const [tamirEdilen, setTamirEdilen] = useState<string | null>(null);
-  // Ayrintisi acik olan gorev (assignment_id). Aciklama karta hep basili
-  // olsaydi liste okunmaz hale gelirdi; tek tek acilir.
+  // Ayrintisi acik olan gorev (assignment_id); tek tek acilir.
   const [acikDetay, setAcikDetay] = useState<string | null>(null);
   // "Tamir Edildi" iki adimli: ilk tik onay ister, ikinci tik tamamlar.
   const [onayBekleyen, setOnayBekleyen] = useState<string | null>(null);
-  // Geri alinmakta olan tamamlanmis gorev (assignment_id).
   const [geriAlinan, setGeriAlinan] = useState<string | null>(null);
-  // Islem gormekte olan gorev bolgesi / guzergah (bolge id) ve onay bekleyeni.
   const [bolgeIslemde, setBolgeIslemde] = useState<string | null>(null);
   const [bolgeOnayBekleyen, setBolgeOnayBekleyen] = useState<string | null>(null);
   // Bu oturumda geri alinan gorevler; aktif listede rozetle isaretlenir.
   const [geriAlinanlar, setGeriAlinanlar] = useState<Set<string>>(new Set());
-  // Islem sonrasi bilgilendirme seridi.
   const [durum, setDurum] = useState<{ ok: boolean; metin: string } | null>(null);
   const [panelAcik, setPanelAcik] = useState(true);
   const mobil = useMobil();
-  // Mobilde gorev listesi bir sheet: acilista yarim kademede durur ki ekip
-  // hem isini hem haritadaki yerini ayni anda gorsun - ekranin tek isi bu.
+  // Mobilde gorev listesi bir sheet, acilista yarim kademede.
   const [sheetAcik, setSheetAcik] = useState(true);
   /** Haritanin gizli konum kontrolunu tetikler (mobildeki konum dugmesi). */
   const konumTetikleRef = useRef<(() => void) | null>(null);
 
-  /** Canli kanal: atama/kaldirma sunucuda olur olmaz listeler tazelenir.
-   *  Durum arayuzde gosterilir - kanal kopmussa ekip listenin bir dakikaya
-   *  kadar bayat olabilecegini bilmeli. */
+  /** Canli kanal: atama/kaldirma sunucuda olur olmaz listeler tazelenir. */
   const canliDurum = useCanliGuncelleme(Boolean(user));
 
   // Konum yayini: acilista ve her 30 sn'de bir backend'e gonderilir.
@@ -172,19 +161,11 @@ export default function SahaEkran() {
     };
   }, []);
 
-  /* Is listeleri: ekip yeni atanan isi SAYFAYI YENILEMEDEN gormeli.
-     ANA YOL ARTIK CANLI KANAL (SSE): atama/kaldirma/tamamlama sunucuda olur
-     olmaz sinyal gelir ve ilgili sorgu tazelenir (bkz. useCanliGuncelleme).
-     Eskiden bunu 10 sn'lik yoklama yapiyordu; ekip basina dakikada ~12 istek
-     gidiyor ve degisiklik yine de yarim periyot gecikiyordu.
-
-     Yoklama KALDIRILMADI, yedege cekildi:
-       * `YEDEK_YOKLAMA_MS` - kanal sessizce olurse (proxy zaman asimi, uzun
-         uyuyan sekme) ekran en fazla 1 dk bayat kalir. "Hic guncellenmiyor"
-         durumu bir saha ekibi icin kabul edilemez.
-       * `refetchOnWindowFocus` - uygulamanin geneli bunu KAPATIR (main.tsx),
-         ama saha ekrani tersini ister: telefon cebe girip cikiyor, ekrana geri
-         donuldugu an liste taze olmali (kanal yeniden baglanirken de). */
+  /* Is listeleri: ana yol canli kanaldir (SSE, bkz. useCanliGuncelleme).
+     Yoklama yedege cekildi: `YEDEK_YOKLAMA_MS` kanal sessizce kopsa bile
+     ekrani en fazla 1 dk bayat tutar; `refetchOnWindowFocus` burada acik
+     (main.tsx'te genel olarak kapali) - telefon cepten cikinca liste taze
+     olmali. */
   const gorevSorgu = useQuery({
     queryKey: ["saha", "gorevlerim"],
     queryFn: gorevlerim,
@@ -207,34 +188,28 @@ export default function SahaEkran() {
   const bolgeSorgu = useQuery({
     queryKey: ["saha", "bolgelerim"],
     queryFn: bolgelerimGetir,
-    // Bakim isiyle AYNI periyot: bolge/guzergah da ayni kotayi paylasan bir
-    // "gorev"dir ve ayni sekilde duyurulur, dolayisiyla ayni hizda ogrenilmeli.
-    // Uzun periyot atamanin ekibe ulasmasini 30 sn'ye kadar geciktiriyordu -
-    // bakim isi "az sonra", bolge "biraz sonra" gelmis gibi gorunuyordu.
+    // Bakim isiyle AYNI periyot: bolge/guzergah ayni kotayi paylasan bir
+    // "gorev"dir, ayni hizda ogrenilmeli.
     refetchInterval: YEDEK_YOKLAMA_MS,
     refetchOnWindowFocus: true,
   });
   const bolgeler = bolgeSorgu.data ?? [];
-  // Memolu: yeni is tespiti bu diziye bakiyor, her render'da yeni bir referans
-  // uretilseydi fark hesabi bosuna her karede calisirdi.
+  // Memolu: yeni is tespiti bu diziye bakiyor.
   const aktifBolgeler = useMemo(
     () => (bolgeSorgu.data ?? []).filter((b) => !b.tamamlandi_at),
     [bolgeSorgu.data]
   );
 
-  /* --- "Size yeni iş atandı" duyurusu ---
-     Liste sessizce uzuyordu: yeni is siranin bir yerine giriyor, ekip fark
-     etmiyordu. Iki cekim arasindaki fark alinip ustte duyurulur.
-     Bakim isi ile bolge/guzergah AYRI DUYURULMAZ: ucu de ayni kotayi paylasan
-     tek bir "gorev" kavrami (bkz. CLAUDE.md), ekip icin hepsi "bugun yapilacak
-     is"tir - ayri seritler ayni olayi iki kez anlatirdi. */
+  /* "Size yeni iş atandı" duyurusu: iki cekim arasindaki fark alinip ustte
+     gosterilir. Bakim isi ile bolge/guzergah AYRI DUYURULMAZ: ucu de ayni
+     kotayi paylasan tek bir "gorev" kavrami. */
   const yeniGorevler = useYeniGorevler(gorevSorgu.data?.features, (g) => ({
     id: g.properties.assignment_id,
     ad: g.properties.name,
     tur: "bakım",
   }));
-  // Yalnizca AKTIF kayitlar: tamamlanmis bir bolge geri alininca listeye
-  // "yeni" gibi girer, o gercekten yeni bir istir ve duyurulmalidir.
+  // Yalnizca AKTIF kayitlar: tamamlanmis bir bolge geri alininca "yeni" gibi
+  // girer ve gercekten duyurulmalidir.
   const yeniBolgeler = useYeniGorevler(aktifBolgeler, (b) => ({
     id: b.id,
     ad: b.ad,
@@ -253,8 +228,6 @@ export default function SahaEkran() {
   const tamamlananBolgeler = bolgeler.filter((b) => b.tamamlandi_at);
   const aktifAlanlar = aktifBolgeler.filter((b) => b.tip === "alan");
   const aktifGuzergahlar = aktifBolgeler.filter((b) => b.tip === "cizgi");
-  // Ekip icin bolge/guzergah ayri bir kategori degil, "bugun yapilacak is";
-  // sayac da bu yuzden tek.
   const aktifIsSayisi = gorevler.length + aktifBolgeler.length;
 
   // Haritada yalnizca aktif kayitlar cizilir; tamamlananlar listede durur.
@@ -272,10 +245,9 @@ export default function SahaEkran() {
     [bolgeSorgu.data]
   );
 
-  /** Isin KENDI sekli: vatandas bir hat ya da bolge cizdiyse haritada oyle
-   *  gorunur. Varlik nokta oldugu icin (envanter/atama tek nokta uzerinden
-   *  calisir) pin yerinde kalir; sekil pinin altina, isin buyuklugunu
-   *  gostermek icin cizilir. Kenarlik DUZ: kesikli olan gorev bolgesidir. */
+  /** Isin KENDI sekli: pin nokta olarak sabit kalir, sekil pinin altina isin
+   *  buyuklugunu gostermek icin cizilir. Kenarlik DUZ: kesikli olan gorev
+   *  bolgesidir. */
   const gorevSekilleri = useMemo<HaritaAlani[]>(
     () =>
       (gorevSorgu.data?.features ?? []).flatMap((g) => {
@@ -322,7 +294,6 @@ export default function SahaEkran() {
         const foto = fotoUrl(p.photo_url);
         const sekil = gorevSekli(p);
         const olcu = sekilOlcusu(sekil);
-        // Pin popup'i: foto + detay + yol tarifi baglantisi.
         const popupHtml =
           `<div style="font-family:system-ui,sans-serif;width:200px">` +
           (foto
@@ -332,7 +303,6 @@ export default function SahaEkran() {
           `<div style="font-size:11px;color:#64748b;margin:2px 0 6px">${kacis(
             turAdi(p.type)
           )}${p.brand_model ? " · " + kacis(p.brand_model) : ""}</div>` +
-          // Isin sekli: pin tek nokta gosterir, isin gercek buyuklugu burada.
           (sekil
             ? `<div style="font-size:11px;color:#b45309;font-weight:600;margin-bottom:4px">` +
               `${kacis(TALEP_SEKIL_ETIKETLERI[sekil.tip])}${olcu ? " · " + kacis(olcu) : ""}` +
@@ -364,9 +334,8 @@ export default function SahaEkran() {
   const tamirEt = async (assetId: string, ad: string) => {
     setTamirEdilen(assetId);
     try {
-      // Is aktif listeden DUSER; ekibin kendi tamamlamasi oldugu icin
-      // "isiniz alindi" diye duyurulmaz. Muafiyet assignment_id uzerinden
-      // kurulur - duyuru kumesinin anahtari odur, asset_id degil.
+      // Ekibin kendi tamamlamasi "isiniz alindi" diye duyurulmaz; muafiyet
+      // assignment_id uzerinden kurulur (duyuru kumesinin anahtari).
       const gorev = gorevler.find((g) => g.properties.asset_id === assetId);
       if (gorev) yeniGorevler.kendiIslemi(gorev.properties.assignment_id);
       await repairAsset(assetId);
@@ -385,9 +354,7 @@ export default function SahaEkran() {
   const bolgeDurumDegis = async (id: string, ad: string, tamamlandi: boolean) => {
     setBolgeIslemde(id);
     try {
-      // Iki yon de ekibin KENDI islemi: tamamlama kaydi aktif listeden dusurur,
-      // geri alma listeye dondurur. Ikisi de duyurudan muaftir - sonucu zaten
-      // asagidaki islem seridinde yaziyor (bakim gorevindeki desenin aynisi).
+      // Iki yon de ekibin KENDI islemi, dolayisiyla duyurudan muaf.
       yeniBolgeler.kendiIslemi(id);
       await bolgeTamamla(id, tamamlandi);
       await queryClient.invalidateQueries({ queryKey: ["saha"] });
@@ -408,9 +375,8 @@ export default function SahaEkran() {
   const geriAl = async (assignmentId: string, ad: string) => {
     setGeriAlinan(assignmentId);
     try {
-      // Kayit aktif listeye GERI DONER (ayni assignment_id, bkz.
-      // crud/assignment.py::tamamlanani_geri_al). Duyuru "size is ATANDI"
-      // dediginden ekibin kendi tikladigi bu donusu haber vermemeli.
+      // Duyuru "size is ATANDI" dediginden ekibin kendi tikladigi bu donusu
+      // haber vermemeli.
       yeniGorevler.kendiIslemi(assignmentId);
       await tamamlananiGeriAl(assignmentId);
       setGeriAlinanlar((prev) => new Set(prev).add(assignmentId));
@@ -423,13 +389,10 @@ export default function SahaEkran() {
     }
   };
 
-  /* --- Iki kabugun paylastigi panel icerigi ---
-     JSX burada bir kez kurulur, asagida ya masaustu yan paneline ya da mobil
-     sheet'ine yerlestirilir; iki kabuk arasinda kopyalanan tek satir yok. */
+  /* Iki kabugun (masaustu/mobil) paylastigi panel icerigi. */
   const panelIcerigi = (
     <>
-          {/* Ust ozet: is yuku + konum yayininin canli olup olmadigi (personel
-              ekibi haritada ancak konum gelirse gorur). */}
+          {/* Ust ozet: is yuku + konum yayininin canli olup olmadigi. */}
           <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 p-4 backdrop-blur-sm">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -464,10 +427,8 @@ export default function SahaEkran() {
               </span>
             </div>
 
-            {/* Canli kanal YALNIZCA KOPUKKEN yazilir: saglikli durumda ikinci
-                bir yesil rozet, yanindaki "Konum canlı" ile karisip gurultu
-                olurdu. Kopukluk ise ekibin bilmesi gereken bir sey - liste bir
-                dakikaya kadar bayat kalabilir (yedek yoklama devrede). */}
+            {/* Canli kanal YALNIZCA KOPUKKEN yazilir; saglikliyken "Konum
+                canlı" rozetiyle karisip gurultu olurdu. */}
             {canliDurum === "kopuk" && (
               <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-700">
                 <IconWarning className="mt-px h-3.5 w-3.5 shrink-0" />
@@ -485,10 +446,8 @@ export default function SahaEkran() {
               </p>
             )}
 
-            {/* Yeni atanan is duyurusu. Ozet blogunun icinde ve YAPISKAN: liste
-                kaydirilmis olsa bile gorunur kalir, yoksa duyuru ekibin
-                bakmadigi bir yerde acilirdi. `aria-live` ile ekran okuyucuya da
-                bildirilir - is atamasi kullanicinin baslatmadigi bir olaydir. */}
+            {/* Yeni atanan is duyurusu: ozet blogunun icinde ve YAPISKAN,
+                liste kaydirilsa da gorunur kalir. */}
             {yeniIsler.length > 0 && (
               <div
                 role="status"
@@ -556,14 +515,9 @@ export default function SahaEkran() {
             )}
           </div>
 
-          {/* Uc kategori tek akista, sabit sirayla: once tek tek bakim isleri,
-              sonra calisilacak alan, en sonda izlenecek hat. Sira is gununun
-              sirasidir - ekip once noktasal isleri yapar, bolge/guzergah
-              gun boyu suren kapsayici islerdir.
-              AYRIM DILI: her kategori kendi rengini SOLDAKI dikey seritte
-              tasir (kategori sinirini goz tek bakista bulur), kategori icindeki
-              isler ise beyaz kartlar olarak bosluklarla ayrilir. Boylece iki
-              ayrim farkli gorsel kanal kullanir ve birbirine karismaz. */}
+          {/* Uc kategori sabit sirayla: bakim isleri, alan, hat. Kategori
+              kendi rengini SOLDAKI dikey seritte tasir, kart sinirlari ayri
+              gorsel kanal - iki ayrim birbirine karismaz. */}
           <div className="min-h-0 flex-1 space-y-4 p-4">
             {gorevSorgu.isLoading ? (
               <p className="text-xs text-slate-400">Yükleniyor…</p>
@@ -627,7 +581,6 @@ export default function SahaEkran() {
                               <Ikon className="h-6 w-6 text-slate-400" />
                             </div>
                           )}
-                          {/* Sira rozeti = gidis sirasi (en yakindan uzaga). */}
                           <span className="absolute -left-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white ring-2 ring-white">
                             {sira + 1}
                           </span>
@@ -645,8 +598,6 @@ export default function SahaEkran() {
                               <IconWarning className="h-3 w-3" />
                               Bakım Lazım
                             </span>
-                            {/* Isin sekli: nokta islerde rozet cizilmez, pin
-                                zaten tek yeri gosteriyor. */}
                             {sekil && (
                               <span
                                 className="inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-700 ring-1 ring-slate-300"
@@ -684,11 +635,9 @@ export default function SahaEkran() {
                         </div>
                       </button>
 
-                      {/* Ayrinti: vatandasin aciklamasi + fotograf + kunye.
-                          `assets`te not sutunu olmadigi icin "hangi bank
-                          kirik" bilgisi yalnizca buradan okunabilir. Karta hep
-                          basili olsaydi liste okunmaz hale gelirdi; kapali
-                          durumda yalnizca ilk satiri sizar. */}
+                      {/* Ayrinti: vatandasin aciklamasi + fotograf + kunye;
+                          `assets`te not sutunu olmadigindan yalnizca buradan
+                          okunur. */}
                       <div className="border-t border-slate-100">
                         <button
                           onClick={() =>
@@ -890,10 +839,8 @@ export default function SahaEkran() {
               </>
             )}
 
-            {/* Tamamlanan isler silinmez; yanlislikla isaretlenirse buradan
-                geri alinabilir. Aktif kategorilerden KALIN bir cizgiyle ayrilir:
-                "yapilacaklar" ile "yapilanlar" arasindaki sinir, uc kategori
-                arasindaki sinirdan daha buyuktur. */}
+            {/* Tamamlanan isler silinmez, geri alinabilir; aktif kategorilerden
+                KALIN bir cizgiyle ayrilir. */}
             {tamamlananlar.length + tamamlananBolgeler.length > 0 && (
               <div className="mt-6 border-t-4 border-slate-200 pt-4">
                 <BolumBasligi
@@ -1026,10 +973,7 @@ export default function SahaEkran() {
         <div className="relative min-h-0 flex-1">
           <div className="absolute inset-0">{harita}</div>
 
-          {/* Konum dugmesi: vatandas ekranindakiyle birebir ayni gorunum.
-              Sheet acikken haritanin alt yarisi zaten panelin altinda kaliyor,
-              dugme de orada gorunmez olurdu; seritle ayni kosulda cizilir ve
-              seridin uzerinde rahat bir bosluga oturur. */}
+          {/* Konum dugmesi: vatandas ekranindakiyle birebir ayni gorunum. */}
           {!sheetAcik && (
             <button
               type="button"
@@ -1063,11 +1007,8 @@ export default function SahaEkran() {
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
                       {aktifIsSayisi} aktif iş
                     </span>
-                    {/* Duyuru serit ustunde de gorunmeli: sheet kapaliyken
-                        paneldeki kutu ekranda hic olmuyor ve degisiklik yine
-                        sessizce gelmis olurdu. Iki yon ayri rozet: "1 yeni"
-                        yazan bir serit, aslinda isi ALINMIS ekibi yanlis
-                        yonlendirirdi. */}
+                    {/* Iki yon ayri rozet: "1 yeni" tek bir serit isi ALINMIS
+                        ekibi yanlis yonlendirirdi. */}
                     {yeniAtananSayisi > 0 && (
                       <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">
                         {yeniAtananSayisi} yeni
@@ -1104,7 +1045,7 @@ export default function SahaEkran() {
     );
   }
 
-  // --- Masaustu kabugu (degismedi) ---
+  // --- Masaustu kabugu ---
   return (
     <div className="ekran-yuksekligi flex w-screen flex-col overflow-hidden bg-slate-100">
       <header className="z-20 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
@@ -1195,15 +1136,10 @@ const BOLUM_RENKLERI = {
   },
 };
 
-/** Kategori kabugu: uc is turunu (bakim / bolge / guzergah) birbirinden
- *  ayiran blok. AYRIM IKI KANALDAN GIDER, boylece kategori siniri ile kart
- *  siniri birbirine karismaz:
- *    * KATEGORI: kendi renginde SOLDAKI dikey serit + ayni rengin cok acik
- *      zemini + baslik. Blok, icindeki kartlari gorsel olarak kucaklar.
- *    * KART: blogun zemini uzerinde beyaz, kenarlikli, aralarinda bosluk.
- *  Sadece baslik kullanilsaydi (eski hali) uzun bir listede kaydirinca
- *  hangi baslibin altinda olundugu kayboluyordu; serit her kaydirma
- *  konumunda gorunur kalir. */
+/** Kategori kabugu: uc is turunu (bakim / bolge / guzergah) ayiran blok.
+ *  Kategori kendi rengini SOLDAKI dikey seritte tasir (uzun listede
+ *  kaydirirken hangi baslik altinda olundugu kaybolmasin), kartlar ise
+ *  blogun zemininde beyaz/kenarlikli durur - iki ayri gorsel kanal. */
 const KATEGORI_RENKLERI = {
   amber: "border-l-amber-500 bg-amber-50/40",
   violet: "border-l-violet-500 bg-violet-50/40",
@@ -1243,8 +1179,7 @@ function Kategori({
   );
 }
 
-/** Sol paneldeki bolum basligi (BolgePaneli'ndeki ile ayni dil): ekran uc ayri
- *  is turunu yan yana listeledigi icin bilincli olarak belirgin. */
+/** Sol paneldeki bolum basligi (BolgePaneli'ndeki ile ayni dil). */
 function BolumBasligi({
   baslik,
   altBaslik,

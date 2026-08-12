@@ -1,9 +1,7 @@
 import type { TipGrubu } from "./asset";
 
 /** Bir varlik/talep turu. Sozluk BACKEND'DEN gelir (`turler` tablosu), kodda
- *  sabitlenmez: admin yeni bir tur ekledigi icin frontend yeniden
- *  derlenmemeli. Renk burada YOKTUR - turun rengi grubundan gelir (`GRUP_RENGI`),
- *  iki renk kaynagi ayni turu iki yerde farkli boyardi. */
+ *  sabitlenmez. Renk burada YOKTUR - turun rengi grubundan gelir (`GRUP_RENGI`). */
 export interface Tur {
   /** Dogal anahtar; `assets.type` / `reports.type` icinde yasayan deger. */
   kod: string;

@@ -1,12 +1,10 @@
-/** Giris/cikis akisinin baslatildigi yer. Token tarayicida tutulmaz: backend'in
- *  `sessions` tablosunda durur, tarayicida yalnizca httpOnly bir oturum
- *  cookie'si vardir (bkz. api/http.ts `credentials: "include"`). */
+/** Giris/cikis akisinin baslatildigi yer. Token tarayicida tutulmaz, yalnizca
+ *  httpOnly oturum cookie'si vardir (bkz. api/http.ts `credentials: "include"`). */
 
 import { BASE_URL } from "../api/http";
 
-/** Giris kendiliginden baslatildigi icin (bkz. RequireRole) dongu riski var:
- *  Keycloak'ta oturum acikken cookie bize ulasmiyorsa `/auth/me` bos doner ve
- *  kullanici iki sunucu arasinda sonsuza kadar gidip gelir. Bu isaret art
+/** Giris otomatik baslatildigi icin dongu riski var: cookie ulasmazsa
+ *  `/auth/me` bos doner ve kullanici surekli yonlendirilir. Bu isaret art
  *  arda denemeleri fark edip akisi `/giris` sayfasinda durdurur. */
 const DENEME_ANAHTARI = "haberver_giris_denemesi";
 const DONGU_ESIGI_MS = 15_000;
@@ -23,10 +21,8 @@ export function girisDenemesiniUnut(): void {
   sessionStorage.removeItem(DENEME_ANAHTARI);
 }
 
-/** Cikis surerken giris baslatilmasini engeller. Cikis iki adimlidir (once
- *  yerel oturum silinir, sonra Keycloak'in cikis adresine gidilir); arada
- *  RequireRole girisi yeniden baslatirsa cikis navigasyonu iptal olur ve
- *  kullanici sessizce hesabina geri alinir. */
+/** Cikis surerken giris baslatilmasini engeller: arada RequireRole girisi
+ *  yeniden baslatirsa cikis navigasyonu iptal olurdu. */
 let cikisSuruyor = false;
 
 export function cikisiBaslat(): void {
@@ -36,10 +32,8 @@ export function cikisiBaslat(): void {
 /** Keycloak giris ekranina gider; state/nonce/PKCE'yi backend uretir ve giris
  *  bitince kullanici `donus` yoluna doner.
  *
- *  `yontem`: "push" kullanicinin dugmeye bastigi durum, gecmise durak ekler
- *  (geri tusu /giris sayfasina doner). "replace" RequireRole'un otomatik
- *  yonlendirmesi icindir; durak eklemedigi icin geri tusu tum giris zincirini
- *  atlayip kullanicinin gercekten geldigi yere doner. */
+ *  `yontem`: "push" gecmise durak ekler (dugmeyle giris), "replace" durak
+ *  eklemez (RequireRole'un otomatik yonlendirmesi). */
 export function girisBaslat(
   donus: string = window.location.pathname,
   yontem: "push" | "replace" = "push"

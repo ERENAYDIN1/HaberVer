@@ -15,22 +15,15 @@ export interface KenarOgesi {
 }
 
 interface KenarcubuguProps {
-  /** Genis (etiketli) mi yoksa dar (yalniz ikon) mi. Header'daki menu dugmesiyle degisir. */
   genis: boolean;
-  /** Ana gezinme (harita panelleri): Varliklar / Ekle / Talepler. */
   ogeler: KenarOgesi[];
-  /** Yonetim & raporlama (modal olarak acilir): Ozet / Gecmis / Personel. */
   yonetimOgeleri: KenarOgesi[];
-  /** En altta, ayrac ustunde duran notr aksiyonlar (orn. Temizle). */
   altOgeler: KenarOgesi[];
 }
 
 /** Acilir/kapanir sol kenar cubugu: genis modda etiketler, dar modda yalnizca
- *  ikonlar (tooltip'li) gorunur.
- *
- *  Cubuk bilincli olarak akisin disinda (absolute) durup haritanin uzerine
- *  biner: akista olsaydi acilip kapanmasi haritayi yeniden boyutlandirir ve
- *  goruntu her basista yana kayardi. Genislik App'te `--kenar` degiskenidir. */
+ *  ikonlar (tooltip'li) gorunur. Akisin disinda (absolute) durup haritanin
+ *  uzerine biner; akista olsa acilip kapanmasi haritayi yeniden boyutlandirirdi. */
 export default function Kenarcubugu({
   genis,
   ogeler,
@@ -73,7 +66,6 @@ export default function Kenarcubugu({
         )}
       </nav>
 
-      {/* Alttaki bilgi karti; yalnizca genis modda gorunur. */}
       {genis && (
         <div className="p-3">
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-green-700 p-4 text-white shadow-sm">
@@ -106,14 +98,12 @@ function KenarButonu({ oge, genis }: { oge: KenarOgesi; genis: boolean }) {
           : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
       }`}
     >
-      {/* Aktif oge icin sol yesil aksan cizgisi */}
       {aktif && (
         <span className="absolute left-0 top-1/2 h-6 -translate-y-1/2 rounded-r-full bg-emerald-600" style={{ width: 3 }} />
       )}
 
       <span className="relative shrink-0">
         <Ikon className={`h-5 w-5 ${aktif ? "text-emerald-600" : "text-slate-400 group-hover:text-slate-600"}`} />
-        {/* Dar modda rozet, ikonun sag ustune kucuk bir nokta olarak duser. */}
         {!genis && rozet != null && rozet > 0 && (
           <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
             {rozet > 99 ? "99+" : rozet}
@@ -132,7 +122,6 @@ function KenarButonu({ oge, genis }: { oge: KenarOgesi; genis: boolean }) {
         </>
       )}
 
-      {/* Dar modda hover tooltip */}
       {!genis && (
         <span className="pointer-events-none absolute left-full top-1/2 z-20 ml-3 -translate-y-1/2 -translate-x-1 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100">
           {etiket}

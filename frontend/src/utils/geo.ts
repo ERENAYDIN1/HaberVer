@@ -65,7 +65,6 @@ export function cizgiOrtaNoktasi(noktalar: [number, number][]): [number, number]
     const segment = mesafeMetre(noktalar[i - 1], noktalar[i]);
     if (segment === 0) continue;
     if (kalan <= segment) {
-      // Tek segmentin icinde dogrusal ara deger yeterli (segment olcegi kucuk).
       const t = kalan / segment;
       return [lon1 + (lon2 - lon1) * t, lat1 + (lat2 - lat1) * t];
     }
@@ -133,7 +132,6 @@ export function noktaHalkadaMi(
   for (let i = 0, j = halka.length - 1; i < halka.length; j = i++) {
     const [xi, yi] = halka[i];
     const [xj, yj] = halka[j];
-    // Kenar noktanin yatay isinini kesiyor mu?
     if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
       icinde = !icinde;
     }

@@ -32,23 +32,19 @@ interface AssetDetayModalProps {
   onKapat: () => void;
   /** Personel ise bakim varligini elle bir ekibe yonlendirebilir. */
   atayabilir?: boolean;
-  /** Elle atama icin secilebilecek ekipler (canli yuk bilgisiyle). */
   ekipler?: EkipOzet[];
-  /** Basarili atama sonrasi liste/ekip ozetini tazelemek icin. Bir soz
-   *  donerse BEKLENIR: modal, tazeleme bitmeden "islem bitti" dememeli. */
+  /** Soz donerse BEKLENIR: modal tazeleme bitmeden "islem bitti" dememeli. */
   onAtandi?: () => void | Promise<unknown>;
-  /** Verilirse "Düzenle" cikar; formu acmak ust bilesenin isi (iki modal ust
-   *  uste binmesin diye detay kapatilir). */
+  /** Verilirse "Düzenle" cikar; formu acmak ust bilesenin isi. */
   onDuzenle?: (asset: AssetFeature) => void;
   /** Verilirse "Sil" cikar; silme bu modalin icinde yapilir. */
   onSilindi?: () => void;
-  /** Verilirse "Konuma Git" cikar. Ucus bilincli olarak yalnizca bu dugmeye
-   *  baglidir: modali acmak haritayi kendiliginden oynatmaz. */
+  /** Verilirse "Konuma Git" cikar; modali acmak haritayi oynatmaz. */
   onGit?: (asset: AssetFeature) => void;
 }
 
-/** Bu modaldan varlik yonetebilmek icin gereken ortak prop kumesi. Tek yerde
- *  durur ki liste, talep paneli ve harita isaretcisi ayni yetenekleri sunsun. */
+/** Varlik yonetimi icin gereken ortak prop kumesi; liste, talep paneli ve
+ *  harita isaretcisi ayni yetenekleri sunsun diye tek yerde durur. */
 export interface VarlikYonetimProplari {
   atayabilir: boolean;
   ekipler?: EkipOzet[];
@@ -58,7 +54,6 @@ export interface VarlikYonetimProplari {
   onGit?: (asset: AssetFeature) => void;
 }
 
-/** Yukaridaki kumeyi uretir; iki panel de bunu kullandigi icin ayrisamazlar. */
 export function useVarlikYonetimi({
   ekipler,
   onDuzenle,
@@ -66,9 +61,7 @@ export function useVarlikYonetimi({
   detayKapat,
 }: {
   ekipler?: EkipOzet[];
-  /** Verilmezse "Düzenle" dugmesi cikmaz. */
   onDuzenle?: (asset: AssetFeature) => void;
-  /** Verilmezse "Konuma Git" dugmesi cikmaz. */
   onGit?: (asset: AssetFeature) => void;
   detayKapat: () => void;
 }): VarlikYonetimProplari {
@@ -78,8 +71,8 @@ export function useVarlikYonetimi({
   return {
     atayabilir: yetkili,
     ekipler,
-    // Soz DONDURULUR: cagiran taraf tazelemenin bitmesini bekliyor (bkz.
-    // AssetDetayModal::tazele), yoksa "islem bitti" yeni veriden once gelir.
+    // Soz DONDURULUR: "islem bitti" yeni veriden once gelmesin diye tazeleme
+    // beklenir (bkz. AssetDetayModal::tazele).
     onAtandi: () => queryClient.invalidateQueries({ queryKey: ["saha"] }),
     onDuzenle:
       yetkili && onDuzenle
@@ -93,8 +86,6 @@ export function useVarlikYonetimi({
   };
 }
 
-/** Varligin tum detaylarini gosterir. Fotograf (varsa) her zaman gorunur:
- *  saha calisani talep edilen varligi sahada daha kolay bulsun. */
 export default function AssetDetayModal({
   asset,
   onKapat,
@@ -111,7 +102,6 @@ export default function AssetDetayModal({
   const { user } = useAuth();
   const deleteAsset = useDeleteAsset();
   const repairAsset = useRepairAsset();
-  /** Islem seridi modal nereden acilirsa acilsin aynidir. */
   const islemModu = Boolean(onDuzenle || onSilindi || onGit);
   const tamCrudYetkisi = user?.role !== "saha_calisani";
 
@@ -119,12 +109,10 @@ export default function AssetDetayModal({
   const [atamaBasari, setAtamaBasari] = useState<string | null>(null);
   const [atanıyor, setAtaniyor] = useState(false);
 
-  // Elle yonlendirme yalnizca bakim bekleyen varliklarda ve personele acilir.
   const assetId = asset?.properties.id;
   const bakimVar = asset?.properties.status === "bakim_lazim";
   const atamaGoster = Boolean(atayabilir && bakimVar && assetId);
 
-  // Varligin atali oldugu ekip (null ise havuzda) + isin yakasi.
   const { data: durum, isLoading: gorevYukleniyor } = useQuery({
     queryKey: ["saha", "gorev", assetId],
     queryFn: () => gorevDurumu(assetId!),
@@ -135,12 +123,10 @@ export default function AssetDetayModal({
   const mevcutGorev = durum?.gorev ?? null;
   const varlikYaka = durum?.varlik_yaka ?? null;
 
-  // Isin departmani turunden turetilir (ayri bir alan degil). Yaka/departman
-  // uyarilarini EkipSecici uretir - elle atama ikisinden de muaftir, ama
-  // personel neyi bilerek yaptigini gormeli.
+  // Isin departmani turunden turetilir; elle atama yaka/departman kisitindan
+  // muaftir ama EkipSecici personeli uyarir.
   const varlikDepartman = asset ? esleme?.[asset.properties.type] : undefined;
 
-  // Varlik degisince atama durumu sifirlanir (silme onayini SilOnayi birakir).
   useEffect(() => {
     setAtamaHatasi(null);
     setAtamaBasari(null);
@@ -159,12 +145,8 @@ export default function AssetDetayModal({
       ? kalanSilmeGunu(p.repaired_at)
       : null;
 
-  /** Atama/geri-alma sonrasi hem gorev durumunu hem ekip yuklerini tazele.
-   *
-   *  DONEN SOZ BEKLENIR: `invalidateQueries` tazelemeyi baslatip hemen doner.
-   *  Beklenmezse "islem bitti" isareti (`atanıyor=false`) yeni veriden ONCE
-   *  verilir ve arada `mevcutGorev` hala ESKI atamayi gosterir - havuza yeni
-   *  alinmis bir kayit o pencerede "Zaten atalı" gorunup atanamiyordu. */
+  // Soz beklenmezse "islem bitti" yeni veriden once gelir ve mevcutGorev
+  // bir an eski atamayi gosterir (yeni havuza alinan kayit "zaten atalı" gorunur).
   const tazele = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ["saha", "gorev", p.id] }),
@@ -283,7 +265,6 @@ export default function AssetDetayModal({
           </div>
         </dl>
 
-        {/* Tamir/duzenleme/silme; serit her cagri yerinde aynidir. */}
         {islemModu && (
           <AksiyonSeridi>
             {bakim && (
@@ -301,9 +282,6 @@ export default function AssetDetayModal({
             {tamCrudYetkisi && onDuzenle && (
               <AksiyonButonu onClick={() => onDuzenle(asset)}>Düzenle</AksiyonButonu>
             )}
-            {/* Gezinme, kaydi degistiren islemlerin sagina bosluklu olarak
-                ayrilir: yanlislikla "Konuma Git"e basmak veri kaybettirmez ama
-                iki kume gorsel olarak da karismasin. */}
             {onGit && (
               <>
                 {(bakim || (tamCrudYetkisi && onDuzenle)) && <AksiyonAyraci />}
@@ -348,7 +326,6 @@ export default function AssetDetayModal({
               )}
             </p>
 
-            {/* Su anki atama durumu: hangi ekipte (otomatik/elle) ya da havuzda. */}
             <div
               className={`mb-2 border px-2.5 py-1.5 text-xs ${
                 mevcutGorev
@@ -372,9 +349,8 @@ export default function AssetDetayModal({
               )}
             </div>
 
-            {/* Bolge/guzergah atamasiyla AYNI secici: uc is turu de tek bir
-                kotayi paylasan "gorev"lerdir, secim ekrani da ayni olmali.
-                Siralama once bu isin mudurlugu, her grupta mesafeye gore. */}
+            {/* Bolge/guzergah atamasiyla ayni secici (ayni kotayi paylasan
+                "gorev"ler); siralama once isin mudurlugu, sonra mesafe. */}
             <EkipSecici
               ekipler={ekipler}
               is={{

@@ -25,14 +25,13 @@ export function haritayaKapaliAttributionEkle(map: maplibregl.Map) {
   });
   gozlemci.observe(container, { attributes: true, attributeFilter: ["class"] });
 
-  // Kullanici actiginda karisilmaz. `disconnect` bu tiklamada kuyruga girmis
-  // kayitlari da iptal eder, yoksa panel ayni tiklamada tekrar kapanirdi.
+  // `disconnect` bu tiklamada kuyruga girmis kayitlari da iptal eder, yoksa
+  // panel ayni tiklamada tekrar kapanirdi.
   container.addEventListener("click", () => {
     kullaniciActi = true;
     gozlemci.disconnect();
   });
 
-  // Ilk render bitince bir kez daha kapat (guvence).
   map.once("idle", () => {
     if (!kullaniciActi) kapat();
   });

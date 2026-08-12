@@ -7,12 +7,11 @@ interface ModalProps {
   children: ReactNode;
   /** Genis icerik (dashboard, personel listesi, log) icin daha genis bir kutu. */
   genis?: boolean;
-  /** Govde (icerik) sarmalayicisinin sinifi; kendi flex/yukseklik/padding'ini
-   *  yoneten tam panel bilesenleri icin varsayilan "p-5" degistirilebilir. */
+  /** Govde sarmalayicisinin sinifi; varsayilan "p-5" kendi layout'unu yoneten
+   *  bilesenler icin degistirilebilir. */
   icerikSinifi?: string;
-  /** Baska bir Modal'in (orn. "Saha Ekipleri" yonetim penceresi) icinden acilan
-   *  detay modalleri icin: hepsi ayni z-50'i kullandigindan DOM sirasi kazanir,
-   *  sonradan acilan yonetim penceresi altta kalan detay modalini ortebilirdi. */
+  /** Baska bir Modal icinden acilan detay modalleri icin: aksi halde ayni
+   *  z-50'de DOM sirasi kazanir, sonra acilan altta kalani ortebilir. */
   ustte?: boolean;
 }
 
@@ -25,7 +24,6 @@ export default function Modal({
   icerikSinifi = "p-5",
   ustte,
 }: ModalProps) {
-  // ESC ile kapatma
   useEffect(() => {
     if (!acik) return;
     const handler = (e: KeyboardEvent) => {
@@ -43,8 +41,7 @@ export default function Modal({
         ustte ? "z-[60]" : "z-50"
       }`}
     >
-      {/* Arka plana tiklamak kapatmaz: modallerin cogu kaydedilmemis bir form ya da
-       *  taslak tasiyor, yanlislikla disari tiklamak onlari yok ediyordu. */}
+      {/* Arka plana tiklamak kapatmaz: modallerin cogu kaydedilmemis bir taslak tasiyor. */}
       <div
         className={`max-h-[90vh] w-full overflow-y-auto border border-slate-400 bg-white ${
           genis ? "max-w-2xl" : "max-w-lg"

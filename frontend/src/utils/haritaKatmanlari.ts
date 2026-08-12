@@ -9,33 +9,23 @@ import {
 import { EKIP_VARSAYILAN_RENK } from "./haritaPopup";
 import type { AssetFeatureCollection } from "../types/asset";
 
-/** Varlik isaretcisindeki atama noktasinin rengi: saha ekibi pininin rengiyle
- *  ayni aile (bkz. haritaPopup.ts::EKIP_VARSAYILAN_RENK) - kullanici bu rengi
- *  zaten ekip pininden taniyor. Katmanin kendisi MapView'da eklenir (bkz.
- *  ATAMA_KAYMA_EKSENI). */
+/** Saha ekibi pininin rengiyle ayni aile (bkz. haritaPopup.ts::EKIP_VARSAYILAN_RENK). */
 export const ATAMA_RENGI = EKIP_VARSAYILAN_RENK;
 
-/** Haritadaki kaynak + katman kurulumu, aileye gore ayrilmis halde. Buradaki
- *  fonksiyonlar yalnizca `map`'e dokunur; olay baglama ve veri yazma guncel
- *  prop/ref degerlerine bagli oldugu icin MapView'da kalir.
- *
- *  Hepsi idempotenttir: stil degisiminde MapLibre tum kaynaklari dusurdugu
- *  icin ayni fonksiyonlar tekrar cagrilir. */
+/** Buradaki fonksiyonlar yalnizca `map`'e dokunur; olay baglama ve veri yazma
+ *  MapView'da kalir. Hepsi idempotenttir: stil degisiminde MapLibre tum
+ *  kaynaklari dusurdugu icin ayni fonksiyonlar tekrar cagrilir. */
 
 export const SOURCE_ID = "assets";
 export const REPORTS_SOURCE_ID = "reports";
-/** Cizgi/alan olarak bildirilen taleplerin HAM SEKLI. Pin katmanlari
- *  `REPORTS_SOURCE_ID`'de nokta geometrisiyle calismaya devam eder; sekil ayri
- *  kaynakta cizilir. Boylece pin/glif/halka/rozet/secim zinciri cok geometriye
- *  uyarlanmak zorunda kalmadi. */
+/** Cizgi/alan taleplerin HAM SEKLI, ayri kaynakta. Pin katmanlari
+ *  `REPORTS_SOURCE_ID`'de nokta geometrisiyle calismaya devam eder. */
 export const TALEP_SEKIL_SOURCE_ID = "talep-sekil";
 export const CIZIM_SOURCE_ID = "cizim";
 export const TAMAMLANAN_SOURCE_ID = "tamamlanan-alanlar";
-/** Kaydedilmis bolgeler: anlik secimlerden ayri kaynak - kalicidir, secim
- *  temizlenince haritadan kalkmaz ve kesik cizgiyle ayrica ayrilir. */
+/** Kaydedilmis bolgeler: anlik secimlerden ayri kaynak, secim temizlenince
+ *  haritadan kalkmaz. */
 export const BOLGE_SOURCE_ID = "bolgeler";
-/** Sekli duzenlenen kayit: kalici katmanla ve digerlerinin tiklama alanlariyla
- *  karismasin diye kendi kaynaginda cizilir. */
 export const SEKIL_SOURCE_ID = "sekil-duzenleme";
 export const OLCUM_SOURCE_ID = "olcum";
 export const DINAMIK_SOURCE_ID = "dinamik-onizleme";
@@ -45,38 +35,28 @@ export const BOS_KOLEKSIYON: AssetFeatureCollection = {
   type: "FeatureCollection",
   features: [],
 };
-/** Rozetlerin gorunmeye basladigi zoom (hem varlik hem talep tarafinda). */
 export const ROZET_MINZOOM = 12.5;
 
 /** Isaretci olculeri: daireler glif okunacak kadar belirgin, ama uzaklasinca
  *  (z10-12) birbirine girmesin diye o uctaki yaricaplar kucuk. */
 export const ISARETCI = {
-  /** Varlik dairesi yaricapi (zoom 10 -> 16 interpolasyonu). */
   varlikYaricap: ["interpolate", ["linear"], ["zoom"], 10, 4.5, 16, 10],
-  /** Talep pininin ucundaki yer golgesi (pin havada durmasin). */
   talepGolgeYaricap: ["interpolate", ["linear"], ["zoom"], 10, 1.5, 16, 3],
-  /** "Bakim lazim" amber uyari halkasi; ana dairenin disinda kalir. */
   uyariYaricap: ["interpolate", ["linear"], ["zoom"], 10, 6.5, 16, 12.5],
-  /** Secim halkasi; uyari halkasinin da disinda. */
   varlikSecimYaricap: ["interpolate", ["linear"], ["zoom"], 10, 8, 16, 14],
   beyazHalka: 2,
-  /** Atama noktasi (bkz. assets-atama): ana daireden kucuk, sabit yaricap -
-   *  cok kucuk zoomda dahi ayirt edilebilir kalsin diye interpolasyon yok. */
+  /** Sabit yaricap (interpolasyonsuz): cok kucuk zoomda dahi ayirt edilebilir kalsin diye. */
   atamaYaricap: 3.5,
 } as const;
 
 /** Atama noktasinin sag-alt koseye kaymasi (px).
  *
- *  DIKKAT: `circle-translate` array tipinde bir paint property'dir ve
- *  expression DIZININ KENDISI olmak zorundadir - `[expr, expr]` gibi eleman
- *  basina expression style-spec dogrulamasindan gecmez, MapLibre property'yi
- *  sessizce reddedip varsayilana ([0,0]) duser ve nokta dairenin tam ortasinda
- *  kalip gorunmez olur. Bu yuzden `interpolate` bir DIZI dondurur.
+ *  DIKKAT: `circle-translate` expression DIZININ KENDISI olmak zorunda -
+ *  eleman basina expression stil dogrulamasindan gecmez, MapLibre sessizce
+ *  [0,0]'a duser ve nokta gorunmez olur. Bu yuzden `interpolate` bir DIZI dondurur.
  *
- *  Olcu ANA DAIREYE degil `uyariYaricap`a (amber halka) gore: bakim bekleyen
- *  varlikta halka ana dairenin disindadir ve nokta ana daireye gore
- *  hizalanirsa halkanin ALTINDA kalip yariya kadar gizleniyordu. Halka
- *  yaricapinin kosegen izdusumu (r/√2) noktayi kenara oturtur. */
+ *  Olcu ana daireye degil `uyariYaricap`a (amber halka) gore: nokta ana
+ *  daireye gore hizalanirsa halkanin altinda yariya kadar gizleniyordu. */
 export const ATAMA_KAYMASI = [
   "interpolate",
   ["linear"],
@@ -87,13 +67,10 @@ export const ATAMA_KAYMASI = [
   ["literal", [8.8, 8.8]],
 ] as unknown as maplibregl.ExpressionSpecification;
 
-/** Isaretcinin altina yumusak golge: asagi kaydirilmis, bulaniklastirilmis
- *  siyah daire - altliktan bagimsiz derinlik hissi verir. */
 export function golgeBoyasi(yaricap: unknown, opaklik: unknown = 1): Record<string, unknown> {
   return {
     "circle-radius": yaricap,
     "circle-color": "#0f172a",
-    // Sonumlenen taleplerde golge de sonmeli.
     "circle-opacity": ["*", 0.22, opaklik],
     "circle-blur": 0.5,
     "circle-translate": [0, 2],
@@ -106,7 +83,6 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
   if (!map.getSource(SOURCE_ID)) {
     map.addSource(SOURCE_ID, { type: "geojson", data: BOS_KOLEKSIYON });
 
-    // En altta golge; isaretcileri altliktan ayirir.
     map.addLayer({
       id: "assets-golge",
       type: "circle",
@@ -114,8 +90,6 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
       paint: golgeBoyasi(ISARETCI.varlikYaricap) as never,
     });
 
-    // Bakim gerektiren varliklarda amber uyari halkasi: dolgu tur rengini
-    // tasidigi icin durumun tek gorsel isareti budur ("!" rozetiyle birlikte).
     map.addLayer({
       id: "assets-durum",
       type: "circle",
@@ -130,7 +104,6 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
       },
     });
 
-    // Ana isaretci: dolgu her zaman tur rengi, beyaz cerceve.
     map.addLayer({
       id: "assets-circle",
       type: "circle",
@@ -158,10 +131,9 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
     });
 
     // Atama noktasi (assets-atama) BURADA EKLENMEZ: assets-icon/assets-rozet
-    // symbol katmanlari glif goruntuleri yuklendikten sonra ASENKRON eklenir
-    // (bkz. MapView::tipIkonlariniHazirla().then()) ve haritada bu circle
-    // katmanlarindan sonra/USTUNDE kalir. Ayni z-siraya girsin diye atama
-    // noktasi da o asenkron blokta, assets-rozet'ten SONRA eklenir.
+    // glif goruntuleri yuklendikten sonra ASENKRON eklenir (bkz.
+    // MapView::tipIkonlariniHazirla().then()); ayni z-siraya girsin diye
+    // atama noktasi da o blokta, assets-rozet'ten SONRA eklenir.
   }
 }
 
@@ -170,9 +142,8 @@ export function talepKatmanlari(map: maplibregl.Map): void {
   if (!map.getSource(REPORTS_SOURCE_ID)) {
     map.addSource(REPORTS_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
 
-    // Pinin ucundaki yer golgesi. Pin symbol katmanidir ve goruntuleri
-    // asenkron yuklendigi icin sonradan eklenir; bu daire senkron var
-    // oldugundan tiklama/hover baglantilari icin sabit dayanaktir.
+    // Pin symbol katmani goruntuleri asenkron yuklendigi icin sonradan
+    // eklenir; bu daire senkron var oldugundan tiklama/hover icin sabit dayanaktir.
     map.addLayer({
       id: "reports-circle",
       type: "circle",
@@ -185,11 +156,8 @@ export function talepKatmanlari(map: maplibregl.Map): void {
   }
 }
 
-/** Cizgi/alan taleplerin ham sekli. Pinlerin ALTINDA cizilir: sekil isin
- *  buyuklugunu anlatir, pin ise isin kendisidir ve ustte kalmali.
- *
- *  Renk kaydin gorunum rengidir (bekleyen mor, tamir gri...), pinle ayni
- *  sinyali tasisin diye - `renk` ozelligini MapView yazar. */
+/** Pinlerin ALTINDA cizilir: sekil isin buyuklugunu anlatir, pin isin
+ *  kendisidir. Renk kaydin gorunum rengidir; `renk` ozelligini MapView yazar. */
 export function talepSekilKatmanlari(map: maplibregl.Map): void {
   if (!map.getSource(TALEP_SEKIL_SOURCE_ID)) {
     map.addSource(TALEP_SEKIL_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
@@ -250,7 +218,7 @@ export function bolgeKatmanlari(map: maplibregl.Map): void {
       filter: ["==", ["geometry-type"], "Polygon"],
       paint: { "fill-color": ["get", "renk"], "fill-opacity": 0.12 },
     });
-    // Kesik kenarlik: kayitli bolgeyi anlik alan seciminden (duz cizgi) ayirir.
+    // Kesik kenarlik kayitli bolgeyi anlik alan seciminden (duz cizgi) ayirir.
     map.addLayer({
       id: "bolge-yol",
       type: "line",
@@ -261,8 +229,7 @@ export function bolgeKatmanlari(map: maplibregl.Map): void {
         "line-dasharray": [3, 2],
       },
     });
-    // Secili kayit: kesik kenarligin uzerine duz bir hat cizilir. Kalinlik
-    // bilerek ayni; secimi kalinlik degil, cizginin duzlesmesi anlatir.
+    // Secim kesik kenarligin uzerine duz hatla anlatilir; kalinlik bilerek ayni.
     map.addLayer({
       id: "bolge-secili",
       type: "line",
@@ -274,9 +241,8 @@ export function bolgeKatmanlari(map: maplibregl.Map): void {
         "line-opacity": 1,
       },
     });
-    // Guzergah yonu: hat boyunca dizilen oklar cizim yonunu isaret eder.
-    // Yon burada bir suslemedir degil is bilgisidir - kaydin ILK noktasi saha
-    // ekibinin yol tarifi hedefidir, yani hat bastan sona yurunur.
+    // Oklar guzergah yonunu gosterir: kaydin ILK noktasi saha ekibinin
+    // yol tarifi hedefidir, hat bastan sona yurunur.
     map.addLayer({
       id: "bolge-yon",
       type: "symbol",
@@ -297,7 +263,6 @@ export function bolgeKatmanlari(map: maplibregl.Map): void {
         "text-halo-width": 1.5,
       },
     });
-    // Guzergahin baslangic ucu: ekibin yol tarifi hedefi tam bu nokta.
     map.addLayer({
       id: "bolge-bas",
       type: "circle",
@@ -310,8 +275,7 @@ export function bolgeKatmanlari(map: maplibregl.Map): void {
         "circle-stroke-width": 2,
       },
     });
-    // Gorunmez kalin vurus seridi: ince bir cizgiyi tam uzerinden tutturmak
-    // zor oldugu icin tiklama/imlec burada yakalanir.
+    // Gorunmez kalin vurus: ince cizgiyi tam uzerinden tutturmak zor oldugu icin.
     map.addLayer({
       id: "bolge-vurus",
       type: "line",
@@ -326,7 +290,6 @@ export function sekilDuzenlemeKatmanlari(map: maplibregl.Map): void {
   if (!map.getSource(SEKIL_SOURCE_ID)) {
     map.addSource(SEKIL_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
 
-    // Duzenlenen sekil daha belirgin cizilir (duz ve kalin kenarlik).
     map.addLayer({
       id: "sekil-fill",
       type: "fill",
@@ -409,7 +372,6 @@ export function dinamikOnizlemeKatmanlari(map: maplibregl.Map): void {
   if (!map.getSource(DINAMIK_SOURCE_ID)) {
     map.addSource(DINAMIK_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
 
-    // Alan isaretlenmeden onceki canli dolgu onizlemesi (imlec dahil).
     map.addLayer({
       id: "dinamik-onizleme-alan",
       type: "fill",
@@ -417,7 +379,7 @@ export function dinamikOnizlemeKatmanlari(map: maplibregl.Map): void {
       filter: ["==", ["get", "tip"], "onizleme-alan"],
       paint: { "fill-color": ["get", "renk"], "fill-opacity": 0.1 },
     });
-    // Kapanis onizlemesi: son nokta -> ilk nokta, kesik cizgiyle.
+    // Kapanis onizlemesi: son nokta -> ilk nokta.
     map.addLayer({
       id: "dinamik-kapanis",
       type: "line",
@@ -430,7 +392,6 @@ export function dinamikOnizlemeKatmanlari(map: maplibregl.Map): void {
         "line-opacity": 0.75,
       },
     });
-    // Elastik cizgi: son nokta -> fare imleci, fareyle birlikte canli guncellenir.
     map.addLayer({
       id: "dinamik-elastik",
       type: "line",

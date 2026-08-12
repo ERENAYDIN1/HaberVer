@@ -20,7 +20,7 @@ const temelOzellikler = {
 };
 
 /** Bir turun ham glif dizgisini (data/tipGlifleri.ts) cizen ic bilesen.
- *  Dizgiler derleme zamani sabitleri oldugundan enjeksiyon yuzeyi yok. */
+ *  Dizgiler derleme zamani sabitleri oldugundan enjeksiyon riski yok. */
 function TipGlifi({ ic, className }: IconProps & { ic: string }) {
   return (
     <svg
@@ -39,19 +39,19 @@ export function IconTree({ className }: IconProps) {
 export function IconMarkaLogo({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
-      {/* Sehir silueti (artan yukseklikte binalar) */}
+      {/* Sehir silueti */}
       <g fill="currentColor">
         <rect x="4.4" y="9.5" width="2.7" height="9" rx="0.5" />
         <rect x="7.7" y="5.8" width="2.7" height="12.7" rx="0.5" />
         <rect x="11" y="8" width="2.7" height="10.5" rx="0.5" />
         <rect x="14.3" y="4" width="2.9" height="14.5" rx="0.5" />
       </g>
-      {/* Bina pencereleri (arka plani gosteren bosluklar) */}
+      {/* Bina pencereleri */}
       <g fill="#059669" fillOpacity="0.9">
         <rect x="15.3" y="6.4" width="0.9" height="0.9" rx="0.2" />
         <rect x="8.7" y="8.2" width="0.9" height="0.9" rx="0.2" />
       </g>
-      {/* Yapraklar (tabanda, saga ve sola acilan) */}
+      {/* Yapraklar */}
       <path
         d="M11.4 18.7c2.1.1 3.9 1.4 4.4 3.4.1.3-.2.6-.5.5-2-.5-3.6-1.9-3.9-3.9Z"
         fill="currentColor"
@@ -89,8 +89,7 @@ export function IconPin({ className }: IconProps) {
 }
 
 /** Katlanmis harita paftasi. `IconPin`'den bilincli olarak ayridir: pin
- *  "su nokta", bu ise "haritanin kendisi" demektir - konum secme akisinda
- *  "haritayi ac, kendin isaretle" ile "GPS'imi kullan" ayni ikonu tasimamali. */
+ *  "su nokta", bu ise "haritanin kendisi" demektir. */
 export function IconHarita({ className }: IconProps) {
   return (
     <svg {...temelOzellikler} className={className}>
@@ -110,8 +109,8 @@ export function IconLayers({ className }: IconProps) {
   );
 }
 
-/** Harita lejanti ikonu (katman kartinin basligi). IconLayers'tan bilincli
- *  olarak farklidir: o, harita cesidi seciciye ait. */
+/** Harita lejanti ikonu (katman kartinin basligi); IconLayers harita cesidi
+ *  seciciye aittir. */
 export function IconLegend({ className }: IconProps) {
   return (
     <svg {...temelOzellikler} className={className}>
@@ -295,29 +294,21 @@ export function IconWarning({ className }: IconProps) {
   );
 }
 
-/** Kelime markasi: "haber" / "ver +" iki satir. Harfler PATH'tir, font
- *  bagimliligi yoktur - kullanicida font olmasa da logo birebir ayni cizilir.
- *  Kaynak cizimin (620x300) koordinat sistemi korunur; disaridan
- *  translate/scale ile yerlestirilir. Ustteki satir koyu, alttaki yesil.
- *
- *  Kaynak cizimdeki ucuncu satir ("Akilli Sehir - Hizli Cozum") bilincli
- *  olarak ALINMADI: yatay kilitlenmede logo 8-14 px yuksekliginde kullaniliyor
- *  ve o olcekte 6 birimlik slogan satiri okunmayan bir lekeye donusuyor.
- *  Slogan gerekirse logonun yaninda gercek metin olarak yazilmali. */
+/** Kelime markasi: "haber" / "ver +" iki satir. Harfler PATH'tir (font
+ *  bagimliligi yok). Kaynak cizimdeki ucuncu satir (slogan) bilincli olarak
+ *  alinmadi: kucuk boyutta okunmayan bir lekeye donusuyordu. */
 function KelimeMarkasi({ ustRenk, altRenk }: { ustRenk: string; altRenk: string }) {
   return (
     <>
-      {/* haber */}
       <path
         fill={ustRenk}
         d="M197.873 135V73.1818H210.943V98.6879H237.475V73.1818H250.515V135H237.475V109.464H210.943V135H197.873ZM274.27 135.875C271.312 135.875 268.676 135.362 266.362 134.336C264.048 133.29 262.217 131.75 260.868 129.718C259.54 127.665 258.876 125.109 258.876 122.051C258.876 119.475 259.349 117.312 260.295 115.561C261.241 113.81 262.528 112.402 264.158 111.335C265.788 110.269 267.64 109.464 269.712 108.92C271.805 108.377 273.999 107.995 276.293 107.773C278.989 107.492 281.162 107.23 282.812 106.989C284.463 106.727 285.66 106.345 286.404 105.842C287.149 105.339 287.521 104.594 287.521 103.608V103.427C287.521 101.515 286.918 100.036 285.71 98.9897C284.523 97.9433 282.833 97.4201 280.639 97.4201C278.325 97.4201 276.484 97.9332 275.115 98.9595C273.747 99.9657 272.842 101.233 272.399 102.763L260.506 101.797C261.11 98.9796 262.297 96.5447 264.068 94.4922C265.839 92.4195 268.123 90.8298 270.92 89.723C273.737 88.5961 276.997 88.0327 280.7 88.0327C283.275 88.0327 285.74 88.3345 288.095 88.9382C290.469 89.5419 292.572 90.4776 294.403 91.7454C296.255 93.0131 297.714 94.6431 298.78 96.6353C299.847 98.6074 300.38 100.972 300.38 103.729V135H288.185V128.571H287.823C287.079 130.02 286.083 131.297 284.835 132.404C283.587 133.491 282.088 134.346 280.337 134.97C278.587 135.574 276.564 135.875 274.27 135.875ZM277.953 127.001C279.844 127.001 281.515 126.629 282.963 125.884C284.412 125.12 285.549 124.093 286.374 122.805C287.199 121.518 287.612 120.059 287.612 118.429V113.509C287.209 113.77 286.656 114.012 285.952 114.233C285.268 114.434 284.493 114.625 283.627 114.806C282.762 114.967 281.897 115.118 281.032 115.259C280.166 115.38 279.382 115.491 278.677 115.591C277.168 115.813 275.85 116.165 274.723 116.648C273.596 117.131 272.721 117.785 272.097 118.61C271.473 119.415 271.161 120.421 271.161 121.628C271.161 123.379 271.795 124.717 273.063 125.643C274.351 126.548 275.981 127.001 277.953 127.001ZM310.597 135V73.1818H323.456V96.424H323.849C324.412 95.1764 325.227 93.9086 326.294 92.6207C327.38 91.3127 328.789 90.2261 330.519 89.3608C332.27 88.4754 334.443 88.0327 337.039 88.0327C340.42 88.0327 343.539 88.9181 346.396 90.6889C349.254 92.4396 351.538 95.0858 353.248 98.6275C354.959 102.149 355.814 106.566 355.814 111.879C355.814 117.05 354.979 121.417 353.309 124.979C351.659 128.52 349.405 131.207 346.547 133.038C343.71 134.849 340.531 135.755 337.009 135.755C334.514 135.755 332.391 135.342 330.64 134.517C328.91 133.692 327.491 132.656 326.384 131.408C325.277 130.14 324.432 128.862 323.849 127.575H323.275V135H310.597ZM323.184 111.818C323.184 114.575 323.567 116.98 324.331 119.032C325.096 121.085 326.203 122.685 327.652 123.832C329.101 124.959 330.861 125.522 332.934 125.522C335.027 125.522 336.798 124.949 338.247 123.801C339.695 122.634 340.792 121.025 341.537 118.972C342.301 116.899 342.684 114.515 342.684 111.818C342.684 109.142 342.311 106.787 341.567 104.755C340.822 102.723 339.726 101.133 338.277 99.9858C336.828 98.8388 335.047 98.2653 332.934 98.2653C330.841 98.2653 329.07 98.8187 327.622 99.9254C326.193 101.032 325.096 102.602 324.331 104.634C323.567 106.667 323.184 109.061 323.184 111.818ZM385.523 135.906C380.754 135.906 376.649 134.94 373.208 133.008C369.787 131.056 367.151 128.299 365.3 124.737C363.448 121.155 362.523 116.919 362.523 112.029C362.523 107.26 363.448 103.075 365.3 99.4727C367.151 95.8706 369.757 93.0634 373.117 91.0511C376.498 89.0388 380.462 88.0327 385.01 88.0327C388.069 88.0327 390.916 88.5257 393.552 89.5117C396.209 90.4776 398.523 91.9366 400.495 93.8885C402.487 95.8404 404.037 98.2955 405.143 101.254C406.25 104.192 406.804 107.633 406.804 111.577V115.108H367.654V107.14H394.699C394.699 105.288 394.297 103.648 393.492 102.219C392.687 100.791 391.57 99.6739 390.142 98.869C388.733 98.0439 387.093 97.6314 385.222 97.6314C383.27 97.6314 381.539 98.0842 380.03 98.9897C378.541 99.8751 377.373 101.072 376.528 102.582C375.683 104.071 375.251 105.731 375.23 107.562V115.138C375.23 117.433 375.653 119.415 376.498 121.085C377.363 122.755 378.581 124.043 380.15 124.949C381.72 125.854 383.581 126.307 385.735 126.307C387.163 126.307 388.471 126.106 389.659 125.703C390.846 125.301 391.862 124.697 392.707 123.892C393.552 123.087 394.196 122.101 394.639 120.934L406.532 121.719C405.928 124.576 404.691 127.071 402.819 129.205C400.968 131.317 398.573 132.968 395.635 134.155C392.717 135.322 389.347 135.906 385.523 135.906ZM415.195 135V88.6364H427.661V96.7259H428.144C428.989 93.8482 430.408 91.675 432.4 90.206C434.392 88.7169 436.686 87.9723 439.282 87.9723C439.926 87.9723 440.62 88.0125 441.365 88.093C442.11 88.1735 442.764 88.2842 443.327 88.4251V99.8349C442.723 99.6538 441.888 99.4928 440.822 99.3519C439.755 99.2111 438.779 99.1406 437.894 99.1406C436.002 99.1406 434.312 99.5531 432.823 100.378C431.354 101.183 430.187 102.31 429.321 103.759C428.476 105.208 428.054 106.878 428.054 108.77V135H415.195Z"
       />
-      {/* ver */}
       <path
         fill={altRenk}
         d="M209.541 148.182L224.483 195.149H225.056L240.028 148.182H254.516L233.206 210H216.363L195.022 148.182H209.541ZM277.615 210.906C272.846 210.906 268.741 209.94 265.3 208.008C261.879 206.056 259.243 203.299 257.391 199.737C255.54 196.155 254.614 191.919 254.614 187.029C254.614 182.26 255.54 178.075 257.391 174.473C259.243 170.871 261.849 168.063 265.209 166.051C268.59 164.039 272.554 163.033 277.102 163.033C280.161 163.033 283.008 163.526 285.644 164.512C288.301 165.478 290.615 166.937 292.587 168.888C294.579 170.84 296.128 173.295 297.235 176.254C298.342 179.192 298.895 182.633 298.895 186.577V190.108H259.746V182.14H286.791C286.791 180.288 286.389 178.648 285.584 177.219C284.779 175.791 283.662 174.674 282.233 173.869C280.825 173.044 279.185 172.631 277.313 172.631C275.361 172.631 273.631 173.084 272.122 173.99C270.632 174.875 269.465 176.072 268.62 177.582C267.775 179.071 267.342 180.731 267.322 182.562V190.138C267.322 192.433 267.745 194.415 268.59 196.085C269.455 197.755 270.673 199.043 272.242 199.949C273.812 200.854 275.673 201.307 277.826 201.307C279.255 201.307 280.563 201.106 281.75 200.703C282.938 200.301 283.954 199.697 284.799 198.892C285.644 198.087 286.288 197.101 286.731 195.934L298.624 196.719C298.02 199.576 296.782 202.071 294.911 204.205C293.06 206.317 290.665 207.968 287.727 209.155C284.809 210.322 281.439 210.906 277.615 210.906ZM307.287 210V163.636H319.753V171.726H320.236C321.081 168.848 322.5 166.675 324.492 165.206C326.484 163.717 328.778 162.972 331.374 162.972C332.018 162.972 332.712 163.013 333.457 163.093C334.201 163.174 334.855 163.284 335.419 163.425V174.835C334.815 174.654 333.98 174.493 332.913 174.352C331.847 174.211 330.871 174.141 329.986 174.141C328.094 174.141 326.404 174.553 324.915 175.378C323.446 176.183 322.278 177.31 321.413 178.759C320.568 180.208 320.145 181.878 320.145 183.77V210H307.287Z"
       />
-      {/* Arti: "ver"e bitisik (marka adi "haber ver +", ayri bir isaret degil) */}
+      {/* Arti: "ver"e bitisik (marka adi "haber ver +") */}
       <path
         fill={altRenk}
         d="M357.366 182.95V156.803H363.977V182.95H357.366ZM347.598 173.182V166.571H373.746V173.182H347.598Z"
@@ -326,11 +317,9 @@ function KelimeMarkasi({ ustRenk, altRenk }: { ustRenk: string; altRenk: string 
   );
 }
 
-/** Amblemin ic cizimi: harita pini (konum/ihbar) + icinde sehir silueti
- *  (varlik) + tabanda filizlenen fidan (yesil alan) + sag ustte sinyal
- *  yaylari (haber verme). Kaynak cizimin (620x300) koordinat sisteminde
- *  durur; disaridan translate/scale ile yerlestirilir.
- *  Hem tek basina (LogoAmblem) hem tam logo icinde (HaberVerLogo) kullanilir. */
+/** Amblemin ic cizimi: harita pini + sehir silueti + filizlenen fidan +
+ *  sinyal yaylari. Kaynak cizimin (620x300) koordinat sisteminde durur;
+ *  hem LogoAmblem hem HaberVerLogo tarafindan kullanilir. */
 function AmblemIci() {
   return (
     <>
@@ -360,13 +349,12 @@ function AmblemIci() {
         </linearGradient>
       </defs>
 
-      {/* Pin govdesi */}
       <path
         d="M96 221C96 221 176 155 176 113C176 91.7827 167.571 71.4344 152.569 56.4315C137.566 41.4285 117.217 33 96 33C74.7827 33 54.4344 41.4285 39.4315 56.4315C24.4285 71.4344 16 91.7827 16 113C16 155 96 221 96 221Z"
         fill="#35953F"
       />
 
-      {/* Sehir: iki bina (pinin icinde beyaz oyuk) */}
+      {/* Sehir siluteti: pinin icinde beyaz oyuk */}
       <path
         d="M117 167.977V82.0232L89 88.4999L89 167.977C89 168.542 89.4323 169 89.9655 169H116.034C116.568 169 117 168.542 117 167.977Z"
         fill="white"
@@ -376,7 +364,6 @@ function AmblemIci() {
         fill="white"
       />
 
-      {/* Bina pencereleri */}
       <g fill="#2F7D4F">
         <path d="M101 95H94V104H101V95Z" />
         <path d="M112 95H105V104H112V95Z" />
@@ -394,7 +381,6 @@ function AmblemIci() {
         <path d="M141 147H135V155H141V147Z" />
       </g>
 
-      {/* Filiz: yapraklar + govde */}
       <path
         d="M48 114.101C48 114.101 49.2909 110.222 52.335 107.789C55.3791 105.356 83.5991 115.779 83.5991 115.779C83.5991 115.779 88.5291 117.538 91.4456 122.197C93.4059 125.331 94.5003 129.964 92.4231 135.558C87.4719 148.882 74.6262 147.341 71.2794 146.581C69.7069 146.225 65.8766 145.211 65.8766 145.211C65.8766 145.211 57.1269 152.436 46.5975 146.895C38.5809 142.677 39.5744 136.371 39.5744 136.371C39.5744 136.371 34.1769 130.973 36.5144 123.456C39.33 114.403 48 114.101 48 114.101Z"
         fill="#5B9821"
@@ -416,13 +402,11 @@ function AmblemIci() {
         fill="url(#hv-filiz-govde)"
       />
 
-      {/* Zemin: sehir ve filiz ayni yere basar */}
       <path
         d="M60.2415 167H146V167.411C146 168.796 145.797 170.174 145.398 171.5C145.151 171.816 144.772 172 144.371 172H60.5621L60 170.5V169.5V168.5V167.5L60.2415 167Z"
         fill="url(#hv-zemin)"
       />
 
-      {/* Sinyal yaylari: "haber verme" hareketi */}
       <path
         d="M151.209 38.8025C159.045 40.1841 166.011 44.6219 170.575 51.1394C175.138 57.657 176.926 65.7206 175.544 73.5562"
         fill="none"
@@ -441,10 +425,9 @@ function AmblemIci() {
   );
 }
 
-/** Amblemin cizim kutusu (kaynak 620x300 icindeki gercek sinirlar) — 64x64'e
- *  oturtan donusum bundan turetilir: olcek 64/198.5, x ortalanir.
- *  Kutu x:16-191.85, y:22.5-221. Sinyal yaylari stroke oldugu icin sinira
- *  stroke-width'in yarisi (3.5) eklenir; aksi halde yayin ucu kirpilir. */
+/** Amblemin cizim kutusu (620x300 icindeki gercek sinirlar), 64x64'e oturtan
+ *  donusum bundan turetilir. Sinyal yaylari stroke oldugu icin sinira
+ *  stroke-width'in yarisi (3.5) eklenir, yoksa yayin ucu kirpilir. */
 const AMBLEM_DONUSUMU = "translate(3.65 0) scale(0.322) translate(-16 -22.5)";
 
 export function LogoAmblem({ className }: IconProps) {
@@ -457,10 +440,9 @@ export function LogoAmblem({ className }: IconProps) {
   );
 }
 
-/** Amblemin tek renk surumu: gradyansiz, currentColor. Fotograf uzerinde,
- *  koyu zeminli simgede ve baskida kullanilir. Ince ayrintilar (pencere
- *  izgarasi, filizin govdesi) tek renkte lekeye dondugu icin sadelestirilir:
- *  pin + iki bina oyugu + filiz + sinyal yaylari. */
+/** Amblemin tek renk surumu: gradyansiz, currentColor. Ince ayrintilar
+ *  (pencere izgarasi, filizin govdesi) tek renkte lekeye dondugu icin
+ *  sadelestirilir. */
 export function LogoAmblemTek({ className }: IconProps) {
   return (
     <svg viewBox="0 0 64 64" fill="none" className={className}>
@@ -487,9 +469,8 @@ export function LogoAmblemTek({ className }: IconProps) {
   );
 }
 
-/** Tam logo (yatay kilitlenme): amblem + kelime markasi yan yana. Harfler
- *  path'tir, font bagimliligi yoktur. `koyu` koyu zeminler icindir: "haber"
- *  satiri beyaza doner. */
+/** Tam logo: amblem + kelime markasi yan yana. `koyu` koyu zeminler
+ *  icindir: "haber" satiri beyaza doner. */
 export function HaberVerLogo({
   className,
   koyu = false,
@@ -505,9 +486,6 @@ export function HaberVerLogo({
       <g transform={AMBLEM_DONUSUMU}>
         <AmblemIci />
       </g>
-      {/* Kelime markasi kaynak cizimin kendi koordinatlarinda; amblemin sagina
-          yerlestirilir. Yazi kutusu x:195-443.3 (248.3), y:73.2-210.9 (137.7);
-          0.378 olcekle 93.9x52 olur ve 64 birimlik kutuda dikey ortalanir. */}
       <g transform="translate(66 6) scale(0.378) translate(-195 -73.2)">
         <KelimeMarkasi
           ustRenk={koyu ? "#ffffff" : "#1C2B21"}
@@ -536,10 +514,8 @@ export function IconMenu({ className }: IconProps) {
 }
 
 /** Tur -> ikon. Sozluk calisma zamaninda geldigi icin bu bir tablo degil
- *  FONKSIYONDUR; sonuclar kod basina onbelleklenir ki her render'da yeni bir
- *  bilesen tipi uretilip agac gereksiz yere yeniden monte edilmesin.
- *
- *  Renk icin data/turSozlugu.ts `turRengi`, ham glif icin `turGlifi`. */
+ *  fonksiyondur; sonuclar kod basina onbelleklenir ki her render'da yeni bir
+ *  bilesen tipi uretilip agac gereksiz yere yeniden monte edilmesin. */
 const IKON_ONBELLEGI = new Map<string, TipIkonu>();
 
 export function tipIkonu(tur: AssetType): TipIkonu {
@@ -553,15 +529,14 @@ export function tipIkonu(tur: AssetType): TipIkonu {
   return ikon;
 }
 
-/** Sozluk degistiginde (admin bir turun glifini degistirdi) onbellek bayat
+/** Sozluk degisince (admin bir turun glifini degistirdi) onbellek bayat
  *  kalir; `useTurler` yeni veriyi yazdiktan sonra burayi bosaltir. */
 export function tipIkonlariniSifirla(): void {
   IKON_ONBELLEGI.clear();
 }
 
-/** Glif kitapligindan tek bir anahtarin onizlemesi; admin'in tur ekranindaki
- *  glif secicisi bunu kullanir (henuz bir ture bagli olmayan glifi cizmek
- *  gerekir, `tipIkonu` ise tur kodu bekler). */
+/** Glif kitapligindan tek bir anahtarin onizlemesi (admin'in tur ekranindaki
+ *  glif secicisi icin - `tipIkonu` tur kodu bekler, bu beklemez). */
 export function GlifIkonu({
   anahtar,
   className,

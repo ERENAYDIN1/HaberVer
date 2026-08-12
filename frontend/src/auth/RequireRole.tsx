@@ -35,20 +35,16 @@ export default function RequireRole({ roller, children }: RequireRoleProps) {
   const konum = useLocation();
 
   const girisiz = !yukleniyor && !user;
-  // Az once de yonlendirmisiz: giris tutmuyor demektir, tekrar denemek yerine
-  // duran bir sayfa gosterilir (bkz. auth/token.ts).
+  // Az once de yonlendirmisiz: giris tutmuyor demektir (bkz. auth/token.ts).
   const dongu = girisiz && girisDongusuVarMi();
 
-  // StrictMode bu effect'i iki kez calistirir; korumasiz birakilirsa
-  // /auth/login'e iki istek gider, her biri farkli bir state/nonce uretip akis
-  // cookie'sini ustune yazar ve Keycloak'tan donen state eslesmeyebilir. Ref,
-  // ayni mount icinde tek cagriyi garanti eder.
+  // StrictMode effect'i iki kez calistirir; ref olmadan /auth/login'e iki
+  // istek gider ve akis cookie'sindeki state/nonce birbirini ezer.
   const baslatildiRef = useRef(false);
   useEffect(() => {
     if (girisiz && !dongu && !baslatildiRef.current) {
       baslatildiRef.current = true;
-      // "replace": yonlendirmeyi kullanici baslatmadigi icin gecmise durak
-      // eklenmez, yoksa geri tusu hep bu korumali sayfaya donerdi.
+      // "replace": geri tusu korumali sayfaya donmesin.
       girisBaslat(konum.pathname + konum.search, "replace");
     }
   }, [girisiz, dongu, konum.pathname, konum.search]);
@@ -60,7 +56,6 @@ export default function RequireRole({ roller, children }: RequireRoleProps) {
     return <Bekleme metin="Giriş ekranına yönlendiriliyorsunuz…" />;
   }
 
-  // Yanlis rol: kullaniciyi kendi ana sayfasina gonder.
   if (!roller.includes(user.role)) {
     return <Navigate to={rolAnaSayfasi(user.role)} replace />;
   }
@@ -68,14 +63,9 @@ export default function RequireRole({ roller, children }: RequireRoleProps) {
   return <SozlukKapisi>{children}</SozlukKapisi>;
 }
 
-/** Tur sozlugu gelmeden korumali ekranlar cizilmez.
- *
- *  Sozluk artik backend verisi (admin tur ekleyebiliyor), ama onu okuyanlarin
- *  cogu React DISI: harita katmanlari, popup HTML'leri, CSV disa aktarma.
- *  Bunlari tek tek bir React aboneligine baglamak yerine tek bir kapi
- *  konuluyor - asagidaki her sey sozlugun dolu oldugunu varsayabilir. Bedeli
- *  ilk acilista bir istek kadar bekleme; karsiliginda "tur adi bir an kod
- *  olarak gorunuyor" sinifindan hatalarin tamami yok. */
+/** Tur sozlugu gelmeden korumali ekranlar cizilmez: sozlugu okuyan cogu yer
+ *  React disi (harita katmanlari, popup HTML'leri, CSV disa aktarma), o
+ *  yuzden tek tek abone olmak yerine tek bir kapi konuldu. */
 function SozlukKapisi({ children }: { children: ReactNode }) {
   const { isPending, isError, error, refetch } = useTurler();
 

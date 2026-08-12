@@ -21,11 +21,9 @@ interface TalepSatiriProps {
   islemPending: boolean;
 }
 
-/** Varlik listesindeki (VarlikSatiri) ile ayni sablonu kullanan talep satiri:
- *  ikon/foto, ad, tur, durum rozeti, konum ve secilince acilan Onayla/Reddet
- *  aksiyonu. Boylece "Bekleyen"/"Reddedildi" sekmeleri "Onaylandı" (varlik
- *  listesi) ve "Varlıklar" sekmesiyle gorsel olarak birebir tutarli olur;
- *  fotograf/not/ret nedeni gibi ek detaylar ReportDetayModal'da gosterilir. */
+/** VarlikSatiri ile ayni sablonu kullanan talep satiri: ikon/foto, ad, tur,
+ *  durum rozeti, konum ve secilince acilan Onayla/Reddet aksiyonu. Ek
+ *  detaylar (foto/not/ret nedeni) ReportDetayModal'da gosterilir. */
 const TalepSatiri = forwardRef<HTMLLIElement, TalepSatiriProps>(function TalepSatiri(
   {
     report,
@@ -90,8 +88,7 @@ const TalepSatiri = forwardRef<HTMLLIElement, TalepSatiriProps>(function TalepSa
             <p className="truncate text-sm font-medium text-slate-800">{name}</p>
             <p className="text-xs text-slate-500">{turAdi(type)}</p>
             <div className="mt-1.5 flex items-center gap-2">
-              {/* Gorunum (dort deger) durumdan (uc deger) once gelir: tamir
-                  edilmis bir is "Onaylandı" diye kalmasin. */}
+              {/* Gorunum durumdan once gelir: tamir edilmis is "Onaylandı" kalmasin. */}
               <TalepDurumRozeti durum={report.properties.gorunum ?? status} />
               <span className="font-mono text-[11px] text-slate-400">
                 {lng.toFixed(4)}, {lat.toFixed(4)}
@@ -100,10 +97,7 @@ const TalepSatiri = forwardRef<HTMLLIElement, TalepSatiriProps>(function TalepSa
           </div>
         </div>
 
-        {/* Aksiyon satiri her zaman ayni yuksekligi kaplar (h-4) - secili/degil
-            ya da durum (beklemede/reddedildi) fark etmeksizin satirlar ayni
-            boyutta kalsin diye; icerik sadece secili+yetkiliyken dolar:
-            beklemede -> Onayla/Reddet, reddedildi -> Reddi Geri Al. */}
+        {/* Sabit h-4: secili/degil fark etmeksizin satir yuksekligi sabit kalir. */}
         <div className="mt-2 flex h-4 gap-3 pl-[34px]">
           {secili && onayReddetYetkisi && bekliyor && (
             <>

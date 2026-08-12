@@ -20,11 +20,8 @@ interface AssetFormValues {
 }
 
 interface AssetFormProps {
-  /** Harita tiklamasiyla gelen koordinat (Faz 6'da baglanacak). */
   koordinat?: { longitude: number; latitude: number };
-  /** Verilirse form duzenleme modunda calisir. */
   asset?: AssetFeature;
-  /** Kaydetme basarili olunca cagrilir (ornegin modali kapatmak icin). */
   onDone?: () => void;
 }
 
@@ -56,8 +53,7 @@ const errorClass = "mt-1 text-xs text-red-600";
 export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) {
   const duzenlemeModu = asset !== undefined;
 
-  // Duzenleme modunda mevcut varligin tipi sozlukten silinmisse listeye
-  // eklenir ki secim bozulmasin; gruplu listede kendi grubunun altinda gorunur.
+  // Mevcut varligin tipi sozlukten silinmisse listeye eklenir ki secim bozulmasin.
   const tipSecenekleri: AssetType[] = [...turKodlari()];
   if (asset && !tipSecenekleri.includes(asset.properties.type)) {
     tipSecenekleri.push(asset.properties.type);
@@ -74,7 +70,6 @@ export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) 
     defaultValues: asset ? assetToValues(asset) : bosDeger,
   });
 
-  // Secili koordinatin dustugu ilce/mahalleyi canli goster.
   const lonDeger = Number(watch("longitude"));
   const latDeger = Number(watch("latitude"));
   const koordGecerli =
@@ -95,7 +90,6 @@ export default function AssetForm({ koordinat, asset, onDone }: AssetFormProps) 
   const updateAsset = useUpdateAsset();
   const mutation = duzenlemeModu ? updateAsset : createAsset;
 
-  // Haritadan koordinat gelirse ilgili alanlari doldur.
   useEffect(() => {
     if (koordinat) {
       setValue("longitude", koordinat.longitude, { shouldValidate: true });

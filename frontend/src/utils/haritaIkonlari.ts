@@ -12,19 +12,14 @@ import {
 } from "../types/report";
 import { EKIP_VARSAYILAN_RENK } from "./haritaPopup";
 
-/** Haritadaki isaretci goruntuleri: pin/glif/halka/rozet SVG'lerinin
- *  uretilmesi, haritaya yuklenmesi ve bunlara bagli stil ifadeleri.
- *  MapView'dan ayri: burasi haritanin yasam dongusune hic dokunmaz. */
+/** Haritadaki isaretci goruntuleri: pin/glif/halka/rozet SVG uretimi, haritaya
+ *  yukleme ve bunlara bagli stil ifadeleri. MapView'dan ayri, `map` disina dokunmaz. */
 
-/** Secili talebin altina cizilen koyu pinin rengi. */
 const TALEP_PIN_SECIM_RENK = "#0f172a";
 
-/** Tipe gore isaretci rengi; liste rozetleriyle ayni paletten turetilir,
- *  bilinmeyen tip icin notr gri.
- *
- *  Sabit degil FONKSIYON: tur sozlugu backend'den geldigi icin ifade ancak
- *  katmanlar kurulurken uretilebilir. `match` en az bir cift ister, bu yuzden
- *  sozluk beklenmedik sekilde bossa duz bir renk donulur. */
+/** Sabit degil FONKSIYON: tur sozlugu backend'den geldigi icin ifade ancak
+ *  katmanlar kurulurken uretilebilir. `match` en az bir cift ister, sozluk
+ *  bossa duz renk donulur. */
 export function tipRengiIfadesi(): maplibregl.ExpressionSpecification {
   const ciftler = turRenkCiftleri();
   if (!ciftler.length) {
@@ -38,22 +33,17 @@ export function tipRengiIfadesi(): maplibregl.ExpressionSpecification {
   ] as unknown as maplibregl.ExpressionSpecification;
 }
 
-/* --- Pin cizim uzayi ------------------------------------------------
- * Pin, tur glifi, durum halkasi ve rozet AYNI viewBox'ta cizilir; hepsi ayni
- * icon-anchor + icon-size ile eklendigi icin hizalama otomatiktir ve
- * `icon-offset` hesabi hic gerekmez. Tuval (24x32 yerine 34x42) halka/rozet
- * pinin disina tastigi icin genis; goruntuler pixelRatio 2 ile eklendiginden
- * 1 viewBox birimi = icon-size 1'de 1 CSS px. */
+/* Pin, tur glifi, durum halkasi ve rozet AYNI viewBox'ta cizilir; hepsi ayni
+ * icon-anchor + icon-size ile eklenir, `icon-offset` hesabi gerekmez. Tuval
+ * (34x42) halka/rozetin pin disina tasmasi icin genis. */
 const PIN_VIEWBOX = { g: 34, y: 42 };
 /** Ham pin path'i (tepesi (12,12) merkezli, ucu (12,31.2)) bu kadar kaydirilir. */
 const PIN_KAYDIRMA = { x: 5, y: 10 };
-/** Pin basinin merkezi; glif, halka ve rozet buna gore konumlanir. */
 const PIN_BAS = { x: 12 + PIN_KAYDIRMA.x, y: 12 + PIN_KAYDIRMA.y };
-/** Pin basinin viewBox birimindeki yaricapi (path'ten gelir, sabit). */
 export const PIN_BAS_YARICAP = 9.6;
 
-/** Durum rozeti simgeleri, rozet diskinin merkezine gore. `<text>` degil path:
- *  data-URI'den raster'a cevrilen SVG'de metin tarayicinin fontuna kalirdi. */
+/** `<text>` degil path: data-URI'den raster'a cevrilen SVG'de metin
+ *  tarayicinin fontuna kalirdi. */
 const ROZET_CIZIMI: Record<DurumRozeti, string> = {
   unlem: `<path d="M0 -3.6 V0.6"/><path d="M0 3.1 h0.01"/>`,
   soru:
@@ -63,8 +53,8 @@ const ROZET_CIZIMI: Record<DurumRozeti, string> = {
   carpi: `<path d="M-2.5 -2.5 L2.5 2.5"/><path d="M2.5 -2.5 L-2.5 2.5"/>`,
 };
 
-/** Renkli disk + beyaz simge. Yaricap cagirandan gelir: pin rozeti ile varlik
- *  rozeti farkli viewBox'larda ayni ekran boyutuna gelmeli. */
+/** Yaricap cagirandan gelir: pin rozeti ile varlik rozeti farkli
+ *  viewBox'larda ayni ekran boyutuna gelmeli. */
 function rozetCizimi(
   cx: number,
   cy: number,
@@ -81,7 +71,6 @@ function rozetCizimi(
   );
 }
 
-/** Pin uzayinda (PIN_VIEWBOX) bir SVG kabugu. */
 function pinSvgKabugu(ic: string): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PIN_VIEWBOX.g} ${PIN_VIEWBOX.y}" ` +
@@ -104,8 +93,7 @@ function svgIkonuYukle(map: maplibregl.Map, id: string, svg: string): Promise<vo
   });
 }
 
-/** Varlik dairesinin ortasina binen beyaz cizgi glifi. Path'ler React
- *  ikonlariyla ayni kaynaktan (`GLIF_KITAPLIGI`) gelir. */
+/** Path'ler React ikonlariyla ayni kaynaktan (`GLIF_KITAPLIGI`) gelir. */
 function tipGlifiSvg(ic: string): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48" height="48" ` +
@@ -115,8 +103,7 @@ function tipGlifiSvg(ic: string): string {
 }
 
 /** Ayni glifin pin varyanti: pinin basina oturacak sekilde kucultulup
- *  PIN_VIEWBOX'a yerlestirilir. Olcek pinle birlikte buyudugu icin icon-size
- *  degistiginde ayrica ayar gerekmez. */
+ *  PIN_VIEWBOX'a yerlestirilir. */
 function pinGlifiSvg(ic: string): string {
   const olcek = 0.62;
   return pinSvgKabugu(
@@ -127,9 +114,8 @@ function pinGlifiSvg(ic: string): string {
   );
 }
 
-/** Talep pini (damla), dolgusu tur rengi. Beyaz kontur her altlikta okunur
- *  kalmasi icin. SDF yerine tur basina hazir goruntu uretilir: SDF ham
- *  distance field ister, alfa maskesi kenar/halo davranisini bozuyor. */
+/** SDF yerine tur basina hazir goruntu uretilir: SDF ham distance field
+ *  ister, alfa maskesi kenar/halo davranisini bozuyor. */
 function talepPinSvg(renk: string): string {
   return pinSvgKabugu(
     `<g transform="translate(${PIN_KAYDIRMA.x} ${PIN_KAYDIRMA.y})">` +
@@ -148,7 +134,6 @@ function talepHalkaSvg(renk: string, kesikli: boolean): string {
   );
 }
 
-/** Pinin sag-ust omzundaki durum rozeti (pinin USTUNE cizilir). */
 function talepRozetSvg(renk: string, simge: DurumRozeti): string {
   // Kayma bas yaricapindan bir tik iceride: tam yaricapta rozetin beyaz
   // konturu viewBox kenarina dayanip kirpiliyordu.
@@ -158,16 +143,12 @@ function talepRozetSvg(renk: string, simge: DurumRozeti): string {
   );
 }
 
-/** Pinin SAG-ALT omzunda kucuk bir nokta: aktif bir goreve bagli (ayni renk
- *  saha ekibi pininde, bkz. EKIP_VARSAYILAN_RENK). Varlik dairesindeki atama
- *  noktasiyla ayni fikir ve AYNI KOSE - iki isaretci tipi ayni sozlugu
- *  konussun diye; pin geometrisine uyarlanmis hali. Sabit tek goruntu (renk
- *  degiskeni yok, tur basina uretilmez). */
+/** Sag-alt omuzda aktif goreve bagli oldugunu gosteren nokta (ayni renk ve
+ *  kose saha ekibi pininde de kullanilir, bkz. EKIP_VARSAYILAN_RENK). */
 function talepAtamaSvg(): string {
-  // Kayma pin BASINA degil, durum halkasinin yaricapina (`talepHalkaSvg`)
-  // gore: halkali gorunumlerde nokta bas yaricapina hizalanirsa halkanin
-  // altinda kalip yariya kadar gizleniyordu. Kosegen izdusumu (r/√2) noktayi
-  // halkanin kenarina oturtur; viewBox'a sigar (26.5+6.3 < 34, 31.5+6.3 < 42).
+  // Kayma pin BASINA degil durum halkasinin yaricapina gore: bas yaricapina
+  // hizalanirsa nokta halkanin altinda yariya kadar gizleniyordu. Kosegen
+  // izdusumu (r/√2) noktayi halkanin kenarina oturtur.
   const kayma = (PIN_BAS_YARICAP + 3.9) / Math.SQRT2;
   return pinSvgKabugu(
     `<circle cx="${(PIN_BAS.x + kayma).toFixed(2)}" cy="${(PIN_BAS.y + kayma).toFixed(2)}" r="4.4" ` +
@@ -175,14 +156,9 @@ function talepAtamaSvg(): string {
   );
 }
 
-/** Bakim uyari halkasinin rengi: onaylanmis taleple ayni amber, ikisi de acik
- *  is. Bu halka (`assets-durum`) "bakim lazim"in TEK gorsel isaretidir - ayrica
- *  basilan bir "!" rozeti vardi, ayni kosula bagli ikinci bir isaret olarak
- *  isaretciyi kalabalıklastirdigi icin kaldirildi. */
+/** Bu halka (`assets-durum`) "bakim lazim"in TEK gorsel isaretidir. */
 export const VARLIK_UYARI_RENK = TALEP_DURUM_RENGI.onaylandi;
 
-/** Bir turun glifini uc varyantla yukler: daire (tip-*), pin glifi
- *  (pin-glif-*) ve talep pini (talep-pin-*). */
 function tipIkonuYukle(map: maplibregl.Map, tur: string): Promise<void> {
   const ic = turGlifi(tur);
   const renk = turRengi(tur);
@@ -193,10 +169,7 @@ function tipIkonuYukle(map: maplibregl.Map, tur: string): Promise<void> {
   ]).then(() => undefined);
 }
 
-/** Tum glif/pin/halka/rozet goruntulerini haritaya yukler; stil degisiminde
- *  katmanlar bastan kuruldugu icin tekrar cagrilir. Halka ve rozet yalnizca
- *  onlari kullanan gorunumler icin uretilir - katman filtreleri de ayni
- *  listelerden turedigi icin eksik goruntu istenmez. */
+/** Stil degisiminde katmanlar bastan kuruldugu icin tekrar cagrilir. */
 export function tipIkonlariniHazirla(map: maplibregl.Map): Promise<void> {
   return Promise.all([
     ...turKodlari().map((tur) => tipIkonuYukle(map, tur)),
@@ -219,7 +192,6 @@ export function tipIkonlariniHazirla(map: maplibregl.Map): Promise<void> {
   ]).then(() => undefined);
 }
 
-/** Gorunume gore sonumleme: kapanmis kayitlar acik islerle yarismasin. */
 export const TALEP_OPAKLIK_IFADESI = [
   "match",
   ["coalesce", ["get", "gorunum"], ["get", "status"]],
@@ -227,7 +199,6 @@ export const TALEP_OPAKLIK_IFADESI = [
   1,
 ] as unknown as maplibregl.ExpressionSpecification;
 
-/** Halka/rozet katmanlarinin filtresi: yalnizca o giysiyi giyen gorunumler. */
 export function gorunumFiltresi(gorunumler: readonly string[]) {
   return [
     "in",

@@ -18,25 +18,17 @@ import TipSecenekleri from "./TipSecenekleri";
 interface ReportDetayModalProps {
   report: ReportFeature | null;
   onKapat: () => void;
-  /** Personel (admin/calisan) ise bekleyen talebi buradan onaylayip
-   *  reddedebilir - haritadaki isaretciden de islem yapilabilmesi icin. */
+  /** Personel (admin/calisan) ise bekleyen talebi buradan onaylayip reddedebilir. */
   islemYetkisi?: boolean;
-  /** Onay/ret basarili olunca (ust bilesen sorgulari tazeler, modali kapatir). */
   onIslemBitti?: () => void;
   /** Onaylanmis talepte "Varlığı Yönet": ondan olusan varligin detay/yonetim
-   *  modalini acar. Haritadaki popup'in ayni adli dugmesiyle TEK islemdir -
-   *  talep ekrani ile varlik ekrani arasindaki tek gecis noktasi. */
+   *  modalini acar (haritadaki popup ile ayni islem). */
   onVarligiYonet?: (raporId: string) => void;
-  /** "Şekli Düzenle": vatandasin cizdigi CIZGI/ALAN yanlis olabilir - haritada
-   *  koseleri surukleyerek duzeltme modunu acar (kaydedilmis bolge/guzergah
-   *  seklinin duzenlenmesiyle ayni mekanizma). Yalnizca cizgi/alan taleplerde
-   *  gosterilir; nokta taleplerde "sekil" diye bir sey yok. */
+  /** Yalnizca cizgi/alan taleplerde: haritada koseleri surukleyerek duzeltme
+   *  modunu acar (kaydedilmis bolge/guzergah duzenlemesiyle ayni mekanizma). */
   onSekilDuzenle?: (report: ReportFeature) => void;
 }
 
-/** Bir talebin (bekleyen/onaylanmis/reddedilen) tum detaylarini (foto dahil)
- *  kucuk bir pop up icinde gosterir - AssetDetayModal ile ayni tasarim
- *  dilini kullanir, boylece "Detay" her yerde tek, tutarli bir modal acar. */
 export default function ReportDetayModal({
   report,
   onKapat,
@@ -49,24 +41,17 @@ export default function ReportDetayModal({
   const { data: konum } = useKonumCozumu(koord ? koord[1] : null, koord ? koord[0] : null);
   const [islemde, setIslemde] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
-  // Onayda uygulanacak tur, hangi talep icin secildigiyle birlikte tutulur:
-  // kayit yoksa ya da baska bir talebe gecildiyse vatandasin sectigi tur
-  // gecerlidir. Boylece ilk render'da "duzeltildi" isareti yanlislikla yanmaz
-  // ve modal baska bir talebe gecerken sifirlayan bir effect'e gerek kalmaz.
+  // Secim hangi talep icin yapildigiyla birlikte tutulur, boylece baska bir
+  // talebe gecince "duzeltildi" isareti yanlislikla yanmaz (sifirlayan effect gerekmez).
   const [tipSecim, setTipSecim] = useState<{ raporId: string; tip: AssetType } | null>(
     null
   );
 
-  // Onaylanmis talebin isi artik ondan olusan VARLIK uzerinden yurur. O varligin
-  // guncel durumu burada salt-okunur gosterilir ki "Detay" bir cikmaz sokak
-  // olmasin: kullanici ne oldugunu gormeden "Varlığı Yönet"e basmak zorunda
-  // kalmasin. Islemler yine yalnizca varlik kartinda.
   const varlikId =
     report?.properties.status === "onaylandi"
       ? report.properties.created_asset_id
       : null;
   const { data: varlik, isLoading: varlikYukleniyor } = useQuery({
-    // AssetDetayModal ile ayni anahtar sekli degil; tekil cekim burada yeterli.
     queryKey: ["assets", "tekil", varlikId],
     queryFn: () => getAsset(varlikId!),
     enabled: Boolean(islemYetkisi && varlikId),
@@ -139,8 +124,6 @@ export default function ReportDetayModal({
               {new Date(p.created_at).toLocaleString("tr-TR")}
             </dd>
           </div>
-          {/* Sonuclanma tarihi (`reviewed_at`) hem onayda hem redde yazilir;
-              etiket duruma gore degisir. Bekleyen talepte satir hic cikmaz. */}
           {p.reviewed_at && p.status !== "beklemede" && (
             <div className="flex justify-between gap-3">
               <dt className="text-slate-500">
@@ -170,11 +153,8 @@ export default function ReportDetayModal({
           </div>
         )}
 
-        {/* Sekil duzenleme: vatandas yol catlagini/alani yanlis cizmis olabilir.
-            Yalnizca CIZGI/ALAN taleplerde (nokta talepte "sekil" yoktur) ve
-            reddedilmemis durumda - reddedilmis kapanmis bir istir. ONAYLANDI
-            durumunda "Varligi Yonet" ile AYNI seritte durur (asagida); burada
-            yalnizca BEKLEMEDE durumu icin (o blokta "Varligi Yonet" yoktur). */}
+        {/* Yalnizca beklemede + cizgi/alan taleplerde; onaylandi durumunda ayni
+            dugme asagida "Varligi Yonet" ile birlikte gosterilir. */}
         {islemYetkisi &&
           onSekilDuzenle &&
           sekilliTalep(report) &&
@@ -189,13 +169,8 @@ export default function ReportDetayModal({
             </AksiyonSeridi>
           )}
 
-        {/* Onay/ret: haritadaki talep isaretcisinden de karar verilebilsin diye
-            (popup -> "Detay" -> buradaki butonlar). Onay yeni bir bakim varligi
-            olusturur ve otomatik atamayi tetikler (bkz. crud/report.py).
-
-            Tur duzeltme bilincli olarak BURADA: fotografin gorulup gercek
-            kararin verildigi ekran burasi. Paneldeki satir ici "Onayla"
-            kisayolu vatandasin turunu aynen kabul eder. */}
+        {/* Tur duzeltme burada: fotografin gorulup karar verildigi ekran.
+            Paneldeki satir ici "Onayla" vatandasin turunu aynen kabul eder. */}
         {islemYetkisi && p.status === "beklemede" && (
           <div className="space-y-2 border-t border-slate-100 pt-2.5">
             <div>
@@ -246,9 +221,6 @@ export default function ReportDetayModal({
           </div>
         )}
 
-        {/* Onaylanmis talebin isi artik ondan olusan VARLIK uzerinden yurur
-            (ekibe atama, tamir, duzenleme, silme). Once o varligin nerede
-            oldugu ozetlenir, sonra tek gecis dugmesi gelir. */}
         {islemYetkisi && p.status === "onaylandi" && (
           <div className="space-y-2 border-t border-slate-100 pt-2.5">
             <div className="border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs">
@@ -292,10 +264,7 @@ export default function ReportDetayModal({
           </div>
         )}
 
-        {/* Reddi geri alma: yanlislikla reddedilen (ya da sonradan gecerli
-            oldugu anlasilan) talep tekrar "beklemede"ye cekilir, boylece
-            onaylanip varliga donusebilir. Onaylanmis taleplerde yoktur -
-            onay bir varlik olusturdugundan geri alinamaz. */}
+        {/* Onaylanmis taleplerde yoktur: onay bir varlik olusturdugundan geri alinamaz. */}
         {islemYetkisi && p.status === "reddedildi" && (
           <AksiyonSeridi>
             <AksiyonButonu

@@ -26,8 +26,8 @@ interface VarlikSatiriProps {
 }
 
 /** Varlik listelerinde (Varliklar sekmesi + Talepler > Onaylandi) ortak
- *  kullanilan tek bir satir: ikon/foto, ad, tur, durum rozeti, konum ve
- *  secilince acilan Detay/Tamir Edildi/Duzenle/Sil aksiyonlari. */
+ *  kullanilan satir: ikon/foto, ad, tur, durum rozeti, konum ve secilince
+ *  acilan Detay/Tamir Edildi/Duzenle/Sil aksiyonlari. */
 const VarlikSatiri = forwardRef<HTMLLIElement, VarlikSatiriProps>(function VarlikSatiri(
   {
     asset,
@@ -50,7 +50,6 @@ const VarlikSatiri = forwardRef<HTMLLIElement, VarlikSatiriProps>(function Varli
   const TipIkonu = tipIkonu(type);
   const foto = fotoUrl(photo_url);
   const [fotoAcik, setFotoAcik] = useState(false);
-  // Tamir edilmis talep varliginda otomatik silmeye kalan gun (varsa).
   const kalanGun =
     source === "ihbar" && status === "iyi" ? kalanSilmeGunu(repaired_at) : null;
 
@@ -127,9 +126,7 @@ const VarlikSatiri = forwardRef<HTMLLIElement, VarlikSatiriProps>(function Varli
           </div>
         </div>
 
-        {/* Aksiyon satiri her zaman ayni yuksekligi kaplar (h-4) - secili/degil
-            ya da varlik durumu/yetki fark etmeksizin satirlar ayni boyutta
-            kalsin diye; icerik sadece seciliyken dolar. */}
+        {/* Sabit h-4: secili/degil fark etmeksizin satir yuksekligi sabit kalir. */}
         <div className="mt-2 flex h-4 gap-3 pl-[34px]">
           {secili && (
             <>

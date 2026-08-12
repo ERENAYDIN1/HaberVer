@@ -5,17 +5,13 @@ import type { KenarOgesi } from "../Kenarcubugu";
 export const ALT_CUBUK_YUKSEKLIGI = 58;
 
 interface AltSekmeCubuguProps {
-  /** Masaustu kenar cubugunun ana ogeleriyle AYNI liste: mobil ayri bir
-   *  gezinme modeli tanimlamaz, ayni ogeleri baska bir kabukta gosterir. */
+  /** Masaustu kenar cubugunun ana ogeleriyle ayni liste. */
   ogeler: KenarOgesi[];
 }
 
 /** Mobilde ana gezinme: ekranin dibinde, basparmak menzilinde sabit sekmeler.
- *
- *  Kenar cubugunun aksine daraltilamaz - kucuk ekranda "hangi paneldeyim"
- *  sorusunun cevabi her zaman gorunur olmali. Yonetim ekranlari buraya
- *  girmez, header'daki menude durur: harita gerektirmeyen isler gezinmenin
- *  ana ekseninde yer tutmamali. */
+ *  Kenar cubugunun aksine daraltilamaz. Yonetim ekranlari buraya girmez,
+ *  header'daki menude durur. */
 export default function AltSekmeCubugu({ ogeler }: AltSekmeCubuguProps) {
   return (
     <nav
@@ -35,8 +31,6 @@ export default function AltSekmeCubugu({ ogeler }: AltSekmeCubuguProps) {
             }`}
             style={{ height: ALT_CUBUK_YUKSEKLIGI }}
           >
-            {/* Aktif sekmenin ust aksan cizgisi: kenar cubugundaki sol
-                cizginin mobil karsiligi. */}
             {aktif && (
               <span className="absolute inset-x-3 top-0 h-0.5 rounded-b-full bg-emerald-600" />
             )}

@@ -20,14 +20,11 @@ function zamanDamgasi(): string {
   return new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
 }
 
-/* TR yerelindeki Excel liste ayirici olarak noktali virgul bekler; virgulle
-   yazilan dosyayi tek sutuna sikistirir. Ayrica ondalik ayirici da virgul
-   oldugundan koordinatlar nokta yerine virgulle yazilir. */
+/* TR Excel noktali virgulu ayirici bekler (ondalik ayirici virgul oldugundan). */
 const AYIRICI = ";";
 
 function csvAlan(deger: string | number | null): string {
   if (deger === null || deger === undefined) return "";
-  // Sayilar TR ondalik ayiricisiyla yazilir ki Excel bunlari sayi olarak tanisin.
   const metin =
     typeof deger === "number" ? String(deger).replace(".", ",") : String(deger);
   return `"${metin.replace(/"/g, '""')}"`;

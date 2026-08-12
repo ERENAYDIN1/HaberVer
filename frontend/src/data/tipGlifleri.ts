@@ -1,16 +1,12 @@
 /**
- * GLIF KITAPLIGI: secilebilir cizgi glifleri, ham SVG icerigi olarak - tek
- * kaynak. Ayni path'ler hem React ikonu olarak (icons.tsx `tipIkonu`) hem de
- * haritada raster'a cevrilen isaretci goruntusu olarak kullanilir; bu yuzden
- * veri bir React dosyasinda degil burada durur.
+ * GLIF KITAPLIGI: secilebilir cizgi glifleri, ham SVG icerigi olarak. Ayni
+ * path'ler React ikonu (`icons.tsx tipIkonu`) ve haritadaki raster isaretci
+ * goruntusu olarak kullanildigi icin bir React dosyasinda degil burada durur.
  *
- * Anahtarlar tur KODU DEGIL glif adidir: tur sozlugu backend'de yasar ve bir
- * tur kaydi buradaki bir anahtari SECER (`turler.glif`). Boylece admin yeni
- * bir tur eklerken SVG yazmak zorunda kalmaz, hazir bir glif secer; sozlukte
- * karsiligi olmayan tur `VARSAYILAN_GLIF`e duser.
+ * Anahtarlar tur KODU DEGIL glif adidir: bir tur kaydi buradaki bir anahtari
+ * SECER (`turler.glif`); karsiligi olmayan tur `VARSAYILAN_GLIF`e duser.
  *
- * Glifler 24x24 viewBox'ta ve yalnizca kontur (dolgusuz) cizilmelidir -
- * haritada beyaz cizgi olarak basilirlar. Renk turun grubundan gelir.
+ * Glifler 24x24 viewBox'ta ve yalnizca kontur (dolgusuz) cizilmelidir.
  */
 export const GLIF_KITAPLIGI: Record<string, string> = {
   // --- Yeşil alan ve park ---
@@ -45,8 +41,6 @@ export const GLIF_KITAPLIGI: Record<string, string> = {
   diger:
     '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7"/><path d="M12 17.5h.01"/>',
   // --- Yalnizca glif olarak var, karsiliginda hazir bir tur yok ---
-  // Yeni tur eklenirken secilebilsinler diye: bir belediyenin ekleyebilecegi
-  // ilk turler (kamera, yangin muslugu, otobus duragi, cesme) icin.
   kamera:
     '<path d="M3 8h11v8H3z"/><path d="M14 11l6-3v8l-6-3"/><circle cx="7" cy="12" r="2"/>',
   yangin_muslugu:

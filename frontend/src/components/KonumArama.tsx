@@ -11,19 +11,13 @@ interface NominatimSonuc {
 interface KonumAramaProps {
   /** Bir sonuc secildiginde [longitude, latitude] ile cagrilir. */
   onSecildi: (konum: [number, number]) => void;
-  /** Gorunen alan; sonuclar bu bolgeye onceliklendirilir (Nominatim viewbox).
-   *  Bu olmadan "cami" gibi genel kelimeler alakasiz sonuclar donduruyor. */
+  /** Gorunen alan; sonuclar bu bolgeye onceliklendirilir (Nominatim viewbox). */
   gorunenAlan?: [[number, number], [number, number]] | null;
-  /** Verilirse arama yalnizca bu alanla sinirlanir (bounded=1); gorunen
-   *  alandan onceliklidir. */
+  /** Verilirse arama yalnizca bu alanla sinirlanir (bounded=1). */
   zorunluAlan?: [[number, number], [number, number]] | null;
-  /** Mobilde header'a sigmasi icin kisaltilir ("Ara"). */
   yerTutucu?: string;
-  /** Genislik sinifi; mobilde kabin dar kalmasi icin ezilir. */
   genislikSinifi?: string;
-  /** Dar (mobil) yerlesim: ic bosluklar kisilir ve bos durumda sag taraftaki
-   *  yer tutucu bosluk cizilmez - dar kutuda "Ara" metnine yer birakmiyordu.
-   *  Sonuc listesi de kutudan tasarak okunabilir genislige acilir. */
+  /** Dar (mobil) yerlesim: sonuc listesi kutudan tasarak acilir. */
   dar?: boolean;
 }
 
@@ -41,8 +35,7 @@ export default function KonumArama({
   const [aciklarKutu, setAciklarKutu] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(false);
   const kutuRef = useRef<HTMLDivElement>(null);
-  // Ref'te tutulur ki her harita hareketi aramayi yeniden tetiklemesin;
-  // yalnizca bir sonraki istekte okunur.
+  // Ref'te tutulur ki her harita hareketi aramayi yeniden tetiklemesin.
   const gorunenAlanRef = useRef(gorunenAlan);
   const zorunluAlanRef = useRef(zorunluAlan);
   useEffect(() => {
@@ -84,12 +77,11 @@ export default function KonumArama({
           // icin kutuya kucuk bir pay eklenir.
           const pay = 0.01;
           const [[minLon, minLat], [maxLon, maxLat]] = alan;
-          // Nominatim viewbox sirasi: sol,ust,sag,alt (minLon,maxLat,maxLon,minLat).
+          // Nominatim viewbox sirasi: sol,ust,sag,alt.
           params.set(
             "viewbox",
             `${minLon - pay},${maxLat + pay},${maxLon + pay},${minLat - pay}`
           );
-          // Zorunlu alanda sert kisit, gorunen alanda yumusak oncelik.
           params.set("bounded", zorunlu ? "1" : "0");
         }
         const yanit = await fetch(
@@ -100,7 +92,7 @@ export default function KonumArama({
         setSonuclar(veri);
         setAciklarKutu(true);
       } catch {
-        // Istek iptal edildiyse (yeni yazim) sessizce yoksay.
+        // Istek iptal edildiyse sessizce yoksay.
       } finally {
         setYukleniyor(false);
       }
@@ -158,8 +150,6 @@ export default function KonumArama({
       {aciklarKutu && (sonuclar.length > 0 || yukleniyor) && (
         <ul
           className={`absolute right-0 top-full z-30 max-h-80 overflow-y-auto border border-slate-200 bg-white py-1 shadow-xl ${
-            // Dar kutuda liste kutu genisligine sigmaz; sagda hizali kalip
-            // sola dogru okunabilir genislige acilir.
             dar
               ? "w-[76vw] max-w-xs rounded-2xl rounded-tr-none"
               : "left-0 rounded-b-2xl border-t-0"

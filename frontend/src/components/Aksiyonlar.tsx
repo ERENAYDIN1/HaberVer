@@ -1,12 +1,10 @@
 import { useState, type ReactNode } from "react";
 
 /** Detay modallerinin (varlik / talep / bolge) ortak islem dili: serit +
- *  buton + silme onayi. Bir kayit hangi panelden acilirsa acilsin ayni
- *  yerlesimi ve ayni renk kodunu gosterir.
+ *  buton + silme onayi.
  *
  *  Renk kodu: yesil = ilerleten ana islem, gri = ikincil, kirmizi = yikici,
- *  amber = geri alan/uyaran, mor = bolge islemleri, mavi = haritada gezinme
- *  (kayda dokunmaz, yalnizca goruntuyu tasir). */
+ *  amber = geri alan/uyaran, mor = bolge islemleri, mavi = haritada gezinme. */
 
 export type AksiyonTuru =
   | "birincil"
@@ -27,8 +25,6 @@ const TUR_SINIFLARI: Record<AksiyonTuru, string> = {
   uyari:
     "border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100",
   mor: "border border-violet-600 bg-violet-600 text-white hover:bg-violet-500",
-  // Harita/konum dilinin rengi (ekip isaretcisi, aydinlatma grubu vb. ile ayni
-  // sky tonu): "veriye dokunmaz, seni oraya goturur".
   gezinme: "border border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100",
 };
 
@@ -64,15 +60,12 @@ export function AksiyonButonu({
   );
 }
 
-/** Serit icinde iki islem kumesini ayiran bosluk. Kaydi degistiren islemler
- *  (tamir/duzenle) ile yalnizca goruntuyu tasiyan gezinme islemi yan yana
- *  dizilmesin diye. */
+/** Serit icinde iki islem kumesini ayiran bosluk. */
 export function AksiyonAyraci() {
   return <span aria-hidden className="w-3" />;
 }
 
-/** Modal govdesinin altindaki islem seridi: ust cizgiyle ayrilir, butonlar
- *  soldan dizilir. */
+/** Modal govdesinin altindaki islem seridi. */
 export function AksiyonSeridi({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
@@ -82,22 +75,17 @@ export function AksiyonSeridi({ children }: { children: ReactNode }) {
 }
 
 interface SilOnayiProps {
-  /** Onay sorusunda gecen kayit adi (verilmezse genel bir soru sorulur). */
   ad?: string;
   siliniyor?: boolean;
   onSil: () => void;
-  /** Duğme metni. Varsayilan "Sil"; islem gercekten silme DEGILSE (orn.
-   *  vatandasin talebi kendi listesinden kaldirmasi - kayit belediyede kalir)
-   *  ne yaptigini dogru soyleyen bir metin verilmelidir. */
+  /** Islem gercekten silme DEGILSE (orn. talebi listeden kaldirma - kayit
+   *  belediyede kalir) ne yaptigini dogru soyleyen bir metin verilmelidir. */
   etiket?: string;
-  /** Onay sorusu ve olumlama metni; `etiket` ile birlikte degistirilir. */
   soru?: string;
   onayEtiketi?: string;
   calisiyorEtiketi?: string;
-  /** Liste satirlarinda kullanilan kucuk, metin-baglantisi olcusu. */
   satirIci?: boolean;
-  /** Degisince acik onay kapanir: modal monte kalirken baska bir kayda
-   *  gecildiginde onceki sorunun tasinmamasi icin. */
+  /** Degisince acik onay kapanir (modal monte kalirken baska kayda gecilince). */
   sifirlaAnahtari?: string | null;
 }
 
@@ -116,9 +104,8 @@ export function SilOnayi({
 }: SilOnayiProps) {
   const [onayda, setOnayda] = useState(false);
 
-  // Kayit degisince acik onay birakilir. Efekt degil render sirasinda
-  // duzeltme: efekt bir kare gecikir ve yeni kayit bir an onay sorusuyla
-  // acilirdi (React'in "prop degisince state'i duzelt" deseni).
+  // Render sirasinda duzeltme (efekt olsa bir kare gecikir, yeni kayit bir
+  // an onay sorusuyla acilirdi).
   const [oncekiAnahtar, setOncekiAnahtar] = useState(sifirlaAnahtari);
   if (oncekiAnahtar !== sifirlaAnahtari) {
     setOncekiAnahtar(sifirlaAnahtari);
@@ -142,8 +129,7 @@ export function SilOnayi({
     );
   }
 
-  // Satir icinde komsu kisayollarla ayni metin olcusunde kalir (liste
-  // satirinin sabit yuksekligini bozmasin); modallerde gercek butondur.
+  // Satir icinde liste satirinin sabit yuksekligini bozmasin diye metin-baglantisi; modallerde gercek buton.
   if (satirIci) {
     return (
       <span

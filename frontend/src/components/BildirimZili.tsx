@@ -6,14 +6,11 @@ import { IconBell, IconInbox, IconWarning, tipIkonu } from "./icons";
 
 export interface Bildirim {
   id: string;
-  /** Ikon/renk icin varlik turu. */
   tip: AssetType;
   baslik: string;
   altbaslik: string;
-  /** ISO tarih - "x dakika once" hesabinda kullanilir. */
   zaman: string;
   kategori: "bakim" | "talep";
-  /** Bildirime tiklaninca (haritada oraya ucar / ilgili paneli acar). */
   onTikla: () => void;
 }
 
@@ -21,15 +18,12 @@ interface BildirimZiliProps {
   bildirimler: Bildirim[];
 }
 
-/** Header'daki bildirim zili + acilir "Son Bildirimler" paneli. Bakim bekleyen
- *  varliklar ve bekleyen talepler tek yerde toplanir; bir ogeye tiklayinca
- *  harita ilgili konuma ucar. */
+/** Header'daki bildirim zili + acilir "Son Bildirimler" paneli. */
 export default function BildirimZili({ bildirimler }: BildirimZiliProps) {
   const [acik, setAcik] = useState(false);
   const kutuRef = useRef<HTMLDivElement>(null);
   const adet = bildirimler.length;
 
-  // Disari tiklayinca / Esc ile kapan.
   useEffect(() => {
     if (!acik) return;
     const disariTikla = (e: MouseEvent) => {

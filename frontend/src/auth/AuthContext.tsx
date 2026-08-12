@@ -38,8 +38,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authApi
       .me()
       .then((gelen) => {
-        // Dongu isareti temizlenir, yoksa ayni sekmede sonraki giris ihtiyaci
-        // dongu sanilirdi.
         girisDenemesiniUnut();
         setUser(gelen);
       })
@@ -47,21 +45,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setYukleniyor(false));
   }, []);
 
-  // Asagidaki dinleyici React render dongusunun disinda calistigi icin
-  // state'i degil bu ref'i okur.
+  // Dinleyici React render dongusu disinda calistigi icin state degil ref okur.
   const kullaniciRef = useRef<User | null>(null);
   kullaniciRef.current = user;
 
-  // Geri/ileri tusuyla gelinen sayfa bfcache'ten oldugu gibi (React state ve
-  // react-query onbellegi dahil) geri gelebilir; hicbir istek atilmadigi icin
-  // `/auth/me` de calismaz. Boylece A hesabindan cikip B ile girildikten sonra
-  // A'nin ekrani gorunmeye devam eder - istekler B olarak gitse de bu bir
-  // gizlilik sorunu. `pageshow.persisted` bu durumu bildirir: kimlik yeniden
-  // sorulur, degistiyse sayfa tamamen yenilenir (bayat ekrani yamamak yerine
-  // bellegi tumden atmak tek guvenli yol).
+  // bfcache'ten donen sayfa React state'ini korur ama istek atmadigi icin
+  // `/auth/me` calismaz; A'dan cikip B ile girilse bile A'nin ekrani gorunur
+  // kalirdi. `pageshow.persisted` kimligi yeniden sorar, degistiyse sayfa
+  // tamamen yenilenir.
   useEffect(() => {
     const geriGelindi = (olay: PageTransitionEvent) => {
-      // Bellekte kimlik yoksa korunacak veri de yok.
       if (!olay.persisted || !kullaniciRef.current) return;
       const oncekiId = kullaniciRef.current.id;
       authApi
@@ -69,7 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .then((gelen) => {
           if (gelen.id !== oncekiId) window.location.reload();
         })
-        // Oturum bitmis: bu ekran artik kimseye ait degil.
         .catch(() => window.location.reload());
     };
     window.addEventListener("pageshow", geriGelindi);
@@ -77,8 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const cikisYap = async () => {
-    // Ilk is giris kapisini kapatmak: yoksa RequireRole'un yonlendirmesi
-    // asagidaki cikis navigasyonunu iptal eder ve Keycloak oturumu kapanmaz.
+    // RequireRole'un yonlendirmesi cikis navigasyonunu iptal etmesin diye once kapi kapatilir.
     cikisiBaslat();
     let cikisUrl: string | null = null;
     try {
@@ -86,9 +77,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Sunucuya ulasilamasa bile kullaniciyi disari cikar.
     }
-    // `setUser(null)` bilincli olarak yok: zaten sayfadan ayriliyoruz, state'i
-    // bosaltmak yalnizca gereksiz bir ara render uretir. Hata durumunda koke
-    // degil /giris'e gidilir - kok rota girisi kendisi baslatirdi.
     window.location.href = cikisUrl ?? "/giris";
   };
 
