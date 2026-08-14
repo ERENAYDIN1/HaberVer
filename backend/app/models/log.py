@@ -18,9 +18,6 @@ class LogAction(str, enum.Enum):
     report_rejected = "report_rejected"
     # Reddedilen talebin reddi geri alinip tekrar "beklemede"ye dondurulmesi.
     report_reopened = "report_reopened"
-    # Talebin ham sekli (cizgi/alan) haritada duzenlendi (vatandas yanlis cizmis
-    # olabilir). Onaylanmisda ondan dogan varligin konumu da tasinir.
-    report_shape_updated = "report_shape_updated"
     user_created = "user_created"
     user_updated = "user_updated"
     # Bir turun hangi departmana yonlendirildiginin degistirilmesi.
