@@ -9,7 +9,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models.asset import Asset
-from ..models.departman import TurDepartman
 from ..models.log import LogAction
 from ..models.talep import Talep
 from ..models.tur import Tur
@@ -46,7 +45,7 @@ def kullanim(db: Session, kod: str) -> dict[str, int]:
 
 
 def create(db: Session, data: TurCreate, actor: User | None) -> Tur:
-    """Turu ve YONLENDIRMESINI birlikte yazar. Ikisi tek islemde olmali:
+    """Turu ve YONLENDIRMESINI birlikte yazar (tek satir, tek insert):
     yonlendirmesiz bir tur hicbir mudurlugun kapsamina girmez, yani hem
     personelden hem otomatik atamadan gorunmez olurdu."""
     tur = Tur(
@@ -54,14 +53,9 @@ def create(db: Session, data: TurCreate, actor: User | None) -> Tur:
         ad=data.ad,
         grup=data.grup,
         glif=data.glif,
+        departman_kod=data.departman,
     )
     db.add(tur)
-    # flush ZORUNLU: `tur_departman.tur` -> `turler.kod` FK'si var ama ORM
-    # tarafinda iki model arasinda bir iliski tanimli degil, dolayisiyla
-    # SQLAlchemy INSERT sirasini kendiliginden cikaramaz ve yonlendirme
-    # satirini once yazmaya calisirdi.
-    db.flush()
-    db.add(TurDepartman(tur=data.kod, departman_kod=data.departman))
     add_log(
         db,
         action=LogAction.tur_created,
@@ -103,8 +97,9 @@ def update(db: Session, kod: str, data: TurUpdate, actor: User | None) -> Tur | 
 
 def delete(db: Session, kod: str, actor: User | None) -> bool:
     """Turu siler. Kullanimda olup olmadigini cagiran taraf kontrol eder
-    (`kullanim`); buraya gelindiginde karar verilmistir. `tur_departman`
-    satiri FK CASCADE ile birlikte gider."""
+    (`kullanim`); buraya gelindiginde karar verilmistir. `departman_kod` ayri
+    bir satir degil bu satirin kendi kolonu oldugundan silinen turle birlikte
+    kendiliginden gider."""
     tur = db.get(Tur, kod)
     if tur is None:
         return False

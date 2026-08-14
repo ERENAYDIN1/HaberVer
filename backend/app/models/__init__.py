@@ -1,7 +1,7 @@
 from .asset import Asset, AssetStatus, AssetType
 from .assignment import Assignment, AssignmentStatus
 from .bolge import Bolge
-from .departman import Departman, TurDepartman
+from .departman import Departman
 from .guzergah import Guzergah
 from .log import ActivityLog, LogAction
 from .talep import Talep, TalepStatus
@@ -26,7 +26,6 @@ __all__ = [
     "Session",
     "TUR_GRUPLARI",
     "Tur",
-    "TurDepartman",
     "User",
     "UserRole",
     "Yaka",

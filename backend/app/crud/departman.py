@@ -2,17 +2,18 @@
 
 Yetki kararlarinin dayandigi tek okuma noktasi: bir kullanicinin gorebilecegi
 tur kumesi (`kullanici_kapsami`) ve bir turun sahibi departman (`tur_departmani`).
-Yonlendirme kodda sabit degil `tur_departman` tablosundadir - bir belediye
-orgutlenmesini degistirdiginde migration degil, admin panelinde bir satir
-degisir."""
+Yonlendirme kodda sabit degil `turler.departman_kod` kolonundadir - bir
+belediye orgutlenmesini degistirdiginde migration degil, admin panelinde bir
+satir degisir."""
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models.asset import AssetType
 from ..models.bolge import Bolge
-from ..models.departman import Departman, TurDepartman
+from ..models.departman import Departman
 from ..models.log import ActivityLog, LogAction
+from ..models.tur import Tur
 from ..models.user import User, UserRole
 
 
@@ -33,29 +34,23 @@ def esleme(db: Session) -> dict[AssetType, str]:
     """tur -> departman_kod sozlugu (tek sorgu)."""
     return {
         tur: kod
-        for tur, kod in db.execute(
-            select(TurDepartman.tur, TurDepartman.departman_kod)
-        ).all()
+        for tur, kod in db.execute(select(Tur.kod, Tur.departman_kod)).all()
     }
 
 
 def tur_departmani(db: Session, tur: AssetType) -> str | None:
-    """Bir turun sahibi departmanin kodu. Tablo eksikse (bos kurulum) None
-    doner ve cagiran taraf departman kisitini uygulamaz - yaka kisitiyla ayni
-    guvenli davranis."""
+    """Bir turun sahibi departmanin kodu. Tur sozlukte yoksa None doner ve
+    cagiran taraf departman kisitini uygulamaz - yaka kisitiyla ayni guvenli
+    davranis."""
     return db.execute(
-        select(TurDepartman.departman_kod).where(TurDepartman.tur == tur)
+        select(Tur.departman_kod).where(Tur.kod == tur)
     ).scalar_one_or_none()
 
 
 def departman_turleri(db: Session, kod: str) -> set[AssetType]:
     """Bir departmanin kapsadigi turler."""
     return set(
-        db.execute(
-            select(TurDepartman.tur).where(TurDepartman.departman_kod == kod)
-        )
-        .scalars()
-        .all()
+        db.execute(select(Tur.kod).where(Tur.departman_kod == kod)).scalars().all()
     )
 
 
@@ -96,12 +91,8 @@ def esleme_guncelle(
         eski_kod = mevcut.get(tur)
         if eski_kod == yeni_kod:
             continue
-        satir = db.get(TurDepartman, tur)
-        if satir is None:
-            satir = TurDepartman(tur=tur, departman_kod=yeni_kod)
-            db.add(satir)
-        else:
-            satir.departman_kod = yeni_kod
+        satir = db.get(Tur, tur)
+        satir.departman_kod = yeni_kod
         add_log(
             db,
             action=LogAction.tur_departman_changed,
@@ -128,9 +119,7 @@ def kullanim(db: Session, kod: str) -> dict[str, int]:
             select(func.count(User.id)).where(User.departman == kod)
         ).scalar_one(),
         "tur": db.execute(
-            select(func.count(TurDepartman.tur)).where(
-                TurDepartman.departman_kod == kod
-            )
+            select(func.count(Tur.kod)).where(Tur.departman_kod == kod)
         ).scalar_one(),
         "kayit": db.execute(
             select(func.count(ActivityLog.id)).where(ActivityLog.departman == kod)
