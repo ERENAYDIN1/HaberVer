@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import DateTime, ForeignKey, String, Text, func, text
+from sqlalchemy import DateTime, Float, ForeignKey, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -36,6 +36,9 @@ class Guzergah(Base):
         Geometry(geometry_type="LINESTRING", srid=4326, spatial_index=False),
         nullable=False,
     )
+    # PostGIS'in jeodezik uzunlugu (m); bkz. models/bolge.py::alan_m2 - ayni
+    # gerekce, olcusu farkli.
+    uzunluk_m: Mapped[float] = mapped_column(Float, nullable=False)
     # NULL = GENEL (tum personel gorur); bkz. models/bolge.py.
     departman: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("departmanlar.kod"), nullable=True

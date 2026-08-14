@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import DateTime, ForeignKey, String, Text, func, text
+from sqlalchemy import DateTime, Float, ForeignKey, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -37,6 +37,11 @@ class Bolge(Base):
         Geometry(geometry_type="MULTIPOLYGON", srid=4326, spatial_index=False),
         nullable=False,
     )
+    # PostGIS'in jeodezik olcusu (m2); create/update aninda ST_Area ile
+    # hesaplanip yazilir (bkz. crud/bolge.py::_alan_m2). Sorgu basina yeniden
+    # hesaplamak yerine kalici sutunda tutulur - okuma sikligi yazmadan
+    # kat kat fazla.
+    alan_m2: Mapped[float] = mapped_column(Float, nullable=False)
     # Kaydi sahiplenen mudurluk. Talep/varlik kapsami TURDEN cozulur, ama bir
     # bolgenin turu yoktur - bu yuzden mudurluk kaydin kendi sutununda durur.
     # NULL = GENEL (tum personel gorur), "sahipsiz" degil: admin'in departmani

@@ -35,15 +35,21 @@ def _temsil_noktasi():
     return func.ST_LineInterpolatePoint(Guzergah.geom, 0.5)
 
 
+def _uzunluk_m(geom):
+    """Bir geometri ifadesinin jeodezik uzunlugu (m). create/update aninda
+    Guzergah.uzunluk_m sutununa yazilir (bkz. crud/bolge.py::_alan_m2)."""
+    return func.ST_Length(cast(geom, Geography))
+
+
 def _select_with_geo():
-    """Guzergah satirini GeoJSON metni + jeodezik uzunlugu + atanan ekibin
-    adiyla birlikte secer (tek sorgu, N+1 yok)."""
+    """Guzergah satirini GeoJSON metni + atanan ekibin adiyla birlikte secer
+    (tek sorgu, N+1 yok). Olcu (uzunluk_m) artik kalici sutundur, burada
+    yeniden hesaplanmaz."""
     ekip = User.__table__.alias("ekip")
     return (
         select(
             Guzergah,
             func.ST_AsGeoJSON(Guzergah.geom).label("gj"),
-            func.ST_Length(cast(Guzergah.geom, Geography)).label("uzunluk_m"),
             func.coalesce(ekip.c.full_name, ekip.c.email).label("worker_ad"),
             yaka_crud.nokta_yakasi_ifadesi(_temsil_noktasi()).label("yaka"),
         )
@@ -60,7 +66,7 @@ def _noktalar(gj: str) -> list[list[tuple[float, float]]]:
 
 
 def _cikti(row) -> GuzergahCikti:
-    guzergah, gj, uzunluk_m, worker_ad, yaka = row
+    guzergah, gj, worker_ad, yaka = row
     return GuzergahCikti(
         yaka=yaka,
         id=guzergah.id,
@@ -69,7 +75,7 @@ def _cikti(row) -> GuzergahCikti:
         renk=guzergah.renk,
         departman=guzergah.departman,
         noktalar=_noktalar(gj),
-        uzunluk_m=float(uzunluk_m) if uzunluk_m is not None else None,
+        uzunluk_m=guzergah.uzunluk_m,
         worker_id=guzergah.worker_id,
         worker_ad=worker_ad,
         assigned_at=guzergah.assigned_at,
@@ -110,12 +116,14 @@ def get_guzergah(db: Session, guzergah_id: uuid.UUID) -> GuzergahCikti | None:
 def create_guzergah(
     db: Session, data: GuzergahGirdi, actor: User | None
 ) -> GuzergahCikti:
+    geom = _geometri(data.noktalar)
     guzergah = Guzergah(
         ad=data.ad,
         aciklama=data.aciklama,
         renk=data.renk,
         departman=data.departman,
-        geom=_geometri(data.noktalar),
+        geom=geom,
+        uzunluk_m=_uzunluk_m(geom),
         created_by=actor.id if actor else None,
     )
     db.add(guzergah)
@@ -146,7 +154,9 @@ def update_guzergah(
     for alan, deger in payload.items():
         setattr(guzergah, alan, deger)
     if noktalar is not None:
-        guzergah.geom = _geometri(noktalar)
+        geom = _geometri(noktalar)
+        guzergah.geom = geom
+        guzergah.uzunluk_m = _uzunluk_m(geom)
     if payload or noktalar is not None:
         add_log(
             db,

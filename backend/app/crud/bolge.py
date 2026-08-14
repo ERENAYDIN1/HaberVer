@@ -47,16 +47,23 @@ def _temsil_noktasi():
     return func.ST_PointOnSurface(Bolge.geom)
 
 
+def _alan_m2(geom):
+    """Bir geometri ifadesinin jeodezik alani (m2). create/update aninda
+    Bolge.alan_m2 sutununa yazilir - okuma sikligi yazmadan kat kat fazla
+    oldugu icin sorgu basina yeniden hesaplamak yerine kalici tutulur."""
+    return func.ST_Area(cast(geom, Geography))
+
+
 def _select_with_geo():
-    """Bolge satirini GeoJSON metni + jeodezik olcusu + atanan ekibin adiyla
-    birlikte secer (tek sorgu, N+1 yok). Isin yakasi da burada cozulur: elle
-    atamada "karsi yaka" uyarisi varliklardakiyle ayni bilgiye dayanmali."""
+    """Bolge satirini GeoJSON metni + atanan ekibin adiyla birlikte secer (tek
+    sorgu, N+1 yok). Isin yakasi da burada cozulur: elle atamada "karsi yaka"
+    uyarisi varliklardakiyle ayni bilgiye dayanmali. Olcu (alan_m2) artik
+    kalici sutundur, burada yeniden hesaplanmaz."""
     ekip = User.__table__.alias("ekip")
     return (
         select(
             Bolge,
             func.ST_AsGeoJSON(Bolge.geom).label("gj"),
-            func.ST_Area(cast(Bolge.geom, Geography)).label("alan_m2"),
             func.coalesce(ekip.c.full_name, ekip.c.email).label("worker_ad"),
             yaka_crud.nokta_yakasi_ifadesi(_temsil_noktasi()).label("yaka"),
         )
@@ -77,7 +84,7 @@ def _noktalar(gj: str) -> list[list[tuple[float, float]]]:
 
 
 def _cikti(row) -> BolgeCikti:
-    bolge, gj, alan_m2, worker_ad, yaka = row
+    bolge, gj, worker_ad, yaka = row
     return BolgeCikti(
         yaka=yaka,
         id=bolge.id,
@@ -86,7 +93,7 @@ def _cikti(row) -> BolgeCikti:
         renk=bolge.renk,
         departman=bolge.departman,
         noktalar=_noktalar(gj),
-        alan_m2=float(alan_m2) if alan_m2 is not None else None,
+        alan_m2=bolge.alan_m2,
         worker_id=bolge.worker_id,
         worker_ad=worker_ad,
         assigned_at=bolge.assigned_at,
@@ -131,12 +138,14 @@ def get_bolge(db: Session, bolge_id: uuid.UUID) -> BolgeCikti | None:
 
 
 def create_bolge(db: Session, data: BolgeGirdi, actor: User | None) -> BolgeCikti:
+    geom = _geometri(data.noktalar)
     bolge = Bolge(
         ad=data.ad,
         aciklama=data.aciklama,
         renk=data.renk,
         departman=data.departman,
-        geom=_geometri(data.noktalar),
+        geom=geom,
+        alan_m2=_alan_m2(geom),
         created_by=actor.id if actor else None,
     )
     db.add(bolge)
@@ -172,7 +181,9 @@ def update_bolge(
     for alan, deger in payload.items():
         setattr(bolge, alan, deger)
     if noktalar is not None:
-        bolge.geom = _geometri(noktalar)
+        geom = _geometri(noktalar)
+        bolge.geom = geom
+        bolge.alan_m2 = _alan_m2(geom)
     if payload or noktalar is not None:
         add_log(
             db,

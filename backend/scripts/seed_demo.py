@@ -481,23 +481,32 @@ def ekle(db) -> None:
 
     # Kaydedilmis bolgeler ve guzergahlar artik ayri tablolarda: tip hangi
     # tabloya yazilacagini secer, sutunun icinde tasinmaz. Alanlar
-    # MULTIPOLYGON'a cevrilir (sutun tipi bunu bekler).
+    # MULTIPOLYGON'a cevrilir (sutun tipi bunu bekler). Olcu sutunu
+    # (alan_m2/uzunluk_m) kalicidir, ayni INSERT icinde PostGIS ile
+    # hesaplanip yazilir (bkz. crud/bolge.py::_alan_m2).
     for ad, aciklama, tip, renk, departman, geojson, ekip in BOLGELER:
         alan = tip == "alan"
         tablo = "bolgeler" if alan else "guzergahlar"
+        olcu_sutunu = "alan_m2" if alan else "uzunluk_m"
         geom = (
             "ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326))"
             if alan
             else "ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326)"
         )
+        olcu = (
+            f"ST_Area(({geom})::geography)"
+            if alan
+            else f"ST_Length(({geom})::geography)"
+        )
         db.execute(
             sa.text(
                 f"""
                 INSERT INTO {tablo}
-                       (ad, aciklama, renk, departman, geom,
+                       (ad, aciklama, renk, departman, geom, {olcu_sutunu},
                         worker_id, assigned_at)
                 SELECT :ad, :aciklama, :renk, :departman,
                        {geom},
+                       {olcu},
                        u.id,
                        CASE WHEN u.id IS NULL THEN NULL ELSE now() END
                   FROM (SELECT 1) AS d
