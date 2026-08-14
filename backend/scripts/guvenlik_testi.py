@@ -319,21 +319,25 @@ def bolge_kapsami() -> None:
 
     # Kendi kaydinda bile MUDURLUK DEVRI admin'in isi: aksi halde bir mudurluk
     # kendi kaydini digerine iterek ya da genele birakarak kapsami asabilirdi.
-    kendi = next(b for b in fen_bolgeler if b["departman"] == "fen_isleri")
+    # Not: BOLGELER seed'inde fen_isleri sahibi kayit "cizgi" (guzergah)
+    # tipinde, "alan" (bolge) degil - kendi/guzergahlar ucundan alinir. Kural
+    # her iki uc icin de aynidir ("Gorev Tek Kavramdir", bkz. CLAUDE.md).
+    fen_guzergahlar = fen.get(f"{API}/api/guzergahlar").json()
+    kendi = next(g for g in fen_guzergahlar if g["departman"] == "fen_isleri")
     devir = fen.patch(
-        f"{API}/api/bolgeler/{kendi['id']}",
+        f"{API}/api/guzergahlar/{kendi['id']}",
         json={"departman": None},
         headers=ORIGIN,
     )
     assert devir.status_code == 403, f"beklenen 403, gelen {devir.status_code}"
-    print(f"[ok] Fen Isleri -> kendi bolgesini genele cek: 403 ({devir.json()['detail']})")
+    print(f"[ok] Fen Isleri -> kendi guzergahini genele cek: 403 ({devir.json()['detail']})")
 
     # Kaydin mudurlugu disindaki bir ekibe atama da reddedilmeli (ekip listesi
     # zaten suzuluyor, ama kural o listeye guvenmemeli).
     park_ekipleri = yonetici.get(f"{API}/api/saha/ekipler").json()
     yabanci_ekip = next(e for e in park_ekipleri if e["departman"] == "park_bahceler")
     atama = fen.post(
-        f"{API}/api/bolgeler/{kendi['id']}/ata",
+        f"{API}/api/guzergahlar/{kendi['id']}/ata",
         json={"worker_id": yabanci_ekip["id"]},
         headers=ORIGIN,
     )
