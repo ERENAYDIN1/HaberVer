@@ -10,7 +10,7 @@ export type OlayAdi =
   | "bolgeler"
   | "guzergahlar"
   | "assets"
-  | "reports"
+  | "talepler"
   | "logs";
 
 /** Yedek yoklama araligi (ms). SSE ana kanal, bu yalnizca AGDIR: baglanti

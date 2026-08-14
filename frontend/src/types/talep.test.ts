@@ -4,8 +4,8 @@ import {
   TALEP_GORUNUMLERI,
   talepGorunumu,
   talepNoktasi,
-  type ReportFeature,
-} from "./report";
+  type TalepFeature,
+} from "./talep";
 
 /** `talepGorunumu` refactor sirasinda App.tsx'ten cikarilacak `useTalep
  *  Gorunumleri` hook'unun cekirdegi. Buradaki kurallar UI'da bir kez bozulmus
@@ -62,14 +62,14 @@ describe("talepGorunumu", () => {
  *  pin, popup, secim senkronu ve alan suzgeci birlikte kayar. */
 describe("talepNoktasi", () => {
   const talep = (
-    geometry: ReportFeature["geometry"],
+    geometry: TalepFeature["geometry"],
     nokta: [number, number] | null
-  ): ReportFeature =>
+  ): TalepFeature =>
     ({
       type: "Feature",
       geometry,
-      properties: { nokta } as ReportFeature["properties"],
-    }) as ReportFeature;
+      properties: { nokta } as TalepFeature["properties"],
+    }) as TalepFeature;
 
   it("backend'in verdigi temsil noktasini kullanir", () => {
     // Onaylanan talepte bu nokta VARLIGIN (personelin duzeltmis olabilecegi)

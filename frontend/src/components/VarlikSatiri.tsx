@@ -1,6 +1,6 @@
 import { forwardRef, useState } from "react";
 
-import { fotoUrl } from "../api/reports";
+import { fotoUrl } from "../api/talepler";
 import { turAdi, turRozetSinifi } from "../data/turSozlugu";
 import {
   durumEtiketi,

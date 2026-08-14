@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 
 import { setTurSozlugu } from "../data/turSozlugu";
 import type { AssetFeature, AssetStatus, AssetType } from "../types/asset";
-import type { ReportFeature, ReportStatus } from "../types/report";
+import type { TalepFeature, TalepStatus } from "../types/talep";
 import type { Tur } from "../types/tur";
 
 /** Bilesen testleri icin ortak kurulum.
@@ -82,10 +82,10 @@ export function varlik(
 }
 
 export function talep(
-  ozel: Partial<ReportFeature["properties"]> & {
+  ozel: Partial<TalepFeature["properties"]> & {
     koordinat?: [number, number];
   } = {}
-): ReportFeature {
+): TalepFeature {
   const { koordinat = [28.98, 41.01], ...props } = ozel;
   return {
     type: "Feature",
@@ -94,7 +94,7 @@ export function talep(
       id: props.id ?? uuid(),
       name: props.name ?? "Test Talep",
       type: (props.type ?? "agac") as AssetType,
-      status: (props.status ?? "beklemede") as ReportStatus,
+      status: (props.status ?? "beklemede") as TalepStatus,
       note: props.note ?? "aciklama",
       photo_url: props.photo_url ?? null,
       reporter_id: props.reporter_id ?? uuid(),
@@ -104,7 +104,7 @@ export function talep(
       created_asset_id: props.created_asset_id ?? null,
       created_at: props.created_at ?? "2026-01-01T00:00:00Z",
       assigned: props.assigned ?? false,
-    } as ReportFeature["properties"],
+    } as TalepFeature["properties"],
   };
 }
 

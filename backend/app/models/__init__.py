@@ -4,7 +4,7 @@ from .bolge import Bolge
 from .departman import Departman, TurDepartman
 from .guzergah import Guzergah
 from .log import ActivityLog, LogAction
-from .report import Report, ReportStatus
+from .talep import Talep, TalepStatus
 from .session import Session
 from .tur import TUR_GRUPLARI, Tur
 from .user import User, UserRole
@@ -21,8 +21,8 @@ __all__ = [
     "Departman",
     "Guzergah",
     "LogAction",
-    "Report",
-    "ReportStatus",
+    "Talep",
+    "TalepStatus",
     "Session",
     "TUR_GRUPLARI",
     "Tur",

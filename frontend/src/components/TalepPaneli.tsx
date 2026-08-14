@@ -2,11 +2,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  approveReport,
-  listReports,
-  rejectReport,
-  reopenReport,
-} from "../api/reports";
+  approveTalep,
+  listTalepler,
+  rejectTalep,
+  reopenTalep,
+} from "../api/talepler";
 import { useAuth } from "../auth/AuthContext";
 import { useDeleteAsset, useRepairAsset } from "../hooks/useAssets";
 import {
@@ -18,9 +18,9 @@ import {
   TALEP_GORUNUMLERI,
   talepNoktasi,
   type TalepGorunumu,
-  type ReportFeature,
-  type ReportStatus,
-} from "../types/report";
+  type TalepFeature,
+  type TalepStatus,
+} from "../types/talep";
 import type { EkipOzet } from "../types/saha";
 import AssetDetayModal, { useVarlikYonetimi } from "./AssetDetayModal";
 import AssetForm from "./AssetForm";
@@ -51,9 +51,9 @@ interface TalepVarlikSorguSonucu {
 
 /** Sabit bos liste: ust bilesene bildirilen deger her render'da yeni bir dizi
  *  olmasin, yoksa `onTaleplerChange` efekti kendini surekli tetikler. */
-const BOS_TALEPLER: ReportFeature[] = [];
+const BOS_TALEPLER: TalepFeature[] = [];
 
-/** Sekme etiketleri kisa tutulur; REPORT_STATUS_LABELS'daki tam metinler
+/** Sekme etiketleri kisa tutulur; TALEP_DURUM_ETIKETLERI'daki tam metinler
  *  sekme genisligini esitsiz yapiyor. */
 const SEKME_ETIKETLERI: Record<TalepGorunumu, string> = {
   onaylandi: "Onaylandı",
@@ -69,7 +69,7 @@ function varlikSekmesi(g: TalepGorunumu): boolean {
 }
 
 /** Varsayilan "en yeni". */
-const TALEP_SIRALAMASI: readonly SiralamaSecenegi<ReportFeature>[] = [
+const TALEP_SIRALAMASI: readonly SiralamaSecenegi<TalepFeature>[] = [
   {
     deger: "yeni",
     etiket: "En yeni",
@@ -157,7 +157,7 @@ interface TalepPaneliProps {
   durum: TalepGorunumu;
   onDurumChange: (d: TalepGorunumu) => void;
   onVarlikOlustu?: () => void;
-  onTaleplerChange?: (talepler: ReportFeature[]) => void;
+  onTaleplerChange?: (talepler: TalepFeature[]) => void;
   seciliRaporId?: string | null;
   onRaporSec?: (id: string) => void;
   talepVarlikSorgu: TalepVarlikSorguSonucu;
@@ -214,8 +214,8 @@ export default function TalepPaneli({
   // cekilmez.
   const varlikListesi = varlikSekmesi(durum);
   const talepSorgu = useQuery({
-    queryKey: ["reports", durum],
-    queryFn: () => listReports(durum as ReportStatus),
+    queryKey: ["talepler", durum],
+    queryFn: () => listTalepler(durum as TalepStatus),
     enabled: !varlikListesi,
   });
   // Tip filtresi: haritayla paylasilmayan yerel bir state.
@@ -299,13 +299,13 @@ export default function TalepPaneli({
 
   /** Onay/ret sonrasi uc durum sorgusu birden gecersiz kilinir. */
   const talepleriTazele = () =>
-    queryClient.invalidateQueries({ queryKey: ["reports"] });
+    queryClient.invalidateQueries({ queryKey: ["talepler"] });
 
   const onayla = async (id: string) => {
     setIslemdeki(id);
     setIslemHatasi(null);
     try {
-      await approveReport(id);
+      await approveTalep(id);
       await talepleriTazele();
       onVarlikOlustu?.();
     } catch (e) {
@@ -320,7 +320,7 @@ export default function TalepPaneli({
     setIslemdeki(id);
     setIslemHatasi(null);
     try {
-      await rejectReport(id, neden || undefined);
+      await rejectTalep(id, neden || undefined);
       await talepleriTazele();
     } catch (e) {
       setIslemHatasi((e as Error).message);
@@ -334,7 +334,7 @@ export default function TalepPaneli({
     setIslemdeki(id);
     setIslemHatasi(null);
     try {
-      await reopenReport(id);
+      await reopenTalep(id);
       await talepleriTazele();
     } catch (e) {
       setIslemHatasi((e as Error).message);

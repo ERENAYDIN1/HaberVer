@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { repairAsset } from "../api/assets";
 import { cizimTamamla } from "../api/cizimler";
 import { useKendiCizimlerim } from "../hooks/useKayitliCizimler";
-import { fotoUrl } from "../api/reports";
+import { fotoUrl } from "../api/talepler";
 import {
   gorevlerim,
   konumGuncelle,

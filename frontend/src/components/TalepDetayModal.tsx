@@ -2,21 +2,21 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { getAsset } from "../api/assets";
-import { approveReport, fotoUrl, rejectReport, reopenReport } from "../api/reports";
+import { approveTalep, fotoUrl, rejectTalep, reopenTalep } from "../api/talepler";
 import { gorevDurumu } from "../api/saha";
 import { useKonumCozumu } from "../hooks/useSinirlar";
 import { turAdi, turKodlari } from "../data/turSozlugu";
 import { durumEtiketi, type AssetType } from "../types/asset";
-import { talepNoktasi } from "../types/report";
-import type { ReportFeature } from "../types/report";
+import { talepNoktasi } from "../types/talep";
+import type { TalepFeature } from "../types/talep";
 import { AksiyonButonu, AksiyonSeridi } from "./Aksiyonlar";
 import { IconCheck } from "./icons";
 import TalepDurumRozeti from "./TalepDurumRozeti";
 import Modal from "./Modal";
 import TipSecenekleri from "./TipSecenekleri";
 
-interface ReportDetayModalProps {
-  report: ReportFeature | null;
+interface TalepDetayModalProps {
+  report: TalepFeature | null;
   onKapat: () => void;
   /** Personel (admin/calisan) ise bekleyen talebi buradan onaylayip reddedebilir. */
   islemYetkisi?: boolean;
@@ -26,13 +26,13 @@ interface ReportDetayModalProps {
   onVarligiYonet?: (raporId: string) => void;
 }
 
-export default function ReportDetayModal({
+export default function TalepDetayModal({
   report,
   onKapat,
   islemYetkisi = false,
   onIslemBitti,
   onVarligiYonet,
-}: ReportDetayModalProps) {
+}: TalepDetayModalProps) {
   const koord = report ? talepNoktasi(report) : null;
   const { data: konum } = useKonumCozumu(koord ? koord[1] : null, koord ? koord[0] : null);
   const [islemde, setIslemde] = useState(false);
@@ -181,7 +181,7 @@ export default function ReportDetayModal({
             <AksiyonSeridi>
             <AksiyonButonu
               tur="birincil"
-              onClick={() => islemYap(() => approveReport(p.id, tip))}
+              onClick={() => islemYap(() => approveTalep(p.id, tip))}
               disabled={islemde}
             >
               <IconCheck className="h-3.5 w-3.5" />
@@ -191,7 +191,7 @@ export default function ReportDetayModal({
               tur="tehlikeIkincil"
               onClick={() => {
                 const neden = window.prompt("Ret nedeni (opsiyonel):") ?? undefined;
-                islemYap(() => rejectReport(p.id, neden || undefined));
+                islemYap(() => rejectTalep(p.id, neden || undefined));
               }}
               disabled={islemde}
             >
@@ -242,7 +242,7 @@ export default function ReportDetayModal({
           <AksiyonSeridi>
             <AksiyonButonu
               tur="uyari"
-              onClick={() => islemYap(() => reopenReport(p.id))}
+              onClick={() => islemYap(() => reopenTalep(p.id))}
               disabled={islemde}
             >
               {islemde ? "…" : "Reddi Geri Al"}

@@ -1,9 +1,9 @@
 import type { AssetStatus, AssetType, PointGeometry } from "./asset";
 
-/** Backend'in bildigi talep durumlari (reports.status). Arayuzdeki siralama
+/** Backend'in bildigi talep durumlari (talepler.status). Arayuzdeki siralama
  *  bunlardan degil, asagidaki TALEP_GORUNUMLERI'nden gelir. */
-export const REPORT_STATUSES = ["onaylandi", "beklemede", "reddedildi"] as const;
-export type ReportStatus = (typeof REPORT_STATUSES)[number];
+export const TALEP_STATUSES = ["onaylandi", "beklemede", "reddedildi"] as const;
+export type TalepStatus = (typeof TALEP_STATUSES)[number];
 
 /** Panel alt-sekmeleri ve lejant alt-filtresi bu kumeyi kullanir. "tamir"
  *  backend'de bir durum degildir: onaylanmis talepten olusan varlik 'iyi'ye
@@ -20,7 +20,7 @@ export const TALEP_GORUNUMLERI = [
 ] as const;
 export type TalepGorunumu = (typeof TALEP_GORUNUMLERI)[number];
 
-export const REPORT_STATUS_LABELS: Record<TalepGorunumu, string> = {
+export const TALEP_DURUM_ETIKETLERI: Record<TalepGorunumu, string> = {
   beklemede: "Bekleyen Talep",
   onaylandi: "Onaylandı",
   reddedildi: "Reddedildi",
@@ -32,7 +32,7 @@ export const REPORT_STATUS_LABELS: Record<TalepGorunumu, string> = {
  *  bitmis is sayilir. `varlikBilgisiVar=false` iken siniflama yapilmaz, yoksa
  *  acilista her sey bir an "Tamir Edildi"ye dusup geri zipliyor. */
 export function talepGorunumu(
-  status: ReportStatus,
+  status: TalepStatus,
   varlikDurumu: "iyi" | "bakim_lazim" | undefined,
   varlikBilgisiVar: boolean
 ): TalepGorunumu {
@@ -93,14 +93,14 @@ export const ROZETLI_GORUNUMLER = TALEP_GORUNUMLERI.filter(
 
 export type TalepGeometrisi = PointGeometry;
 
-export interface ReportProperties {
+export interface TalepProperties {
   id: string;
   reporter_id: string;
   name: string;
   type: AssetType;
   note: string | null;
   photo_url: string | null;
-  status: ReportStatus;
+  status: TalepStatus;
   reviewed_by: string | null;
   reviewed_at: string | null;
   review_note: string | null;
@@ -122,21 +122,21 @@ export interface ReportProperties {
   gorunum?: TalepGorunumu;
 }
 
-export interface ReportFeature {
+export interface TalepFeature {
   type: "Feature";
   geometry: TalepGeometrisi;
-  properties: ReportProperties;
+  properties: TalepProperties;
 }
 
 /** Talebin harita pininin oturacagi nokta. `nokta` alani once okunur cunku
  *  onaylanmis talepte VARLIGIN (personelin duzeltmis olabilecegi) konumunu
  *  tasir; `geometry` vatandasin gonderdigi ham kayit olarak durur. */
-export function talepNoktasi(f: ReportFeature): [number, number] | null {
+export function talepNoktasi(f: TalepFeature): [number, number] | null {
   if (f.properties.nokta) return f.properties.nokta;
   return f.geometry.coordinates as [number, number];
 }
 
-export interface ReportFeatureCollection {
+export interface TalepFeatureCollection {
   type: "FeatureCollection";
-  features: ReportFeature[];
+  features: TalepFeature[];
 }

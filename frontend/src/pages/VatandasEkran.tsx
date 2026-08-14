@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { createReport, fotoUrl, hideReport, myReports } from "../api/reports";
+import { createTalep, fotoUrl, hideTalep, myTalepler } from "../api/talepler";
 import { useAuth } from "../auth/AuthContext";
 import TalepDurumRozeti from "../components/TalepDurumRozeti";
 import KonumSecMap from "../components/KonumSecMap";
@@ -27,9 +27,9 @@ import type { AssetType } from "../types/asset";
 import { departmanAdi } from "../types/departman";
 import {
   talepGorunumu,
-  type ReportFeature,
+  type TalepFeature,
   type TalepGeometrisi,
-} from "../types/report";
+} from "../types/talep";
 
 /** Talep listesinin acik/kapali tercihi kalicidir: vatandas listeyi bir kez
  *  kapattiysa her girisinde tekrar kapatmak zorunda kalmamali. */
@@ -67,7 +67,7 @@ export default function VatandasEkran() {
   const [basari, setBasari] = useState(false);
   const [gonderiliyor, setGonderiliyor] = useState(false);
 
-  const [taleplerim, setTaleplerim] = useState<ReportFeature[]>([]);
+  const [taleplerim, setTaleplerim] = useState<TalepFeature[]>([]);
   const [listeAcik, setListeAcik] = useState(
     () => localStorage.getItem(LISTE_ANAHTARI) !== "0"
   );
@@ -88,7 +88,7 @@ export default function VatandasEkran() {
   );
 
   const talepleriYukle = () => {
-    myReports()
+    myTalepler()
       .then((d) => setTaleplerim(d.features))
       .catch(() => {});
   };
@@ -195,7 +195,7 @@ export default function VatandasEkran() {
 
     setGonderiliyor(true);
     try {
-      await createReport({
+      await createTalep({
         name: ad.trim(),
         type: tip,
         geometry: geo,
@@ -221,7 +221,7 @@ export default function VatandasEkran() {
   const listedenKaldir = async (id: string) => {
     setKaldirilan(id);
     try {
-      await hideReport(id);
+      await hideTalep(id);
       setTaleplerim((t) => t.filter((f) => f.properties.id !== id));
     } catch (err) {
       setHata((err as Error).message);
@@ -690,7 +690,7 @@ export default function VatandasEkran() {
 
 
 interface TalepKartiProps {
-  talep: ReportFeature;
+  talep: TalepFeature;
   kaldiriliyor: boolean;
   onKaldir: () => void;
 }

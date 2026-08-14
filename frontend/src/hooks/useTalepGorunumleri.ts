@@ -1,15 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { listReports } from "../api/reports";
+import { listTalepler } from "../api/talepler";
 import type { AssetFeature } from "../types/asset";
 import {
-  REPORT_STATUSES,
+  TALEP_STATUSES,
   talepGorunumu,
   type TalepGorunumu,
-  type ReportFeature,
-  type ReportStatus,
-} from "../types/report";
+  type TalepFeature,
+  type TalepStatus,
+} from "../types/talep";
 import { useAssets } from "./useAssets";
 
 /** Taleplerin cekilmesi ve gorunume gore gruplanmasi.
@@ -29,7 +29,7 @@ export interface OnayliEsleme {
 /** Onaylanmis talep <-> ondan olusan varlik eslesmesi (`created_asset_id`).
  *  Ikisi ayri id'ler oldugu icin secim callback'leri esi de birlikte secer;
  *  yoksa haritadan talep secmek panelde hicbir satiri vurgulamazdi. */
-export function onayliEslemeKur(onaylananlar: readonly ReportFeature[]): OnayliEsleme {
+export function onayliEslemeKur(onaylananlar: readonly TalepFeature[]): OnayliEsleme {
   const rapordanVarliga = new Map<string, string>();
   const varliktanRapora = new Map<string, string>();
   for (const f of onaylananlar) {
@@ -52,9 +52,9 @@ export function onayliEslemeKur(onaylananlar: readonly ReportFeature[]): OnayliE
  *  (pinin oturdugu yer) degistirilir, `geometry` DEGIL** - `geometry`
  *  vatandasin gonderdigi kaydin kendisidir ve bir belge olarak durur. */
 export function gorunumlereAyir(
-  durumaGoreTalepler: Record<ReportStatus, readonly ReportFeature[] | undefined>,
+  durumaGoreTalepler: Record<TalepStatus, readonly TalepFeature[] | undefined>,
   taleptenDoganVarliklar: readonly AssetFeature[] | undefined
-): Record<TalepGorunumu, ReportFeature[]> {
+): Record<TalepGorunumu, TalepFeature[]> {
   const varlikDurumu = new Map<string, "iyi" | "bakim_lazim">();
   const varlikKonumu = new Map<string, [number, number]>();
   for (const a of taleptenDoganVarliklar ?? []) {
@@ -64,13 +64,13 @@ export function gorunumlereAyir(
     }
   }
   const varlikBilgisiVar = taleptenDoganVarliklar !== undefined;
-  const gruplar: Record<TalepGorunumu, ReportFeature[]> = {
+  const gruplar: Record<TalepGorunumu, TalepFeature[]> = {
     onaylandi: [],
     tamir: [],
     beklemede: [],
     reddedildi: [],
   };
-  for (const durum of REPORT_STATUSES) {
+  for (const durum of TALEP_STATUSES) {
     for (const f of durumaGoreTalepler[durum] ?? []) {
       const varlikId = f.properties.created_asset_id;
       const g = talepGorunumu(
@@ -96,18 +96,18 @@ export function useTalepGorunumleri({ personel }: { personel: boolean }) {
   // Talep katmani kapaliyken de cekilir: lejant sayaclari katmanin acik olup
   // olmamasindan bagimsiz olarak gercek toplami gostermeli.
   const bekleyenTalepSorgu = useQuery({
-    queryKey: ["reports", "beklemede"],
-    queryFn: () => listReports("beklemede"),
+    queryKey: ["talepler", "beklemede"],
+    queryFn: () => listTalepler("beklemede"),
     enabled: personel,
   });
   const onaylananTalepSorgu = useQuery({
-    queryKey: ["reports", "onaylandi"],
-    queryFn: () => listReports("onaylandi"),
+    queryKey: ["talepler", "onaylandi"],
+    queryFn: () => listTalepler("onaylandi"),
     enabled: personel,
   });
   const reddedilenTalepSorgu = useQuery({
-    queryKey: ["reports", "reddedildi"],
-    queryFn: () => listReports("reddedildi"),
+    queryKey: ["talepler", "reddedildi"],
+    queryFn: () => listTalepler("reddedildi"),
     enabled: personel,
   });
 

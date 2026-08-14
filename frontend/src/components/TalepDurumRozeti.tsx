@@ -1,4 +1,4 @@
-import { REPORT_STATUS_LABELS, type TalepGorunumu } from "../types/report";
+import { TALEP_DURUM_ETIKETLERI, type TalepGorunumu } from "../types/talep";
 
 /** Rozet backend'in uc durumunu degil arayuzun dort gorunumunu gosterir:
  *  onaylanmis bir talep, olusan varlik tamir edilince "Tamir Edildi"ye gecer. */
@@ -24,7 +24,7 @@ export default function TalepDurumRozeti({ durum }: { durum: TalepGorunumu }) {
       className={`inline-flex items-center gap-1 border px-1.5 py-0.5 text-[11px] font-medium ${STIL[durum]}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${NOKTA[durum]}`} />
-      {REPORT_STATUS_LABELS[durum]}
+      {TALEP_DURUM_ETIKETLERI[durum]}
     </span>
   );
 }

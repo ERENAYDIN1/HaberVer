@@ -64,11 +64,11 @@ vi.mock("./api/assets", () => ({
   repairAsset: vi.fn(),
 }));
 
-vi.mock("./api/reports", () => ({
-  listReports: vi.fn(async (status?: string) =>
+vi.mock("./api/talepler", () => ({
+  listTalepler: vi.fn(async (status?: string) =>
     koleksiyon(status === "onaylandi" ? [ONAYLI_TALEP] : [])
   ),
-  reopenReport: vi.fn(),
+  reopenTalep: vi.fn(),
   fotoUrl: (y: string | null) => y,
 }));
 

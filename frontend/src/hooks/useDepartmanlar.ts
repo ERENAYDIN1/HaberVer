@@ -48,7 +48,7 @@ export function useTurDepartmanEslemesi() {
 function kapsamSonrasiTazele(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["departmanlar"] });
   qc.invalidateQueries({ queryKey: ["assets"] });
-  qc.invalidateQueries({ queryKey: ["reports"] });
+  qc.invalidateQueries({ queryKey: ["talepler"] });
   qc.invalidateQueries({ queryKey: ["bolgeler"] });
   qc.invalidateQueries({ queryKey: ["guzergahlar"] });
 }

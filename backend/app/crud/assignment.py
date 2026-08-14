@@ -1,7 +1,7 @@
 """Gorev atama mantigi: en yakin uygun ekibi bulma, atama, tamamlama ve
 ekip/kuyruk ozetleri. "Ekip" = bir saha_calisani hesabi.
 
-Yalnizca modelleri import eder (asset/report crud'unu degil): report ve asset
+Yalnizca modelleri import eder (asset/talep crud'unu degil): talep ve asset
 modulleri buradan cagirdigi icin aksi halde dongusel import olusur."""
 
 import uuid
@@ -15,7 +15,7 @@ from ..models.assignment import Assignment, AssignmentStatus
 from ..models.bolge import Bolge
 from ..models.guzergah import Guzergah
 from ..models.log import LogAction
-from ..models.report import Report
+from ..models.talep import Talep
 from ..models.user import User, UserRole
 from . import departman as departman_crud
 from . import yaka as yaka_crud
@@ -117,7 +117,7 @@ def _talep_alani_subq(ifade):
     coklanmaz."""
     return (
         select(ifade)
-        .where(Report.created_asset_id == Asset.id)
+        .where(Talep.created_asset_id == Asset.id)
         .correlate(Asset)
         .limit(1)
         .scalar_subquery()
@@ -127,8 +127,8 @@ def _talep_alani_subq(ifade):
 def _talep_sutunlari():
     """Gorev satirlarina eklenen talep alanlari (sema ile ayni sirada)."""
     return (
-        _talep_alani_subq(Report.note).label("talep_notu"),
-        _talep_alani_subq(Report.created_at).label("talep_tarihi"),
+        _talep_alani_subq(Talep.note).label("talep_notu"),
+        _talep_alani_subq(Talep.created_at).label("talep_tarihi"),
     )
 
 

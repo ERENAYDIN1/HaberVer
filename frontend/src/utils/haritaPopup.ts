@@ -1,14 +1,14 @@
 import type maplibregl from "maplibre-gl";
 
-import { fotoUrl } from "../api/reports";
+import { fotoUrl } from "../api/talepler";
 import { konumCozumle } from "../api/sinirlar";
 import { turAdi, turRengi } from "../data/turSozlugu";
 import { ASSET_SOURCE_LABELS, durumEtiketi } from "../types/asset";
 import type { AssetFeature } from "../types/asset";
 import { BOLGE_TIP_ETIKETLERI } from "../types/bolge";
 import type { Bolge } from "../types/bolge";
-import { REPORT_STATUS_LABELS } from "../types/report";
-import type { ReportFeature } from "../types/report";
+import { TALEP_DURUM_ETIKETLERI } from "../types/talep";
+import type { TalepFeature } from "../types/talep";
 import { MAKS_AKTIF_GOREV } from "../types/saha";
 import type { EkipGorevleri } from "../types/saha";
 import { alanEtiketi, cokHalkaliAlanM2, mesafeEtiketi } from "./geo";
@@ -118,11 +118,11 @@ export async function konumSatiriDoldur(
   }
 }
 
-export function talepPopupIcerigi(report: ReportFeature): string {
-  const { name, type, status, note, photo_url, assigned } = report.properties;
+export function talepPopupIcerigi(talep: TalepFeature): string {
+  const { name, type, status, note, photo_url, assigned } = talep.properties;
   // Rozet ham durumu degil gorunumu anlatir: tamir edilmis bir is "Onaylandı"
   // yazip acik isle ayni rengi tasimasin.
-  const gorunum = report.properties.gorunum ?? status;
+  const gorunum = talep.properties.gorunum ?? status;
   const foto = fotoUrl(photo_url);
   const durumRenk: Record<string, { bg: string; fg: string }> = {
     beklemede: { bg: "#fef3c7", fg: "#92400e" },
@@ -145,7 +145,7 @@ export function talepPopupIcerigi(report: ReportFeature): string {
         <span style="
           display:inline-block; padding:2px 8px; border-radius:9999px;
           font-size:11px; font-weight:500; background:${dr.bg}; color:${dr.fg}">
-          ${REPORT_STATUS_LABELS[gorunum]}
+          ${TALEP_DURUM_ETIKETLERI[gorunum]}
         </span>
         ${
           gorunum === "onaylandi"

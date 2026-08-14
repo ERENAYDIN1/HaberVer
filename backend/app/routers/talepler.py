@@ -15,21 +15,21 @@ from sqlalchemy.orm import Session
 
 from .. import olaylar
 from ..config import settings
-from ..crud import report as crud
+from ..crud import talep as crud
 from ..crud import tur as tur_crud
 from ..database import get_db
 from ..models.asset import AssetType
-from ..models.report import ReportStatus
+from ..models.talep import TalepStatus
 from ..models.user import User, UserRole
-from ..schemas.report import (
-    ReportFeature,
-    ReportFeatureCollection,
-    ReportReview,
+from ..schemas.talep import (
+    TalepFeature,
+    TalepFeatureCollection,
     TalepGeometrisi,
+    TalepReview,
 )
 from ..security import Kapsam, kapsam, personel, require_role
 
-router = APIRouter(prefix="/api/reports", tags=["reports"])
+router = APIRouter(prefix="/api/talepler", tags=["talepler"])
 
 IZINLI_FOTO_TIPLERI = {"image/jpeg", "image/png", "image/webp"}
 MAKS_FOTO_BAYT = 5 * 1024 * 1024  # 5 MB
@@ -44,9 +44,9 @@ def _talep_degisti(varlik_da: bool = False) -> None:
     """Talep listesi degisti (yeni talep, onay, ret, reddi geri alma).
 
     `varlik_da=True` yalnizca ONAYDA verilir: onay bir varlik olusturur ve onu
-    otomatik atamaya sokar (crud/report.py::approve_report), yani envanter ve
+    otomatik atamaya sokar (crud/talep.py::approve_talep), yani envanter ve
     gorev dagilimi da degisir. Ret/geri-alma yalnizca talebi etkiler."""
-    olaylar.yayinla("reports")
+    olaylar.yayinla("talepler")
     if varlik_da:
         olaylar.yayinla("assets")
         olaylar.yayinla("saha")
@@ -94,26 +94,26 @@ def _fotograf_kaydet(foto: UploadFile) -> str:
             detail="Dosya icerigi belirtilen goruntu turuyle uyusmuyor",
         )
 
-    hedef_dizin = Path(settings.media_dir) / "reports"
+    hedef_dizin = Path(settings.media_dir) / "talepler"
     hedef_dizin.mkdir(parents=True, exist_ok=True)
     ad = f"{uuid.uuid4()}{UZANTILAR[foto.content_type]}"
     (hedef_dizin / ad).write_bytes(icerik)
-    return f"/{settings.media_dir}/reports/{ad}"
+    return f"/{settings.media_dir}/talepler/{ad}"
 
 
-def _talep_getir(db: Session, report_id: uuid.UUID, alan: Kapsam):
+def _talep_getir(db: Session, talep_id: uuid.UUID, alan: Kapsam):
     """Talebi getirir ve departman kapsamini uygular.
 
     Kapsam disi bir talep 404 doner, 403 degil: talebin VARLIGI da baska
     mudurlugun bilgisidir, "yetkiniz yok" demek kaydin var oldugunu sizdirir."""
-    row = crud.get(db, report_id)
+    row = crud.get(db, talep_id)
     if row is None or not alan.izinli(row[0].type):
         raise HTTPException(status_code=404, detail="Talep bulunamadi")
     return row
 
 
-@router.post("", response_model=ReportFeature, status_code=status.HTTP_201_CREATED)
-def create_report(
+@router.post("", response_model=TalepFeature, status_code=status.HTTP_201_CREATED)
+def create_talep(
     name: str = Form(..., min_length=1, max_length=255),
     type: AssetType = Form(...),
     geometry: str = Form(..., description="GeoJSON Point"),
@@ -138,7 +138,7 @@ def create_report(
         raise HTTPException(status_code=422, detail=f"Geçersiz konum: {e.errors()[0]['msg']}")
 
     photo_url = _fotograf_kaydet(photo)
-    row = crud.create_report(
+    row = crud.create_talep(
         db,
         reporter_id=user.id,
         name=name.strip(),
@@ -149,23 +149,23 @@ def create_report(
     )
     # Yeni talep personelin bekleyenler listesine ve bildirim ziline dusmeli.
     _talep_degisti()
-    return ReportFeature.from_row(row)
+    return TalepFeature.from_row(row)
 
 
-@router.get("/mine", response_model=ReportFeatureCollection)
-def my_reports(
+@router.get("/mine", response_model=TalepFeatureCollection)
+def my_talepler(
     user: User = Depends(require_role(UserRole.vatandas)),
     db: Session = Depends(get_db),
 ):
     """Vatandasin kendi talepleri. Kendi listesinden kaldirdiklari gelmez."""
-    return ReportFeatureCollection.from_rows(
-        crud.list_reports(db, reporter_id=user.id, gizliler_haric=True)
+    return TalepFeatureCollection.from_rows(
+        crud.list_talepler(db, reporter_id=user.id, gizliler_haric=True)
     )
 
 
-@router.delete("/{report_id}", response_model=ReportFeature)
-def hide_report(
-    report_id: uuid.UUID,
+@router.delete("/{talep_id}", response_model=TalepFeature)
+def hide_talep(
+    talep_id: uuid.UUID,
     user: User = Depends(require_role(UserRole.vatandas)),
     db: Session = Depends(get_db),
 ):
@@ -174,89 +174,89 @@ def hide_report(
     Satir silinmez: onaylanmis bir talep gercekten silinseydi ondan olusan
     varlik, saha atamasi ve audit log kayitlari sahipsiz kalirdi. Personel
     tarafi ve gecmis bu islemden etkilenmez."""
-    row = crud.get(db, report_id)
+    row = crud.get(db, talep_id)
     if row is None or row[0].reporter_id != user.id:
         raise HTTPException(status_code=404, detail="Talep bulunamadi")
-    return ReportFeature.from_row(crud.gizle(db, row[0]))
+    return TalepFeature.from_row(crud.gizle(db, row[0]))
 
 
-@router.get("", response_model=ReportFeatureCollection)
-def list_reports(
-    status: ReportStatus | None = None,
+@router.get("", response_model=TalepFeatureCollection)
+def list_talepler(
+    status: TalepStatus | None = None,
     _: User = Depends(personel),
     alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
     """Personel tum talepleri (opsiyonel duruma gore) listeler - yalnizca KENDI
     DEPARTMANININ turlerinde. Vatandasin listeden kaldirdiklari burada durur."""
-    return ReportFeatureCollection.from_rows(
-        crud.list_reports(db, status=status, kapsam_turleri=alan.turler)
+    return TalepFeatureCollection.from_rows(
+        crud.list_talepler(db, status=status, kapsam_turleri=alan.turler)
     )
 
 
-@router.post("/{report_id}/onayla", response_model=ReportFeature)
+@router.post("/{talep_id}/onayla", response_model=TalepFeature)
 def approve(
-    report_id: uuid.UUID,
-    data: ReportReview | None = None,
+    talep_id: uuid.UUID,
+    data: TalepReview | None = None,
     user: User = Depends(personel),
     alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
     """Talebi onaylar. Govde opsiyoneldir; `type` gonderilirse personel
-    vatandasin sectigi turu duzeltmis olur (bkz. crud.approve_report).
+    vatandasin sectigi turu duzeltmis olur (bkz. crud.approve_talep).
 
     Tur duzeltmesi talebi BASKA BIR DEPARTMANA devredebilir: Cozum Merkezi
     'diger' olarak gelen bir talebi 'yol'a cektiginde kayit Fen Isleri'nin
     kapsamina gecer. Bu bilincli - triyaj mekanizmasi budur - ama hedef tur
     icin ayrica yetki aranmaz, yoksa 'diger' talepleri hicbir yere devredilemezdi."""
-    row = _talep_getir(db, report_id, alan)
-    report = row[0]
-    if report.status != ReportStatus.beklemede:
+    row = _talep_getir(db, talep_id, alan)
+    talep = row[0]
+    if talep.status != TalepStatus.beklemede:
         raise HTTPException(status_code=409, detail="Talep zaten sonuclandirilmis")
     if data and data.type is not None and not tur_crud.gecerli(db, data.type):
         raise HTTPException(
             status_code=422, detail=f"Gecersiz tur: {data.type}"
         )
-    sonuc = ReportFeature.from_row(
-        crud.approve_report(db, report, user, yeni_tip=data.type if data else None)
+    sonuc = TalepFeature.from_row(
+        crud.approve_talep(db, talep, user, yeni_tip=data.type if data else None)
     )
     _talep_degisti(varlik_da=True)
     return sonuc
 
 
-@router.post("/{report_id}/reddet", response_model=ReportFeature)
+@router.post("/{talep_id}/reddet", response_model=TalepFeature)
 def reject(
-    report_id: uuid.UUID,
-    data: ReportReview,
+    talep_id: uuid.UUID,
+    data: TalepReview,
     user: User = Depends(personel),
     alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
-    row = _talep_getir(db, report_id, alan)
-    report = row[0]
-    if report.status != ReportStatus.beklemede:
+    row = _talep_getir(db, talep_id, alan)
+    talep = row[0]
+    if talep.status != TalepStatus.beklemede:
         raise HTTPException(status_code=409, detail="Talep zaten sonuclandirilmis")
-    sonuc = ReportFeature.from_row(
-        crud.reject_report(db, report, user, data.review_note)
+    sonuc = TalepFeature.from_row(
+        crud.reject_talep(db, talep, user, data.review_note)
     )
     _talep_degisti()
     return sonuc
 
 
-@router.post("/{report_id}/geri-al", response_model=ReportFeature)
+@router.post("/{talep_id}/geri-al", response_model=TalepFeature)
 def reopen(
-    report_id: uuid.UUID,
+    talep_id: uuid.UUID,
     user: User = Depends(personel),
     alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
     """Reddedilen talebin reddini geri alir (tekrar 'beklemede')."""
-    row = _talep_getir(db, report_id, alan)
-    report = row[0]
-    if report.status != ReportStatus.reddedildi:
+    row = _talep_getir(db, talep_id, alan)
+    talep = row[0]
+    if talep.status != TalepStatus.reddedildi:
         raise HTTPException(
             status_code=409, detail="Yalnizca reddedilmis taleplerin reddi geri alinabilir"
         )
-    sonuc = ReportFeature.from_row(crud.reopen_report(db, report, user))
+    sonuc = TalepFeature.from_row(crud.reopen_talep(db, talep, user))
     _talep_degisti()
     return sonuc

@@ -19,10 +19,10 @@ import type { AssetFeatureCollection } from "../types/asset";
 import {
   TALEP_DURUM_RENGI,
   TALEP_GORUNUMLERI,
-  REPORT_STATUS_LABELS,
+  TALEP_DURUM_ETIKETLERI,
   talepNoktasi,
-} from "../types/report";
-import type { ReportFeature, TalepGorunumu } from "../types/report";
+} from "../types/talep";
+import type { TalepFeature, TalepGorunumu } from "../types/talep";
 import {
   csvIndir,
   jsonIndir,
@@ -51,7 +51,7 @@ const SEVIYE_STIL = [
 
 interface DashboardProps {
   data?: AssetFeatureCollection;
-  talepGorunumleri?: Record<TalepGorunumu, ReportFeature[]>;
+  talepGorunumleri?: Record<TalepGorunumu, TalepFeature[]>;
   alanSecimiAktif?: boolean;
 }
 
@@ -678,7 +678,7 @@ function TalepOzeti({
   gorunumler,
   alanSecimiAktif,
 }: {
-  gorunumler?: Record<TalepGorunumu, ReportFeature[]>;
+  gorunumler?: Record<TalepGorunumu, TalepFeature[]>;
   alanSecimiAktif?: boolean;
 }) {
   const [ilceFiltre, setIlceFiltre] = useState<string | null>(null);
@@ -760,7 +760,7 @@ function TalepOzeti({
 
   const durumDagilimi = TALEP_GORUNUMLERI.map((g) => ({
     anahtar: g,
-    etiket: REPORT_STATUS_LABELS[g],
+    etiket: TALEP_DURUM_ETIKETLERI[g],
     renk: TALEP_DURUM_RENGI[g],
     sayi: filtrelenmis.filter((f) => f.properties.gorunum === g).length,
   }));

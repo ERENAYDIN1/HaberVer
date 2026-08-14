@@ -46,7 +46,7 @@ def create_tur(
 ):
     """Yeni tur ekler ve mudurlugune baglar.
 
-    Kod sonradan degistirilemez: `assets.type` / `reports.type` icinde yasayan
+    Kod sonradan degistirilemez: `assets.type` / `talepler.type` icinde yasayan
     deger odur. Bu yuzden cakisma 409 ile acikca reddedilir - "zaten var" olan
     bir kodu sessizce guncellemek baska bir turun anlamini degistirirdi."""
     _grup_dogrula(data.grup)

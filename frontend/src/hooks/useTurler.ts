@@ -41,7 +41,7 @@ function sozlukSonrasiTazele(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["turler"] });
   qc.invalidateQueries({ queryKey: ["departmanlar"] });
   qc.invalidateQueries({ queryKey: ["assets"] });
-  qc.invalidateQueries({ queryKey: ["reports"] });
+  qc.invalidateQueries({ queryKey: ["talepler"] });
 }
 
 export function useTurEkle() {

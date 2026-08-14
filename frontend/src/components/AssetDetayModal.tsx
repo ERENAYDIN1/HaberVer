@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import { fotoUrl } from "../api/reports";
+import { fotoUrl } from "../api/talepler";
 import { ekibeAta, gorevDurumu, gorevGeriAl } from "../api/saha";
 import { useAuth } from "../auth/AuthContext";
 import { useDeleteAsset, useRepairAsset } from "../hooks/useAssets";

@@ -75,7 +75,7 @@ def medya_yetkisi() -> None:
     """A2: talep fotografi kimlik dogrulamasi olmadan indirilememeli."""
     bolum("A2 - medya kimlik dogrulamasi")
     personel = admin_girisi()
-    talepler = personel.get(f"{API}/api/reports").json()["features"]
+    talepler = personel.get(f"{API}/api/talepler").json()["features"]
     fotolu = [i for i in talepler if i["properties"].get("photo_url")]
     if not fotolu:
         print("[atlandi] fotografli talep yok (seed taleplerinde photo_url NULL)")
@@ -93,7 +93,7 @@ def medya_yetkisi() -> None:
 
     # Yol kacisi denemeleri desene takilmali.
     for kotu in ["../../../etc/passwd", "..%2f..%2fmain.py", "abc.jpg", "x.php"]:
-        r = personel.get(f"{API}/media/reports/{kotu}")
+        r = personel.get(f"{API}/media/talepler/{kotu}")
         assert r.status_code == 404, (kotu, r.status_code)
     print("[ok] yol kacisi / gecersiz dosya adi denemeleri -> 404")
 
@@ -181,7 +181,7 @@ def yukleme_siniri() -> None:
     }
 
     buyuk = vatandas.post(
-        f"{API}/api/reports",
+        f"{API}/api/talepler",
         data=alan,
         files={"photo": ("b.png", b"\x89PNG\r\n\x1a\n" + b"0" * (6 * 1024 * 1024), "image/png")},
         headers=ORIGIN,
@@ -190,7 +190,7 @@ def yukleme_siniri() -> None:
     print("[ok] 6 MB fotograf -> 413 (once: once bellege alinip sonra reddediliyordu)")
 
     sahte = vatandas.post(
-        f"{API}/api/reports",
+        f"{API}/api/talepler",
         data=alan,
         files={"photo": ("x.png", b"<html><script>alert(1)</script></html>", "image/png")},
         headers=ORIGIN,
@@ -199,7 +199,7 @@ def yukleme_siniri() -> None:
     print(f"[ok] PNG diye gonderilen HTML -> 400 ({sahte.json()['detail']})")
 
     gercek = vatandas.post(
-        f"{API}/api/reports",
+        f"{API}/api/talepler",
         data=alan,
         files={"photo": ("ok.png", b"\x89PNG\r\n\x1a\n" + b"x" * 100, "image/png")},
         headers=ORIGIN,
@@ -223,8 +223,8 @@ def departman_kapsami() -> None:
     fen = giris("calisan1@haberver.com", "calisan1234")
     park = giris("calisan2@haberver.com", "calisan1234")
 
-    fen_talepler = fen.get(f"{API}/api/reports", params={"status": "beklemede"}).json()
-    park_talepler = park.get(f"{API}/api/reports", params={"status": "beklemede"}).json()
+    fen_talepler = fen.get(f"{API}/api/talepler", params={"status": "beklemede"}).json()
+    park_talepler = park.get(f"{API}/api/talepler", params={"status": "beklemede"}).json()
     fen_turler = {t["properties"]["type"] for t in fen_talepler["features"]}
     park_turler = {t["properties"]["type"] for t in park_talepler["features"]}
     assert fen_turler <= {"yol", "kaldirim"}, f"Fen Isleri fazlasini goruyor: {fen_turler}"
@@ -236,12 +236,12 @@ def departman_kapsami() -> None:
     assert yabanci, "park departmaninda bekleyen talep yok (seed_demo calistirin)"
     hedef = yabanci[0]["properties"]["id"]
 
-    onay = fen.post(f"{API}/api/reports/{hedef}/onayla", headers=ORIGIN)
+    onay = fen.post(f"{API}/api/talepler/{hedef}/onayla", headers=ORIGIN)
     assert onay.status_code == 404, f"beklenen 404, gelen {onay.status_code}"
     print("[ok] Fen Isleri -> park talebini onayla: 404 (kayit sizdirilmadi)")
 
     ret = fen.post(
-        f"{API}/api/reports/{hedef}/reddet",
+        f"{API}/api/talepler/{hedef}/reddet",
         json={"review_note": "x"},
         headers=ORIGIN,
     )
@@ -419,7 +419,7 @@ def main() -> None:
     # Test talebini temizle.
     personel = admin_girisi()
     personel.post(
-        f"{API}/api/reports/{talep_id}/reddet",
+        f"{API}/api/talepler/{talep_id}/reddet",
         json={"review_note": "guvenlik testi"},
         headers=ORIGIN,
     )

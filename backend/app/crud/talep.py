@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..models.asset import Asset, AssetSource, AssetStatus, AssetType
 from ..models.assignment import Assignment, AssignmentStatus
 from ..models.log import LogAction
-from ..models.report import Report, ReportStatus
+from ..models.talep import Talep, TalepStatus
 from ..models.user import User
 from . import assignment as assignment_crud
 from .log import add_log
@@ -16,7 +16,6 @@ from .log import add_log
 def _select_with_coords():
     """Talep satiri + ham seklin GeoJSON'u + temsil noktasinin koordinatlari.
 
-    Geometri artik nokta olmak zorunda olmadigi icin (cizgi/alan da olabilir)
     ST_X/ST_Y dogrudan `geometry` uzerinde calistirilmaz - onlar `nokta`
     sutunundan okunur. Ayrica olusan varligin durumu LEFT JOIN ile gelir:
     vatandas varlik listesini goremedigi icin "Tamir Edildi" bilgisini baska
@@ -25,19 +24,19 @@ def _select_with_coords():
     gibi ayni atama noktasini gostersin diye (bkz. crud/asset.py)."""
     return (
         select(
-            Report,
-            func.ST_AsGeoJSON(Report.geometry).label("geojson"),
-            func.ST_X(Report.temsil_noktasi).label("longitude"),
-            func.ST_Y(Report.temsil_noktasi).label("latitude"),
+            Talep,
+            func.ST_AsGeoJSON(Talep.geometry).label("geojson"),
+            func.ST_X(Talep.temsil_noktasi).label("longitude"),
+            func.ST_Y(Talep.temsil_noktasi).label("latitude"),
             Asset.status.label("asset_status"),
             exists(
                 select(Assignment.id).where(
-                    Assignment.asset_id == Report.created_asset_id,
+                    Assignment.asset_id == Talep.created_asset_id,
                     Assignment.status == AssignmentStatus.atandi,
                 )
             ).label("assigned"),
         )
-        .outerjoin(Asset, Asset.id == Report.created_asset_id)
+        .outerjoin(Asset, Asset.id == Talep.created_asset_id)
     )
 
 
@@ -45,34 +44,34 @@ def _geometri(geojson: str):
     return func.ST_SetSRID(func.ST_GeomFromGeoJSON(geojson), 4326)
 
 
-def get(db: Session, report_id: uuid.UUID):
+def get(db: Session, talep_id: uuid.UUID):
     return db.execute(
-        _select_with_coords().where(Report.id == report_id)
+        _select_with_coords().where(Talep.id == talep_id)
     ).first()
 
 
-def list_reports(
+def list_talepler(
     db: Session,
-    status: ReportStatus | None = None,
+    status: TalepStatus | None = None,
     reporter_id: uuid.UUID | None = None,
     kapsam_turleri: set[AssetType] | None = None,
     gizliler_haric: bool = False,
 ):
     stmt = _select_with_coords()
     if status is not None:
-        stmt = stmt.where(Report.status == status)
+        stmt = stmt.where(Talep.status == status)
     if reporter_id is not None:
-        stmt = stmt.where(Report.reporter_id == reporter_id)
+        stmt = stmt.where(Talep.reporter_id == reporter_id)
     # Departman kapsami: None = sinirsiz (admin). Bos kume hicbir satir
     # dondurmez - departmani olmayan personel icin dogru sonuc.
     if kapsam_turleri is not None:
-        stmt = stmt.where(Report.type.in_(kapsam_turleri))
+        stmt = stmt.where(Talep.type.in_(kapsam_turleri))
     if gizliler_haric:
-        stmt = stmt.where(Report.reporter_hidden_at.is_(None))
-    return db.execute(stmt.order_by(Report.created_at.desc())).all()
+        stmt = stmt.where(Talep.reporter_hidden_at.is_(None))
+    return db.execute(stmt.order_by(Talep.created_at.desc())).all()
 
 
-def create_report(
+def create_talep(
     db: Session,
     reporter_id: uuid.UUID,
     name: str,
@@ -84,7 +83,7 @@ def create_report(
     """Vatandas talebi olusturur. `geojson` yalnizca bir Point olabilir; temsil
     noktasi da odur (bkz. migration 0016)."""
     geom = _geometri(geojson)
-    report = Report(
+    talep = Talep(
         reporter_id=reporter_id,
         name=name,
         type=type_,
@@ -93,26 +92,26 @@ def create_report(
         temsil_noktasi=geom,
         photo_url=photo_url,
     )
-    db.add(report)
+    db.add(talep)
     db.commit()
-    return get(db, report.id)
+    return get(db, talep.id)
 
 
-def gizle(db: Session, report: Report, gizli: bool = True):
+def gizle(db: Session, talep: Talep, gizli: bool = True):
     """Vatandasin talebi kendi listesinden kaldirmasi/geri getirmesi.
 
     GERCEK SILME DEGILDIR: onaylanmis bir talep silinseydi ondan olusan varlik,
     saha atamasi ve audit log kayitlari sahipsiz kalirdi. Personel tarafi ve
     log bu islemden hic etkilenmez, bu yuzden ayrica loglanmaz - kullanici
     kendi gorunumunu duzenliyor, sistemde bir sey degistirmiyor."""
-    report.reporter_hidden_at = datetime.now(timezone.utc) if gizli else None
+    talep.reporter_hidden_at = datetime.now(timezone.utc) if gizli else None
     db.commit()
-    return get(db, report.id)
+    return get(db, talep.id)
 
 
-def approve_report(
+def approve_talep(
     db: Session,
-    report: Report,
+    talep: Talep,
     reviewer: User,
     yeni_tip: AssetType | None = None,
 ):
@@ -123,38 +122,38 @@ def approve_report(
     varlik hem TALEP KAYDI bu turle yazilir - aksi halde kuyrukta arsivlenen
     talep vatandasin yanlis secimini gostermeye devam ederdi."""
     tur_notu: str | None = None
-    if yeni_tip is not None and yeni_tip != report.type:
-        tur_notu = f"Tür düzeltildi: {report.type.value} → {yeni_tip.value}"
-        report.type = yeni_tip
+    if yeni_tip is not None and yeni_tip != talep.type:
+        tur_notu = f"Tür düzeltildi: {talep.type.value} → {yeni_tip.value}"
+        talep.type = yeni_tip
 
-    # Varlik her zaman NOKTADIR: talep bir cizgi/alan olsa bile envanter,
-    # otomatik atamanin mesafe hesabi ve harita isaretcisi tek nokta uzerinden
-    # calisir. Ham sekil `reports.geometry`de belge olarak durmaya devam eder.
     asset = Asset(
-        name=report.name,
-        type=report.type,
+        name=talep.name,
+        type=talep.type,
         status=AssetStatus.bakim_lazim,
         source=AssetSource.ihbar,
-        geometry=report.temsil_noktasi,
-        photo_url=report.photo_url,
+        geometry=talep.temsil_noktasi,
+        photo_url=talep.photo_url,
     )
     db.add(asset)
     db.flush()  # asset.id'yi almak icin
 
-    report.status = ReportStatus.onaylandi
-    report.reviewed_by = reviewer.id
-    report.reviewed_at = datetime.now(timezone.utc)
-    report.created_asset_id = asset.id
+    talep.status = TalepStatus.onaylandi
+    talep.reviewed_by = reviewer.id
+    talep.reviewed_at = datetime.now(timezone.utc)
+    talep.created_asset_id = asset.id
 
+    # LogAction.report_* degerleri ve entity_type="report" BILINCLI olarak
+    # degismedi: bunlar DB'de yazili gecmis veridir (PG enum + mevcut satirlar),
+    # yeniden adlandirmak eski audit kayitlarini sahipsiz birakirdi.
     add_log(
         db,
         action=LogAction.report_approved,
         actor=reviewer,
         entity_type="report",
-        entity_id=report.id,
-        entity_name=report.name,
+        entity_id=talep.id,
+        entity_name=talep.name,
         detail=tur_notu,
-        tur=report.type,
+        tur=talep.type,
     )
     add_log(
         db,
@@ -175,55 +174,55 @@ def approve_report(
         assignment_crud.ata(db, asset, ekip, assigned_by=None)
 
     db.commit()
-    return get(db, report.id)
+    return get(db, talep.id)
 
 
-def reject_report(
+def reject_talep(
     db: Session,
-    report: Report,
+    talep: Talep,
     reviewer: User,
     review_note: str | None = None,
 ):
-    report.status = ReportStatus.reddedildi
-    report.reviewed_by = reviewer.id
-    report.reviewed_at = datetime.now(timezone.utc)
-    report.review_note = review_note
+    talep.status = TalepStatus.reddedildi
+    talep.reviewed_by = reviewer.id
+    talep.reviewed_at = datetime.now(timezone.utc)
+    talep.review_note = review_note
 
     add_log(
         db,
         action=LogAction.report_rejected,
         actor=reviewer,
         entity_type="report",
-        entity_id=report.id,
-        entity_name=report.name,
+        entity_id=talep.id,
+        entity_name=talep.name,
         detail=review_note,
-        tur=report.type,
+        tur=talep.type,
     )
     db.commit()
-    return get(db, report.id)
+    return get(db, talep.id)
 
 
-def reopen_report(db: Session, report: Report, reviewer: User):
+def reopen_talep(db: Session, talep: Talep, reviewer: User):
     """Reddedilen bir talebin reddini geri alir: kayit 'beklemede'ye doner ve
     inceleme izleri (kim/ne zaman/ret nedeni) temizlenir - talep, hic
     sonuclandirilmamis gibi kuyruga geri girer ve tekrar onaylanabilir.
 
     Onaylanmis talepler icin cagrilmaz (router 409 doner): onay bir varlik
     olusturdugundan geri alinmasi o varligi ve atamasini da bozardi."""
-    report.status = ReportStatus.beklemede
-    report.reviewed_by = None
-    report.reviewed_at = None
-    report.review_note = None
+    talep.status = TalepStatus.beklemede
+    talep.reviewed_by = None
+    talep.reviewed_at = None
+    talep.review_note = None
 
     add_log(
         db,
         action=LogAction.report_reopened,
         actor=reviewer,
         entity_type="report",
-        entity_id=report.id,
-        entity_name=report.name,
+        entity_id=talep.id,
+        entity_name=talep.name,
         detail="Ret geri alındı",
-        tur=report.type,
+        tur=talep.type,
     )
     db.commit()
-    return get(db, report.id)
+    return get(db, talep.id)

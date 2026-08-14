@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..crud.session import OturumBaglami
 from ..database import get_db
-from ..models.report import Report
+from ..models.talep import Talep
 from ..models.user import UserRole
 from ..security import Kapsam, get_context, kapsam
 
@@ -52,7 +52,7 @@ def _erisebilir(
         return True
     if baglam.etkin_rol in (UserRole.calisan, UserRole.saha_calisani):
         tur = db.execute(
-            select(Report.type).where(Report.photo_url == goreli_yol)
+            select(Talep.type).where(Talep.photo_url == goreli_yol)
         ).scalar_one_or_none()
         # Talebe bagli olmayan bir dosya (orn. elle eklenmis varlik fotografi)
         # departman kisitina tabi degildir.
@@ -60,9 +60,9 @@ def _erisebilir(
     if baglam.etkin_rol is UserRole.vatandas:
         return (
             db.execute(
-                select(Report.id).where(
-                    Report.photo_url == goreli_yol,
-                    Report.reporter_id == baglam.user.id,
+                select(Talep.id).where(
+                    Talep.photo_url == goreli_yol,
+                    Talep.reporter_id == baglam.user.id,
                 )
             ).first()
             is not None
@@ -70,7 +70,7 @@ def _erisebilir(
     return False
 
 
-@router.get("/reports/{dosya}")
+@router.get("/talepler/{dosya}")
 def talep_fotografi(
     dosya: str,
     baglam: OturumBaglami = Depends(get_context),
@@ -80,11 +80,11 @@ def talep_fotografi(
     if not DOSYA_DESENI.match(dosya):
         raise HTTPException(status_code=404, detail="Dosya bulunamadi")
 
-    goreli_yol = f"/{settings.media_dir}/reports/{dosya}"
+    goreli_yol = f"/{settings.media_dir}/talepler/{dosya}"
     if not _erisebilir(db, baglam, alan, goreli_yol):
         raise HTTPException(status_code=403, detail="Bu dosyaya erisim yetkiniz yok")
 
-    yol = settings.media_yolu / "reports" / dosya
+    yol = settings.media_yolu / "talepler" / dosya
     if not yol.is_file():
         raise HTTPException(status_code=404, detail="Dosya bulunamadi")
 

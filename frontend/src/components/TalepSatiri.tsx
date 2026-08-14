@@ -1,15 +1,15 @@
 import { forwardRef, useState } from "react";
 
-import { fotoUrl } from "../api/reports";
+import { fotoUrl } from "../api/talepler";
 import { turAdi, turRozetSinifi } from "../data/turSozlugu";
-import { talepNoktasi } from "../types/report";
-import type { ReportFeature } from "../types/report";
+import { talepNoktasi } from "../types/talep";
+import type { TalepFeature } from "../types/talep";
 import FotoBuyutucu from "./FotoBuyutucu";
 import { tipIkonu } from "./icons";
 import TalepDurumRozeti from "./TalepDurumRozeti";
 
 interface TalepSatiriProps {
-  report: ReportFeature;
+  report: TalepFeature;
   secili: boolean;
   onSec: (id: string) => void;
   /** Sadece "beklemede" durumundaki taleplerde ve yetkili roller icin gosterilir. */
@@ -23,7 +23,7 @@ interface TalepSatiriProps {
 
 /** VarlikSatiri ile ayni sablonu kullanan talep satiri: ikon/foto, ad, tur,
  *  durum rozeti, konum ve secilince acilan Onayla/Reddet aksiyonu. Ek
- *  detaylar (foto/not/ret nedeni) ReportDetayModal'da gosterilir. */
+ *  detaylar (foto/not/ret nedeni) TalepDetayModal'da gosterilir. */
 const TalepSatiri = forwardRef<HTMLLIElement, TalepSatiriProps>(function TalepSatiri(
   {
     report,

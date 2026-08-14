@@ -22,7 +22,7 @@ def add_log(
     departman: str | None = None,
 ) -> ActivityLog:
     """Log kaydini olusturup session'a ekler; commit cagirmaz - ait oldugu
-    islemin (asset/report/user degisikligi) commit'iyle birlikte atomik
+    islemin (asset/talep/user degisikligi) commit'iyle birlikte atomik
     yazilsin diye cagiran taraf commit eder.
 
     `tur` verilirse kaydin departmani O ANDA cozulur ve satira yazilir. Bu,

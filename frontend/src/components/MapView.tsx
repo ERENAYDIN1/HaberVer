@@ -12,8 +12,8 @@ import {
   HALKALI_GORUNUMLER,
   ROZETLI_GORUNUMLER,
   talepNoktasi,
-} from "../types/report";
-import type { ReportFeatureCollection } from "../types/report";
+} from "../types/talep";
+import type { TalepFeatureCollection } from "../types/talep";
 import type { EkipGorevleri } from "../types/saha";
 import {
   alanEtiketi,
@@ -43,7 +43,7 @@ import {
   ISARETCI,
   OLCUM_RENK,
   OLCUM_SOURCE_ID,
-  REPORTS_SOURCE_ID,
+  TALEPLER_SOURCE_ID,
   ROZET_MINZOOM,
   SEKIL_SOURCE_ID,
   SOURCE_ID,
@@ -130,7 +130,7 @@ export type UcusHedefi =
 
 interface MapViewProps {
   assets?: AssetFeatureCollection;
-  reports?: ReportFeatureCollection;
+  talepler?: TalepFeatureCollection;
   seciliTalepId?: string | null;
   onTalepSec?: (id: string) => void;
   seciliId: string | null;
@@ -175,7 +175,7 @@ interface MapViewProps {
 
 export default function MapView({
   assets,
-  reports,
+  talepler,
   seciliTalepId,
   onTalepSec,
   seciliId,
@@ -265,7 +265,7 @@ export default function MapView({
   const olcumModuRef = useRef(olcumModu);
   const olcumNoktalariRef = useRef(olcumNoktalari);
   const assetsRef = useRef(assets);
-  const reportsRef = useRef(reports);
+  const taleplerRef = useRef(talepler);
   const seciliTalepIdRef = useRef(seciliTalepId);
   const onTalepSecRef = useRef(onTalepSec);
   const cizimNoktalariRef = useRef(cizimNoktalari);
@@ -297,7 +297,7 @@ export default function MapView({
     olcumModuRef.current = olcumModu;
     olcumNoktalariRef.current = olcumNoktalari;
     assetsRef.current = assets;
-    reportsRef.current = reports;
+    taleplerRef.current = talepler;
     seciliTalepIdRef.current = seciliTalepId;
     onTalepSecRef.current = onTalepSec;
     cizimNoktalariRef.current = cizimNoktalari;
@@ -313,7 +313,7 @@ export default function MapView({
   // katmanda cizildigi icin tek tiklama birden cok handler tetikler; son
   // islenen DOM olayi tutularak tekrar elenir.
   const sonIslenenAssetsOlayiRef = useRef<MouseEvent | null>(null);
-  const sonIslenenReportsOlayiRef = useRef<MouseEvent | null>(null);
+  const sonIslenenTaleplerOlayiRef = useRef<MouseEvent | null>(null);
   const assetsTiklandiRef = useRef((e: maplibregl.MapLayerMouseEvent) => {
     if (cizimModuRef.current || olcumModuRef.current) return;
     if (sonIslenenAssetsOlayiRef.current === e.originalEvent) return;
@@ -324,10 +324,10 @@ export default function MapView({
       onVarlikSecRef.current(id);
     }
   });
-  const reportsTiklandiRef = useRef((e: maplibregl.MapLayerMouseEvent) => {
+  const taleplerTiklandiRef = useRef((e: maplibregl.MapLayerMouseEvent) => {
     if (cizimModuRef.current || olcumModuRef.current) return;
-    if (sonIslenenReportsOlayiRef.current === e.originalEvent) return;
-    sonIslenenReportsOlayiRef.current = e.originalEvent;
+    if (sonIslenenTaleplerOlayiRef.current === e.originalEvent) return;
+    sonIslenenTaleplerOlayiRef.current = e.originalEvent;
     const id = e.features?.[0]?.properties?.id;
     if (typeof id === "string") {
       sonSecimHaritadanRef.current = true;
@@ -423,16 +423,16 @@ export default function MapView({
     if (sekilDuzenlemeRef.current) return;
 
     const katmanlar = ["assets-circle"];
-    // "reports-halka" bilincli olarak disarida: dekoratif ve genis bir alan
+    // "talepler-halka" bilincli olarak disarida: dekoratif ve genis bir alan
     // kapladigi icin bos harita tiklamasini yutardi.
     for (const k of [
       "assets-icon",
       "assets-atama",
-      "reports-circle",
-      "reports-pin",
-      "reports-icon",
-      "reports-rozet",
-      "reports-atama",
+      "talepler-circle",
+      "talepler-pin",
+      "talepler-icon",
+      "talepler-rozet",
+      "talepler-atama",
     ]) {
       if (map.getLayer(k)) katmanlar.push(k);
     }
@@ -927,14 +927,14 @@ export default function MapView({
   /** Talepler tek kaynaga yazilir: her kayit temsil noktasiyla (pin/glif/
    *  halka/rozet zinciri bunu okur). Vatandas yalnizca nokta isaretledigi icin
    *  ayrica cizilecek bir ham sekil yok. */
-  function reportsUygula(map: maplibregl.Map) {
-    const noktaSource = map.getSource(REPORTS_SOURCE_ID) as
+  function taleplerUygula(map: maplibregl.Map) {
+    const noktaSource = map.getSource(TALEPLER_SOURCE_ID) as
       | maplibregl.GeoJSONSource
       | undefined;
 
     noktaSource?.setData({
       type: "FeatureCollection",
-      features: (reportsRef.current?.features ?? []).flatMap((f) => {
+      features: (taleplerRef.current?.features ?? []).flatMap((f) => {
         const nokta = talepNoktasi(f);
         if (!nokta) return [];
         return [
@@ -1140,17 +1140,17 @@ export default function MapView({
    *  yuzden secim halkasi/popup'i da burada bastirilir (aksi halde eski pin
    *  popup'i duzenleme tutamaklarinin ustunde acik kalirdi). */
   function secimTalepUygula(map: maplibregl.Map) {
-    if (!map.getLayer("reports-selected")) return;
+    if (!map.getLayer("talepler-selected")) return;
     const id = seciliTalepIdRef.current;
     const duzenleniyor = sekilDuzenlemeRef.current?.id === id;
     map.setFilter(
-      "reports-selected",
+      "talepler-selected",
       ["==", ["get", "id"], duzenleniyor ? "" : (id ?? "")]
     );
 
     const secili =
       id && !duzenleniyor
-        ? reportsRef.current?.features.find((f) => f.properties.id === id)
+        ? taleplerRef.current?.features.find((f) => f.properties.id === id)
         : undefined;
     if (!secili) {
       popupKapat(["talep"]);
@@ -1208,7 +1208,7 @@ export default function MapView({
     dinamikOnizlemeKatmanlari(map);
 
     katmanBagla(map, "assets-circle", assetsTiklandiRef.current);
-    katmanBagla(map, "reports-circle", reportsTiklandiRef.current);
+    katmanBagla(map, "talepler-circle", taleplerTiklandiRef.current);
     // Bolge dolgusu + kalin vurus seridi de tiklanabilir.
     for (const katman of ["bolge-fill", "bolge-vurus"]) {
       katmanBagla(map, katman, bolgeTiklandiRef.current);
@@ -1223,7 +1223,7 @@ export default function MapView({
     hazirRef.current = true;
     maskeUygula(map);
     veriUygula(map);
-    reportsUygula(map);
+    taleplerUygula(map);
     cizimUygula(map);
     tamamlananUygula(map);
     bolgeleriUygula(map);
@@ -1272,20 +1272,20 @@ export default function MapView({
         }
       }
 
-      if (map.getSource(REPORTS_SOURCE_ID) && !map.getLayer("reports-icon")) {
+      if (map.getSource(TALEPLER_SOURCE_ID) && !map.getLayer("talepler-icon")) {
         // Secim pini EN ALTA: normal pinin arkasindan tasarak kontur olur.
         map.addLayer({
-          id: "reports-selected",
+          id: "talepler-selected",
           type: "symbol",
-          source: REPORTS_SOURCE_ID,
+          source: TALEPLER_SOURCE_ID,
           filter: ["==", ["get", "id"], ""],
           layout: { "icon-image": "talep-pin-secim", ...PIN_SECIM_YERLESIMI },
         });
         // Kapanmis gorunumlerde halka cizilmez.
         map.addLayer({
-          id: "reports-halka",
+          id: "talepler-halka",
           type: "symbol",
-          source: REPORTS_SOURCE_ID,
+          source: TALEPLER_SOURCE_ID,
           filter: gorunumFiltresi(HALKALI_GORUNUMLER),
           layout: {
             "icon-image": [
@@ -1298,9 +1298,9 @@ export default function MapView({
           paint: { "icon-opacity": TALEP_OPAKLIK_IFADESI as never },
         });
         map.addLayer({
-          id: "reports-pin",
+          id: "talepler-pin",
           type: "symbol",
-          source: REPORTS_SOURCE_ID,
+          source: TALEPLER_SOURCE_ID,
           layout: {
             "icon-image": ["concat", "talep-pin-", ["get", "type"]],
             ...PIN_KATMAN_YERLESIMI,
@@ -1308,9 +1308,9 @@ export default function MapView({
           paint: { "icon-opacity": TALEP_OPAKLIK_IFADESI as never },
         });
         map.addLayer({
-          id: "reports-icon",
+          id: "talepler-icon",
           type: "symbol",
-          source: REPORTS_SOURCE_ID,
+          source: TALEPLER_SOURCE_ID,
           layout: {
             "icon-image": ["concat", "pin-glif-", ["get", "type"]],
             ...PIN_KATMAN_YERLESIMI,
@@ -1318,9 +1318,9 @@ export default function MapView({
           paint: { "icon-opacity": TALEP_OPAKLIK_IFADESI as never },
         });
         map.addLayer({
-          id: "reports-rozet",
+          id: "talepler-rozet",
           type: "symbol",
-          source: REPORTS_SOURCE_ID,
+          source: TALEPLER_SOURCE_ID,
           minzoom: ROZET_MINZOOM,
           filter: gorunumFiltresi(ROZETLI_GORUNUMLER),
           layout: {
@@ -1335,9 +1335,9 @@ export default function MapView({
         });
         // `assets-atama` ile ayni renk ve AYNI KOSE (bkz. haritaIkonlari.ts::talepAtamaSvg).
         map.addLayer({
-          id: "reports-atama",
+          id: "talepler-atama",
           type: "symbol",
-          source: REPORTS_SOURCE_ID,
+          source: TALEPLER_SOURCE_ID,
           filter: ["==", ["get", "assigned"], true],
           layout: {
             "icon-image": "talep-pin-atama",
@@ -1348,12 +1348,12 @@ export default function MapView({
         // Halka tiklamaya baglanmaz: genis bir alan kapladigi icin bos harita
         // tiklamasini yutardi.
         for (const katman of [
-          "reports-pin",
-          "reports-icon",
-          "reports-rozet",
-          "reports-atama",
+          "talepler-pin",
+          "talepler-icon",
+          "talepler-rozet",
+          "talepler-atama",
         ]) {
-          katmanBagla(map, katman, reportsTiklandiRef.current);
+          katmanBagla(map, katman, taleplerTiklandiRef.current);
         }
         // Secim katmani asenkron eklendi: bu arada yapilmis secimin filtresi
         // kaybolmasin diye tekrar uygulanir.
@@ -1478,8 +1478,8 @@ export default function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (hazirRef.current) reportsUygula(map);
-  }, [reports]);
+    if (hazirRef.current) taleplerUygula(map);
+  }, [talepler]);
 
   // --- Secili talep degisince: vurgula, popup ac, konumuna ucur ---
   useEffect(() => {
@@ -1491,8 +1491,8 @@ export default function MapView({
     const haritadanMi = sonSecimHaritadanRef.current;
     sonSecimHaritadanRef.current = false;
 
-    if (seciliTalepId && reports) {
-      const secili = reports.features.find(
+    if (seciliTalepId && talepler) {
+      const secili = talepler.features.find(
         (f) => f.properties.id === seciliTalepId
       );
       if (secili) {
@@ -1504,7 +1504,7 @@ export default function MapView({
         });
       }
     }
-  }, [seciliTalepId, reports]);
+  }, [seciliTalepId, talepler]);
 
   // --- Cizim noktalarini haritada goster ---
   useEffect(() => {
@@ -1547,7 +1547,7 @@ export default function MapView({
   }, [seciliBolgeId]);
 
   // --- Sekil duzenleme: taslak degisince cizimi ve tutamaklari yenile ---
-  // `bolgeleriUygula`/`reportsUygula` da cagrilir: duzenlenen kayit kalici
+  // `bolgeleriUygula`/`taleplerUygula` da cagrilir: duzenlenen kayit kalici
   // katmandan cikarilir, cift isaretci olmasin.
   useEffect(() => {
     const map = mapRef.current;
@@ -1558,7 +1558,7 @@ export default function MapView({
     sekilUygula(map);
     sekilTutamaklariUygula(map);
     bolgeleriUygula(map);
-    reportsUygula(map);
+    taleplerUygula(map);
     // Secili kaydin popup'i/halkasi: duzenlenen ayni kayitsa (raporaGit onu
     // secili de birakir) burada bastirilir, duzenleme bitince geri acilir.
     secimTalepUygula(map);

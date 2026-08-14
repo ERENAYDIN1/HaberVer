@@ -17,9 +17,9 @@ export const ATAMA_RENGI = EKIP_VARSAYILAN_RENK;
  *  kaynaklari dusurdugu icin ayni fonksiyonlar tekrar cagrilir. */
 
 export const SOURCE_ID = "assets";
-export const REPORTS_SOURCE_ID = "reports";
+export const TALEPLER_SOURCE_ID = "talepler";
 /** Cizgi/alan taleplerin HAM SEKLI, ayri kaynakta. Pin katmanlari
- *  `REPORTS_SOURCE_ID`'de nokta geometrisiyle calismaya devam eder. */
+ *  `TALEPLER_SOURCE_ID`'de nokta geometrisiyle calismaya devam eder. */
 export const CIZIM_SOURCE_ID = "cizim";
 export const TAMAMLANAN_SOURCE_ID = "tamamlanan-alanlar";
 /** Kaydedilmis bolgeler: anlik secimlerden ayri kaynak, secim temizlenince
@@ -138,15 +138,15 @@ export function varlikKatmanlari(map: maplibregl.Map): void {
 
 /** Vatandas talepleri: yer golgesi + secim pini + pin + glif + halka/rozet. */
 export function talepKatmanlari(map: maplibregl.Map): void {
-  if (!map.getSource(REPORTS_SOURCE_ID)) {
-    map.addSource(REPORTS_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
+  if (!map.getSource(TALEPLER_SOURCE_ID)) {
+    map.addSource(TALEPLER_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
 
     // Pin symbol katmani goruntuleri asenkron yuklendigi icin sonradan
     // eklenir; bu daire senkron var oldugundan tiklama/hover icin sabit dayanaktir.
     map.addLayer({
-      id: "reports-circle",
+      id: "talepler-circle",
       type: "circle",
-      source: REPORTS_SOURCE_ID,
+      source: TALEPLER_SOURCE_ID,
       paint: golgeBoyasi(
         ISARETCI.talepGolgeYaricap,
         TALEP_OPAKLIK_IFADESI

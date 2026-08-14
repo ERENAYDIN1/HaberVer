@@ -107,13 +107,13 @@ def main() -> None:
 
     # Rol ayrimi: herkeste `vatandas` rolu var, ama yetki tek etkin role gore
     # verilmeli - admin vatandas ucuna girememeli.
-    vatandas_ucu = istemci.get(f"{API}/api/reports/mine")
+    vatandas_ucu = istemci.get(f"{API}/api/talepler/mine")
     assert vatandas_ucu.status_code == 403, vatandas_ucu.status_code
-    print("[ok] admin -> vatandas ucu (/reports/mine) 403")
+    print("[ok] admin -> vatandas ucu (/talepler/mine) 403")
 
     # Ters yon: vatandas hesabi personel ucuna girememeli.
     vatandas = giris("vatandas1@haberver.com", "vatandas1234")
-    assert vatandas.get(f"{API}/api/reports/mine").status_code == 200
+    assert vatandas.get(f"{API}/api/talepler/mine").status_code == 200
     assert vatandas.get(f"{API}/api/saha/ekipler").status_code == 403
     print("[ok] vatandas -> kendi ucu 200, personel ucu 403")
 

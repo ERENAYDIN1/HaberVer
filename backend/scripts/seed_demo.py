@@ -275,7 +275,7 @@ def _keycloak_hesabi(email: str, ad: str, rol: str, parola: str) -> uuid.UUID:
 def sil(db) -> None:
     """Demo veriyi kaldirir. Silme sirasi FK bagimliliklarina gore onemlidir."""
     # Onaydan dogan varlik adini TALEPTEN alir, yani TUM_VARLIK_ADLARI'nda
-    # gecmez; ustelik reports.created_asset_id ON DELETE SET NULL oldugu icin
+    # gecmez; ustelik talepler.created_asset_id ON DELETE SET NULL oldugu icin
     # talep silinince varlik pesinden gitmez. Bag kopmadan once silinmezse
     # panelde gorunen ama haritada pini olmayan oksuz varliklar kalir.
     # Demo hesabin kendi actigi talepler de dahil: users silinince reporter_id
@@ -283,7 +283,7 @@ def sil(db) -> None:
     db.execute(
         sa.text(
             "DELETE FROM assets WHERE id IN ("
-            "  SELECT created_asset_id FROM reports"
+            "  SELECT created_asset_id FROM talepler"
             "  WHERE created_asset_id IS NOT NULL"
             "    AND (name = ANY(:talep_adlari) OR reporter_id IN"
             "         (SELECT id FROM users WHERE email = ANY(:mailler)))"
@@ -292,7 +292,7 @@ def sil(db) -> None:
         {"talep_adlari": TUM_TALEP_ADLARI, "mailler": TUM_EMAILLER},
     )
     db.execute(
-        sa.text("DELETE FROM reports WHERE name = ANY(:adlar)"),
+        sa.text("DELETE FROM talepler WHERE name = ANY(:adlar)"),
         {"adlar": TUM_TALEP_ADLARI},
     )
     # assignments, assets/users silinince ON DELETE CASCADE ile gider.
@@ -411,12 +411,12 @@ def ekle(db) -> None:
         db.execute(
             sa.text(
                 """
-                INSERT INTO reports (reporter_id, name, type, note, geometry, nokta)
+                INSERT INTO talepler (reporter_id, name, type, note, geometry, nokta)
                 SELECT (SELECT id FROM users WHERE email = 'vatandas1@haberver.com'),
                        :ad, :tip, :note,
                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)
-                WHERE NOT EXISTS (SELECT 1 FROM reports WHERE name = :ad)
+                WHERE NOT EXISTS (SELECT 1 FROM talepler WHERE name = :ad)
                   AND EXISTS (SELECT 1 FROM users
                               WHERE email = 'vatandas1@haberver.com')
                 """
@@ -436,7 +436,7 @@ def ekle(db) -> None:
         db.execute(
             sa.text(
                 """
-                INSERT INTO reports (reporter_id, name, type, note, geometry,
+                INSERT INTO talepler (reporter_id, name, type, note, geometry,
                                      nokta, status, reviewed_by, reviewed_at,
                                      review_note)
                 SELECT (SELECT id FROM users WHERE email = 'vatandas1@haberver.com'),
@@ -446,7 +446,7 @@ def ekle(db) -> None:
                        CAST('reddedildi' AS report_status),
                        (SELECT id FROM users WHERE email = 'calisan1@haberver.com'),
                        now(), :gerekce
-                WHERE NOT EXISTS (SELECT 1 FROM reports WHERE name = :ad)
+                WHERE NOT EXISTS (SELECT 1 FROM talepler WHERE name = :ad)
                   AND EXISTS (SELECT 1 FROM users
                               WHERE email = 'vatandas1@haberver.com')
                 """
@@ -537,7 +537,7 @@ def ekle(db) -> None:
     kullanici = say("SELECT count(*) FROM users")
     varlik = say("SELECT count(*) FROM assets")
     iyi = say("SELECT count(*) FROM assets WHERE status = 'iyi'")
-    talep = say("SELECT count(*) FROM reports")
+    talep = say("SELECT count(*) FROM talepler")
     gorev = say("SELECT count(*) FROM assignments WHERE status = 'atandi'")
     bolge = say("SELECT count(*) FROM bolgeler")
     guzergah = say("SELECT count(*) FROM guzergahlar")

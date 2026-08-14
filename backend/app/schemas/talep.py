@@ -6,9 +6,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..models.asset import AssetStatus, AssetType
-from ..models.report import ReportStatus
+from ..models.talep import TalepStatus
 
-class ReportProperties(BaseModel):
+class TalepProperties(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -17,7 +17,7 @@ class ReportProperties(BaseModel):
     type: AssetType
     note: str | None
     photo_url: str | None
-    status: ReportStatus
+    status: TalepStatus
     reviewed_by: uuid.UUID | None
     reviewed_at: datetime | None
     review_note: str | None
@@ -30,7 +30,7 @@ class ReportProperties(BaseModel):
     # Edildi"yi baska turlu ogrenemezdi - gorunum hesabi bu alandan beslenir.
     asset_status: AssetStatus | None = None
     # Talebin temsil noktasi [lon, lat]; nokta-only'de `geometry` ile ayni
-    # degeri tasir (bkz. models/report.py).
+    # degeri tasir (bkz. models/talep.py).
     nokta: tuple[float, float] | None = None
     # Onaydan dogan varlik (varsa) su an aktif bir goreve mi bagli. Harita
     # pini de varlik dairesiyle AYNI atama noktasini gostersin diye.
@@ -58,15 +58,15 @@ class TalepGeometrisi(BaseModel):
         return [lon, lat]
 
 
-class ReportFeature(BaseModel):
+class TalepFeature(BaseModel):
     type: Literal["Feature"] = "Feature"
     geometry: TalepGeometrisi
-    properties: ReportProperties
+    properties: TalepProperties
 
     @classmethod
-    def from_row(cls, row) -> "ReportFeature":
-        report, geojson, longitude, latitude, asset_status, assigned = row
-        ozellikler = ReportProperties.model_validate(report)
+    def from_row(cls, row) -> "TalepFeature":
+        talep, geojson, longitude, latitude, asset_status, assigned = row
+        ozellikler = TalepProperties.model_validate(talep)
         ozellikler.asset_status = asset_status
         ozellikler.nokta = (longitude, latitude)
         ozellikler.assigned = assigned
@@ -76,16 +76,16 @@ class ReportFeature(BaseModel):
         )
 
 
-class ReportFeatureCollection(BaseModel):
+class TalepFeatureCollection(BaseModel):
     type: Literal["FeatureCollection"] = "FeatureCollection"
-    features: list[ReportFeature]
+    features: list[TalepFeature]
 
     @classmethod
-    def from_rows(cls, rows) -> "ReportFeatureCollection":
-        return cls(features=[ReportFeature.from_row(row) for row in rows])
+    def from_rows(cls, rows) -> "TalepFeatureCollection":
+        return cls(features=[TalepFeature.from_row(row) for row in rows])
 
 
-class ReportReview(BaseModel):
+class TalepReview(BaseModel):
     """Talebi onaylama/reddetme istegi. review_note red icin gerekce olabilir.
 
     `type` yalnizca ONAYDA anlamlidir: personel, vatandasin sectigi turu

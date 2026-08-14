@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..models.tur import TUR_GRUPLARI
 
-# Kod dogal anahtardir ve `assets.type` / `reports.type` icinde YASAR: sonradan
+# Kod dogal anahtardir ve `assets.type` / `talepler.type` icinde YASAR: sonradan
 # degistirilemez, bu yuzden dar tutulur (kucuk harf + alt cizgi). Bir tur kodu
 # bir kez yazildiktan sonra veritabanindaki tum kayitlarin anlamidir.
 KOD_DESENI = r"^[a-z][a-z0-9_]{1,31}$"

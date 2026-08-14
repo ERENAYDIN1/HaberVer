@@ -9,7 +9,7 @@ import {
   TALEP_GORUNUMLERI,
   ROZETLI_GORUNUMLER,
   type DurumRozeti,
-} from "../types/report";
+} from "../types/talep";
 import { EKIP_VARSAYILAN_RENK } from "./haritaPopup";
 
 /** Haritadaki isaretci goruntuleri: pin/glif/halka/rozet SVG uretimi, haritaya

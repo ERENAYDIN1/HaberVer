@@ -7,7 +7,7 @@ import {
   type AssetStatus,
   type AssetType,
 } from "../types/asset";
-import { TALEP_GORUNUMLERI, type TalepGorunumu } from "../types/report";
+import { TALEP_GORUNUMLERI, type TalepGorunumu } from "../types/talep";
 
 /** Haritanin katman gorunurlugu ve alt-filtreleri.
  *

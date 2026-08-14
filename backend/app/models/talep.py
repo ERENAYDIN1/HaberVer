@@ -11,17 +11,17 @@ from ..database import Base
 from .asset import AssetType
 
 
-class ReportStatus(str, enum.Enum):
+class TalepStatus(str, enum.Enum):
     beklemede = "beklemede"
     onaylandi = "onaylandi"
     reddedildi = "reddedildi"
 
 
-class Report(Base):
+class Talep(Base):
     """Vatandas tarafindan gonderilen talep. Onaylaninca bir Asset olusturulur;
     bu yeni varligin id'si created_asset_id'de tutulur."""
 
-    __tablename__ = "reports"
+    __tablename__ = "talepler"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -44,7 +44,7 @@ class Report(Base):
         Geometry(geometry_type="POINT", srid=4326, spatial_index=False),
         nullable=False,
     )
-    # Seklin temsil noktasi (bkz. migration 0008); nokta-only'de her zaman
+    # Temsil noktasi (bkz. migration 0008); nokta-only'de her zaman
     # `geometry`nin kendisidir. Harita pini, otomatik atamanin mesafe hesabi ve
     # yaka cozumlemesi BU kolonu okur ve oyle kalir - kaldirilmasi kazanci
     # olmayan genis bir degisiklik olurdu.
@@ -57,10 +57,12 @@ class Report(Base):
         nullable=False,
     )
     photo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    status: Mapped[ReportStatus] = mapped_column(
-        Enum(ReportStatus, name="report_status"),
+    # PG enum TIPININ adi `report_status` olarak KALIR: yalnizca Python sembolu
+    # yeniden adlandirildi, tip adini degistirmek kazanci olmayan ek bir riskti.
+    status: Mapped[TalepStatus] = mapped_column(
+        Enum(TalepStatus, name="report_status"),
         nullable=False,
-        server_default=ReportStatus.beklemede.value,
+        server_default=TalepStatus.beklemede.value,
     )
     # Onay/red bilgisi.
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
@@ -75,7 +77,7 @@ class Report(Base):
     )
     # Vatandas talebi kendi listesinden kaldirdiginda dolar. GERCEK SILME
     # DEGILDIR: onaylanmis bir talep silinseydi ondan olusan varlik, atamasi ve
-    # audit log kayitlari sahipsiz kalirdi. Yalnizca /reports/mine suzer.
+    # audit log kayitlari sahipsiz kalirdi. Yalnizca /talepler/mine suzer.
     reporter_hidden_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

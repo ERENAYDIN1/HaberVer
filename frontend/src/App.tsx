@@ -60,7 +60,7 @@ import MapStilKontrolu from "./components/MapStilKontrolu";
 import MapView, { type UcusHedefi } from "./components/MapView";
 import Modal from "./components/Modal";
 import PersonelYonetimi from "./components/PersonelYonetimi";
-import ReportDetayModal from "./components/ReportDetayModal";
+import TalepDetayModal from "./components/TalepDetayModal";
 import SahaEkipleri from "./components/SahaEkipleri";
 import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
@@ -104,14 +104,14 @@ import type { Bolge, BolgeTipi } from "./types/bolge";
 import {
   TALEP_DURUM_RENGI,
   TALEP_GORUNUMLERI,
-  REPORT_STATUS_LABELS,
+  TALEP_DURUM_ETIKETLERI,
   talepNoktasi,
-} from "./types/report";
+} from "./types/talep";
 import type {
   TalepGorunumu,
-  ReportFeature,
-  ReportFeatureCollection,
-} from "./types/report";
+  TalepFeature,
+  TalepFeatureCollection,
+} from "./types/talep";
 import { noktaAlandaMi, poligonSinirKutusu } from "./utils/geo";
 import { EKIP_VARSAYILAN_RENK } from "./utils/haritaPopup";
 import type { EkipDepartmanBilgisi } from "./utils/haritaPopup";
@@ -178,7 +178,7 @@ export default function App() {
    *  olarak alip yeniden kurulur. */
   const [sifirlamaNo, setSifirlamaNo] = useState(0);
   const [seciliId, setSeciliId] = useState<string | null>(null);
-  const [talepler, setTalepler] = useState<ReportFeature[]>([]);
+  const [talepler, setTalepler] = useState<TalepFeature[]>([]);
   const [seciliTalepId, setSeciliTalepId] = useState<string | null>(null);
   const [talepDurum, setTalepDurum] = useState<TalepGorunumu>(BASLANGIC.talepDurum);
   const [duzenlenen, setDuzenlenen] = useState<AssetFeature | null>(null);
@@ -792,14 +792,14 @@ export default function App() {
           return true;
         }),
       ])
-    ) as Record<TalepGorunumu, ReportFeature[]>;
+    ) as Record<TalepGorunumu, TalepFeature[]>;
   }, [talepGorunumleri, alandaMi, eslemeSorgu.data, talepDepartmani]);
 
   // Talep katmani: secili gorunumlerin talepleri id'ye gore tekillestirilir.
   // ALAN SECIMI haritayi daraltmaz, ama MUDURLUK alt-filtresi haritayi da
   // suzer: bu "sorgu" degil "hangi katman gorunsun" secimidir.
-  const talepKatmanVeri = useMemo<ReportFeatureCollection>(() => {
-    const gorulen = new Map<string, ReportFeature>();
+  const talepKatmanVeri = useMemo<TalepFeatureCollection>(() => {
+    const gorulen = new Map<string, TalepFeature>();
     for (const gorunum of TALEP_GORUNUMLERI) {
       if (!katmanDurumlari[gorunum]) continue;
       const filtre = talepDepartmani[gorunum];
@@ -1037,7 +1037,7 @@ export default function App() {
       secenekler: [
         {
           anahtar: d,
-          etiket: REPORT_STATUS_LABELS[d],
+          etiket: TALEP_DURUM_ETIKETLERI[d],
           renk: TALEP_DURUM_RENGI[d],
           secili: katmanDurumlari[d],
           sayi: talepGorunumleriAlanda[d].length,
@@ -1135,7 +1135,7 @@ export default function App() {
   }, [alanlariTemizle]);
 
   // Bildirimden talebe git.
-  const bildirimTalepaGit = useCallback((report: ReportFeature) => {
+  const bildirimTalepaGit = useCallback((report: TalepFeature) => {
     setSekme("talepler");
     setPanelAcik(true);
     setSeciliTalepId(report.properties.id);
@@ -1291,7 +1291,7 @@ export default function App() {
 
   // Secili talep: once panelin yukledigi listede, yoksa harita katmaninda
   // aranir; boylece hangi sekmede gorunurse gorunsun detayi acilabilir.
-  const seciliRapor = useMemo<ReportFeature | null>(() => {
+  const seciliRapor = useMemo<TalepFeature | null>(() => {
     if (!seciliTalepId) return null;
     return (
       talepler.find((r) => r.properties.id === seciliTalepId) ??
@@ -1299,7 +1299,7 @@ export default function App() {
       null
     );
   }, [talepler, talepKatmanVeri, seciliTalepId]);
-  const [detayRapor, setDetayRapor] = useState<ReportFeature | null>(null);
+  const [detayRapor, setDetayRapor] = useState<TalepFeature | null>(null);
 
   /** "Varlığı Yönet": talepten olusan varligin detay modalini acar. Hem harita
    *  popup'i hem talep detayi bunu cagirir; varlik yoksa talep detayina duser. */
@@ -1467,7 +1467,7 @@ export default function App() {
   const haritaBlogu = (
     <MapView
       assets={katmanlar.varliklar ? varlikKatmanVeri : undefined}
-      reports={katmanlar.talepler ? talepKatmanVeri : undefined}
+      talepler={katmanlar.talepler ? talepKatmanVeri : undefined}
       seciliTalepId={seciliTalepId}
       onTalepSec={talepSecildi}
       seciliId={seciliId}
@@ -2004,7 +2004,7 @@ export default function App() {
         }}
         onGit={varligaGit}
       />
-      <ReportDetayModal
+      <TalepDetayModal
         report={detayRapor}
         onKapat={() => setDetayRapor(null)}
         islemYetkisi={personel}
@@ -2012,7 +2012,7 @@ export default function App() {
         onIslemBitti={() => {
           setDetayRapor(null);
           setSeciliTalepId(null);
-          queryClient.invalidateQueries({ queryKey: ["reports"] });
+          queryClient.invalidateQueries({ queryKey: ["talepler"] });
           queryClient.invalidateQueries({ queryKey: ["assets"] });
           queryClient.invalidateQueries({ queryKey: ["saha"] });
         }}

@@ -1,8 +1,8 @@
 import { turAdi } from "../data/turSozlugu";
 import { ASSET_STATUS_LABELS } from "../types/asset";
 import type { AssetFeatureCollection } from "../types/asset";
-import { REPORT_STATUS_LABELS, talepNoktasi } from "../types/report";
-import type { ReportFeatureCollection } from "../types/report";
+import { TALEP_DURUM_ETIKETLERI, talepNoktasi } from "../types/talep";
+import type { TalepFeatureCollection } from "../types/talep";
 
 function indir(icerik: string, dosyaAdi: string, mimeType: string) {
   const blob = new Blob([icerik], { type: `${mimeType};charset=utf-8;` });
@@ -75,7 +75,7 @@ export function jsonIndir(data: AssetFeatureCollection) {
   );
 }
 
-export function talepCsvIndir(data: ReportFeatureCollection) {
+export function talepCsvIndir(data: TalepFeatureCollection) {
   const basliklar = [
     "id",
     "isim",
@@ -94,7 +94,7 @@ export function talepCsvIndir(data: ReportFeatureCollection) {
       p.id,
       p.name,
       turAdi(p.type),
-      REPORT_STATUS_LABELS[p.gorunum ?? p.status],
+      TALEP_DURUM_ETIKETLERI[p.gorunum ?? p.status],
       n?.[0] ?? null,
       n?.[1] ?? null,
       p.note,
@@ -109,7 +109,7 @@ export function talepCsvIndir(data: ReportFeatureCollection) {
   indir(icerik, `haberver-talepler-${zamanDamgasi()}.csv`, "text/csv");
 }
 
-export function talepJsonIndir(data: ReportFeatureCollection) {
+export function talepJsonIndir(data: TalepFeatureCollection) {
   indir(
     JSON.stringify(data, null, 2),
     `haberver-talepler-${zamanDamgasi()}.geojson`,

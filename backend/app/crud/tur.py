@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ..models.asset import Asset
 from ..models.departman import TurDepartman
 from ..models.log import LogAction
-from ..models.report import Report
+from ..models.talep import Talep
 from ..models.tur import Tur
 from ..models.user import User
 from ..schemas.tur import TurCreate, TurUpdate
@@ -40,7 +40,7 @@ def kullanim(db: Session, kod: str) -> dict[str, int]:
             select(func.count(Asset.id)).where(Asset.type == kod)
         ).scalar_one(),
         "talep": db.execute(
-            select(func.count(Report.id)).where(Report.type == kod)
+            select(func.count(Talep.id)).where(Talep.type == kod)
         ).scalar_one(),
     }
 
