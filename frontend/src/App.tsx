@@ -4,8 +4,7 @@ import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getAsset } from "./api/assets";
-import { bolgeler as bolgeleriGetir } from "./api/bolgeler";
-import { bolgeGuncelle } from "./api/bolgeler";
+import { CIZIM_ANAHTARLARI, cizimGuncelle } from "./api/cizimler";
 import {
   ekipGorevleri as ekipGorevleriGetir,
   havuz as havuzGetir,
@@ -67,8 +66,8 @@ import { VARSAYILAN_STIL, type HaritaStilId } from "./data/mapStyles";
 import { useAssets } from "./hooks/useAssets";
 import { useAlanSecimi } from "./hooks/useAlanSecimi";
 import { useTalepGorunumleri } from "./hooks/useTalepGorunumleri";
+import { useKayitliCizimler } from "./hooks/useKayitliCizimler";
 import { useSekilDuzenleme } from "./hooks/useSekilDuzenleme";
-import { useTalepSekilDuzenleme } from "./hooks/useTalepSekilDuzenleme";
 import {
   DEPARTMANSIZ,
   useKatmanlar,
@@ -342,7 +341,6 @@ export default function App() {
     setDetayBolgeId(null);
     setSeciliBolgeId(null);
     sekilDuzenlemeKapat();
-    talepSekilDuzenlemeKapat();
     // Kaydedilmis bolgeler silinmez, yalnizca katmanlari kapanir.
     setGizliBolgeler(new Set());
     setUcusHedefi({
@@ -561,11 +559,7 @@ export default function App() {
   );
   const eslemeSorgu = useTurDepartmanEslemesi();
 
-  const bolgeSorgu = useQuery({
-    queryKey: ["bolgeler"],
-    queryFn: bolgeleriGetir,
-    enabled: personel,
-  });
+  const bolgeSorgu = useKayitliCizimler(personel);
   /** Detay modalinin gosterecegi CANLI kayit: id state'te, veri sorguda.
    *  Kayit silinince (ya da kapsamdan cikinca) listeden duser ve modal
    *  kendiliginde kapanir. */
@@ -667,10 +661,16 @@ export default function App() {
   /** Harita etiketi uzerinden yeniden adlandirma; hata MapView'de yakalanir. */
   const bolgeAdiDegistir = useCallback(
     async (id: string, ad: string) => {
-      await bolgeGuncelle(id, { ad });
-      queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
+      // Etiket yalnizca id tasir; hangi uca gidilecegi kaydin listedeki
+      // tipinden cozulur.
+      const tip = bolgeSorgu.data?.find((b) => b.id === id)?.tip;
+      if (!tip) return;
+      await cizimGuncelle(tip, id, { ad });
+      for (const anahtar of CIZIM_ANAHTARLARI) {
+        queryClient.invalidateQueries({ queryKey: anahtar });
+      }
     },
-    [queryClient]
+    [queryClient, bolgeSorgu.data]
   );
 
   // --- Sekil (geometri) duzenleme ----------------------------------------
@@ -690,71 +690,11 @@ export default function App() {
   } = useSekilDuzenleme({
     bolgeler: bolgeSorgu.data,
     bolgeyeGit,
-    // Cizim/olcum VE talep sekli duzenlemesi ile ayni alt paneli paylasir.
-    onBaslarken: () => {
-      cizimVeOlcumuKapat();
-      talepSekilDuzenlemeKapat();
-    },
+    // Cizim/olcum ile ayni alt paneli paylasir.
+    onBaslarken: cizimVeOlcumuKapat,
   });
 
-  /** Talebin (cizgi/alan) haritada konumuna ucurur + secili yapar - `bolgeyeGit`
-   *  ile ayni desen. */
-  const raporaGit = useCallback(
-    (report: ReportFeature) => {
-      setSeciliTalepId(report.properties.id);
-      setSeciliId(onayliEsleme.rapordanVarliga.get(report.properties.id) ?? null);
-      katmaniAc("talepler");
-      const nokta = talepNoktasi(report);
-      if (report.geometry.type === "Point" || !nokta) {
-        if (nokta) {
-          setUcusHedefi({
-            anahtar: crypto.randomUUID(),
-            tip: "nokta",
-            merkez: nokta,
-            zoom: 16,
-          });
-        }
-        return;
-      }
-      const koordinatlar =
-        report.geometry.type === "LineString"
-          ? report.geometry.coordinates
-          : report.geometry.coordinates.flat();
-      setUcusHedefi({
-        anahtar: crypto.randomUUID(),
-        tip: "sinir",
-        bounds: poligonSinirKutusu(koordinatlar),
-      });
-    },
-    [onayliEsleme, katmaniAc]
-  );
 
-  const {
-    duzenleme: talepSekilDuzenleme,
-    hata: talepSekilHatasi,
-    kaydediliyor: talepSekilKaydediliyor,
-    genisletiliyor: talepSekilGenisletiliyor,
-    degismis: talepSekilDegismis,
-    geriAlinabilir: talepSekilGeriAlinabilir,
-    baslat: talepSekilDuzenlemeBaslat,
-    kapat: talepSekilDuzenlemeKapat,
-    degisti: talepSekilDegisti,
-    geriAl: talepSekilGeriAl,
-    kaydet: talepSekilKaydet,
-    genislet: talepSekilGenislet,
-  } = useTalepSekilDuzenleme({
-    talepler,
-    raporaGit,
-    onBaslarken: () => {
-      cizimVeOlcumuKapat();
-      sekilDuzenlemeKapat();
-    },
-    onKaydedildi: () => {
-      queryClient.invalidateQueries({ queryKey: ["reports"] });
-      queryClient.invalidateQueries({ queryKey: ["assets"] });
-      queryClient.invalidateQueries({ queryKey: ["saha"] });
-    },
-  });
 
   /** Tamamlanmis bir alani "görev bölgesi" olarak kaydetme formunu acar. */
   const alanKaydetIste = useCallback((alan: TamamlananAlan, sira: number) => {
@@ -1557,8 +1497,8 @@ export default function App() {
       onBolgeSec={bolgeSecildi}
       onBolgeDetay={setDetayBolgeId}
       onBolgeAdDegis={personel ? bolgeAdiDegistir : undefined}
-      sekilDuzenleme={sekilDuzenleme ?? talepSekilDuzenleme}
-      onSekilDegis={sekilDuzenleme ? sekilDegisti : talepSekilDegisti}
+      sekilDuzenleme={sekilDuzenleme}
+      onSekilDegis={sekilDegisti}
       // Yalnizca varlik ekleme kipinde kapatilir: buyuk bir bolgenin icine
       // tiklayarak varlik eklenebilmeli.
       bolgeTiklanabilir={!(panelAcik && sekme === "ekle" && ekleKipi === "varlik")}
@@ -1581,22 +1521,6 @@ export default function App() {
       genisletiliyor={sekilGenisletiliyor}
       onGeriAl={sekilGeriAl}
       geriAlinabilir={sekilGeriAlinabilir}
-      altOfset={aracOfseti}
-    />
-  ) : talepSekilDuzenleme ? (
-    <BolgeSekilPaneli
-      duzenleme={talepSekilDuzenleme}
-      degisti={talepSekilDegismis}
-      onVazgec={talepSekilDuzenlemeKapat}
-      onKaydet={talepSekilKaydet}
-      kaydediliyor={talepSekilKaydediliyor}
-      hata={talepSekilHatasi}
-      // Genisletme yalnizca ALAN (Polygon) taleplerde anlamli; cizgide
-      // BolgeSekilPaneli zaten bu bolumu gostermez (`duzenleme.tip==="cizgi"`).
-      onGenislet={talepSekilGenislet}
-      genisletiliyor={talepSekilGenisletiliyor}
-      onGeriAl={talepSekilGeriAl}
-      geriAlinabilir={talepSekilGeriAlinabilir}
       altOfset={aracOfseti}
     />
   ) : (
@@ -1764,7 +1688,7 @@ export default function App() {
         {/* Aktif sekmenin yuzen paneli: kenar cubugunun sagindan acilir. Sekil
             duzenlenirken gizlenir (secili sekme STATE'te durur, sekil
             kapatilinca panel oldugu yerden geri acilir). */}
-        {panelAcik && !sekilDuzenleme && !talepSekilDuzenleme && (
+        {panelAcik && !sekilDuzenleme && (
           <div className="absolute bottom-4 top-4 z-20 flex w-[360px] max-w-[calc(100vw_-_var(--kenar)_-_2rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur-sm transition-[left] duration-200 ease-out" style={{ left: "calc(var(--kenar) + 1rem)" }}>
             <div
               className={`flex shrink-0 items-center justify-between border-b px-3.5 py-2.5 ${SEKME_RENK_SINIFLARI[SEKME_TANIMLARI[sekme].renk].aktif}`}
@@ -1919,7 +1843,7 @@ export default function App() {
         <Sheet
           // Sekil duzenlenirken cekilir; secili sekme STATE'te durdugu icin
           // kaydet/vazgec/kapat sonrasi panel oldugu yerden geri acilir.
-          acik={panelAcik && !sekilDuzenleme && !talepSekilDuzenleme}
+          acik={panelAcik && !sekilDuzenleme}
           baslik={SEKME_TANIMLARI[sekme].etiket}
           onKapat={paneliKapat}
           altBosluk={ALT_CUBUK_YUKSEKLIGI}
@@ -2085,14 +2009,6 @@ export default function App() {
         onKapat={() => setDetayRapor(null)}
         islemYetkisi={personel}
         onVarligiYonet={personel ? talepVarligiYonet : undefined}
-        onSekilDuzenle={
-          personel
-            ? (report) => {
-                setDetayRapor(null);
-                talepSekilDuzenlemeBaslat(report);
-              }
-            : undefined
-        }
         onIslemBitti={() => {
           setDetayRapor(null);
           setSeciliTalepId(null);
@@ -2114,14 +2030,18 @@ export default function App() {
         // eski atamayi gosterirdi.
         onDegisti={() =>
           Promise.all([
-            queryClient.invalidateQueries({ queryKey: ["bolgeler"] }),
+            ...CIZIM_ANAHTARLARI.map((anahtar) =>
+              queryClient.invalidateQueries({ queryKey: anahtar })
+            ),
             queryClient.invalidateQueries({ queryKey: ["saha"] }),
           ])
         }
         onSilindi={() => {
           setDetayBolgeId(null);
           setSeciliBolgeId(null);
-          queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
+          for (const anahtar of CIZIM_ANAHTARLARI) {
+            queryClient.invalidateQueries({ queryKey: anahtar });
+          }
           queryClient.invalidateQueries({ queryKey: ["saha"] });
         }}
       />
@@ -2131,7 +2051,9 @@ export default function App() {
         taslak={bolgeTaslagi}
         onKapat={() => setBolgeTaslagi(null)}
         onKaydedildi={() => {
-          queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
+          for (const anahtar of CIZIM_ANAHTARLARI) {
+            queryClient.invalidateQueries({ queryKey: anahtar });
+          }
           // Yeni kayit otomatik atanmis olabilir (bkz. crud/bolge.py::create_bolge).
           queryClient.invalidateQueries({ queryKey: ["saha"] });
           // Sekil artik "Bölgeler" katmaninda; gecici cizim listesinde de

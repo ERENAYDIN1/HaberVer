@@ -86,45 +86,12 @@ export const ROZETLI_GORUNUMLER = TALEP_GORUNUMLERI.filter(
 );
 
 /* --- Talep sekli ---------------------------------------------------------
- * Vatandas nokta disinda CIZGI (yol catlagi) ve POLIGON (cukur alani) da
- * bildirebilir. Onaydan olusan VARLIK yine noktadir (talebin temsil noktasi):
- * envanter/atama/harita tek nokta uzerinden calisir, ham sekil talep
- * kaydinda bir belge olarak durur. */
+ * Vatandas YALNIZCA nokta isaretler. Cizgi/alan destegi kaldirildi (backend:
+ * migration 0016): isin bir hat ya da bolge boyunca uzandigini personel,
+ * onaydan sonra actigi bir guzergah/bolge kaydiyla soyler - vatandas formunda
+ * cizim, ogrenilmesi zor ve yanlis cizilmesi kolay bir adimdi. */
 
-export const TALEP_SEKILLERI = ["Point", "LineString", "Polygon"] as const;
-export type TalepSekilTipi = (typeof TALEP_SEKILLERI)[number];
-
-export const TALEP_SEKIL_ETIKETLERI: Record<TalepSekilTipi, string> = {
-  Point: "Nokta",
-  LineString: "Çizgi",
-  Polygon: "Alan",
-};
-
-/** Vatandas formundaki sade dil: teknik ad degil, ne ise yaradigi. */
-export const TALEP_SEKIL_ACIKLAMASI: Record<TalepSekilTipi, string> = {
-  Point: "Tek bir yer",
-  LineString: "Bir hat boyunca",
-  Polygon: "Bir bölge içinde",
-};
-
-export interface LineStringGeometry {
-  type: "LineString";
-  coordinates: [number, number][];
-}
-
-export interface TalepPolygonGeometry {
-  type: "Polygon";
-  /** Tek dis halka; ic halka ("delik") vatandas formunda desteklenmez. */
-  coordinates: [number, number][][];
-}
-
-export type TalepGeometrisi =
-  | PointGeometry
-  | LineStringGeometry
-  | TalepPolygonGeometry;
-
-/** Elle cizim icin nokta siniri; backend'deki MAKS_TALEP_NOKTASI ile ayni. */
-export const MAKS_TALEP_NOKTASI = 500;
+export type TalepGeometrisi = PointGeometry;
 
 export interface ReportProperties {
   id: string;
@@ -145,8 +112,8 @@ export interface ReportProperties {
    *  varlik listesini goremedigi icin "Tamir Edildi"yi baska turlu
    *  ogrenemezdi - vatandas ekraninin gorunum hesabi bunu okur. */
   asset_status: AssetStatus | null;
-  /** Seklin temsil noktasi [lon, lat]; cizgi/alan taleplerde harita pini ve
-   *  mesafe hesabi bunu kullanir. */
+  /** Talebin temsil noktasi [lon, lat]. Harita pini ve mesafe hesabi bunu
+   *  okur; onaylanmis talepte olusan varligin (duzeltilmis) konumunu tasir. */
   nokta: [number, number] | null;
   /** Onaydan dogan varlik (varsa) su an aktif bir goreve mi bagli. */
   assigned: boolean;
@@ -161,18 +128,12 @@ export interface ReportFeature {
   properties: ReportProperties;
 }
 
-/** Talebin harita pininin oturacagi nokta. Temsil noktasi backend'den gelir;
- *  gelmiyorsa (eski onbellek) nokta geometriden dusulur. */
+/** Talebin harita pininin oturacagi nokta. `nokta` alani once okunur cunku
+ *  onaylanmis talepte VARLIGIN (personelin duzeltmis olabilecegi) konumunu
+ *  tasir; `geometry` vatandasin gonderdigi ham kayit olarak durur. */
 export function talepNoktasi(f: ReportFeature): [number, number] | null {
   if (f.properties.nokta) return f.properties.nokta;
-  return f.geometry.type === "Point"
-    ? (f.geometry.coordinates as [number, number])
-    : null;
-}
-
-/** Sekil cizgi/alan mi (haritada ayrica cizilmesi gerekir)? */
-export function sekilliTalep(f: ReportFeature): boolean {
-  return f.geometry.type !== "Point";
+  return f.geometry.coordinates as [number, number];
 }
 
 export interface ReportFeatureCollection {

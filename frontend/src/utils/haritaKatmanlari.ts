@@ -20,7 +20,6 @@ export const SOURCE_ID = "assets";
 export const REPORTS_SOURCE_ID = "reports";
 /** Cizgi/alan taleplerin HAM SEKLI, ayri kaynakta. Pin katmanlari
  *  `REPORTS_SOURCE_ID`'de nokta geometrisiyle calismaya devam eder. */
-export const TALEP_SEKIL_SOURCE_ID = "talep-sekil";
 export const CIZIM_SOURCE_ID = "cizim";
 export const TAMAMLANAN_SOURCE_ID = "tamamlanan-alanlar";
 /** Kaydedilmis bolgeler: anlik secimlerden ayri kaynak, secim temizlenince
@@ -152,36 +151,6 @@ export function talepKatmanlari(map: maplibregl.Map): void {
         ISARETCI.talepGolgeYaricap,
         TALEP_OPAKLIK_IFADESI
       ) as never,
-    });
-  }
-}
-
-/** Pinlerin ALTINDA cizilir: sekil isin buyuklugunu anlatir, pin isin
- *  kendisidir. Renk kaydin gorunum rengidir; `renk` ozelligini MapView yazar. */
-export function talepSekilKatmanlari(map: maplibregl.Map): void {
-  if (!map.getSource(TALEP_SEKIL_SOURCE_ID)) {
-    map.addSource(TALEP_SEKIL_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
-
-    map.addLayer({
-      id: "talep-sekil-fill",
-      type: "fill",
-      source: TALEP_SEKIL_SOURCE_ID,
-      filter: ["==", ["geometry-type"], "Polygon"],
-      paint: {
-        "fill-color": ["get", "renk"],
-        "fill-opacity": ["*", 0.16, ["coalesce", ["get", "opaklik"], 1]],
-      },
-    });
-    map.addLayer({
-      id: "talep-sekil-yol",
-      type: "line",
-      source: TALEP_SEKIL_SOURCE_ID,
-      layout: { "line-cap": "round", "line-join": "round" },
-      paint: {
-        "line-color": ["get", "renk"],
-        "line-width": 3,
-        "line-opacity": ["coalesce", ["get", "opaklik"], 1],
-      },
     });
   }
 }

@@ -49,10 +49,8 @@ export function onayliEslemeKur(onaylananlar: readonly ReportFeature[]): OnayliE
  *  koordinatini duzeltince (vatandas yanlis yere isaretlemis olabilir) harita
  *  isaretcisi de tasinmali. Ham talep noktasi veritabaninda oldugu gibi kalir,
  *  yalnizca gosterim isin guncel yerini izler. **Yalnizca `properties.nokta`
- *  (pinin oturdugu yer) degistirilir, `geometry` DEGIL** - cizgi/alan
- *  taleplerde ham sekli tasiyan odur ve `talep-sekil` katmani onu okur;
- *  geometry'yi de varligin (her zaman POINT olan) konumuyla degistirmek
- *  onaylanmis her cizgi/alani noktaya cevirirdi. */
+ *  (pinin oturdugu yer) degistirilir, `geometry` DEGIL** - `geometry`
+ *  vatandasin gonderdigi kaydin kendisidir ve bir belge olarak durur. */
 export function gorunumlereAyir(
   durumaGoreTalepler: Record<ReportStatus, readonly ReportFeature[] | undefined>,
   taleptenDoganVarliklar: readonly AssetFeature[] | undefined

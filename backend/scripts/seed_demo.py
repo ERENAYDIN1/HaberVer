@@ -9,7 +9,8 @@ Kullanim (backend container icinde):
     python scripts/seed_demo.py --temizle  # once sil, sonra ekle
     python scripts/seed_demo.py --sil      # yalnizca sil
 
-Silme, kaydedilmis TUM alanlari/guzergahlari (gorev_bolgeleri) da bosaltir.
+Silme, kaydedilmis TUM alanlari (bolgeler) ve guzergahlari (guzergahlar) da
+bosaltir.
 
 Hesap parolalari bu dosyada aciktir; bu verinin uretime gitmemesi gerekir.
 """
@@ -156,30 +157,15 @@ TALEPLER = [
      "Kaldırımın altından sürekli su sızıyor, yol sürekli ıslak ve kaygan."),
     ("Şirinevler'de kaldırıma bırakılmış moloz", "diger", 28.8460, 40.9930,
      "Kaldırımın tamamını kapatan bir inşaat molozu yığını var, yürünemiyor."),
-]
-
-# --- Sekilli talepler: (ad, tip, geojson, aciklama) --------------------------
-#
-# Vatandas yalnizca nokta isaretlemek zorunda degil: bir yol catlagi CIZGI, bir
-# cukur alani POLIGON olarak bildirilir. Ikisi de burada var ki harita
-# katmani ve temsil noktasi hesabi (pin nereye duser) elle gorulebilsin.
-SEKILLI_TALEPLER = [
-    (
-        "Barbaros Bulvarı'nda uzun asfalt çatlağı",
-        "yol",
-        '{"type":"LineString","coordinates":'
-        '[[29.0043,41.0468],[29.0051,41.0452],[29.0058,41.0436],[29.0064,41.0421]]}',
-        "Bulvar boyunca yaklaşık 400 metrelik bir çatlak var, her yağmurda "
-        "büyüyor. Tek bir noktayı işaretlemek yetmiyor, hattın tamamı bozuk.",
-    ),
-    (
-        "Fenerbahçe Parkı'nda kuruyan çim alanı",
-        "sulama",
-        '{"type":"Polygon","coordinates":[[[29.0432,40.9712],[29.0468,40.9714],'
-        '[29.0471,40.9694],[29.0436,40.9691],[29.0432,40.9712]]]}',
-        "Parkın bu bölümündeki çim tamamen sarardı, sulama fıskiyeleri "
-        "çalışmıyor gibi görünüyor.",
-    ),
+    # Bu iki is bir hat/alan boyunca uzaniyor; vatandas yalnizca nokta
+    # isaretler (bkz. migration 0016), isin buyuklugunu personel onaydan sonra
+    # actigi bolge/guzergah kaydiyla tanimlar.
+    ("Barbaros Bulvarı'nda uzun asfalt çatlağı", "yol", 29.0051, 41.0444,
+     "Bulvar boyunca yaklaşık 400 metrelik bir çatlak var, her yağmurda "
+     "büyüyor."),
+    ("Fenerbahçe Parkı'nda kuruyan çim alanı", "sulama", 29.0452, 40.9703,
+     "Parkın bu bölümündeki çim tamamen sarardı, sulama fıskiyeleri "
+     "çalışmıyor gibi görünüyor."),
 ]
 
 # --- Reddedilmis talepler: (ad, tip, lon, lat, aciklama, gerekce) ------------
@@ -273,9 +259,7 @@ ATAMALAR = [
 
 TUM_VARLIK_ADLARI = [a[0] for a in BAKIM_VARLIKLARI] + [a[0] for a in IYI_VARLIKLAR]
 TUM_TALEP_ADLARI = (
-    [r[0] for r in TALEPLER]
-    + [r[0] for r in SEKILLI_TALEPLER]
-    + [r[0] for r in REDDEDILEN_TALEPLER]
+    [r[0] for r in TALEPLER] + [r[0] for r in REDDEDILEN_TALEPLER]
 )
 TUM_EMAILLER = [k[0] for k in KULLANICILAR]
 
@@ -324,9 +308,12 @@ def sil(db) -> None:
     # secmek yerine TAMAMI silinir. Demo ortamini gercekten bosaltmanin tek
     # yolu bu: aksi halde silinen ekiplerden arta kalan (worker_id NULL'a
     # dusmus) elle cizilmis bolgeler haritada oylece kalirdi.
-    bolge = db.execute(sa.text("DELETE FROM gorev_bolgeleri")).rowcount
+    bolge = db.execute(sa.text("DELETE FROM bolgeler")).rowcount
+    guzergah = db.execute(sa.text("DELETE FROM guzergahlar")).rowcount
     db.commit()
-    print(f"Demo veri silindi (kaydedilmis alan/guzergah: {bolge}).")
+    print(
+        f"Demo veri silindi (kaydedilmis alan: {bolge}, guzergah: {guzergah})."
+    )
 
 
 def ekle(db) -> None:
@@ -442,35 +429,6 @@ def ekle(db) -> None:
             )
         )
 
-    # Cizgi/alan talepleri. Temsil noktasi PostGIS tarafinda turetilir
-    # (crud/report.py::temsil_nokta ile ayni kural): cizgide hattin ortasi,
-    # alanda seklin ICINE dusen bir nokta.
-    for ad, tip, geojson, note in SEKILLI_TALEPLER:
-        db.execute(
-            sa.text(
-                """
-                INSERT INTO reports (reporter_id, name, type, note, geometry, nokta)
-                SELECT (SELECT id FROM users WHERE email = 'vatandas1@haberver.com'),
-                       :ad, :tip, :note,
-                       ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326),
-                       CASE ST_GeometryType(ST_GeomFromGeoJSON(:geojson))
-                           WHEN 'ST_LineString' THEN ST_LineInterpolatePoint(
-                               ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326), 0.5)
-                           ELSE ST_PointOnSurface(
-                               ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326))
-                       END
-                WHERE NOT EXISTS (SELECT 1 FROM reports WHERE name = :ad)
-                  AND EXISTS (SELECT 1 FROM users
-                              WHERE email = 'vatandas1@haberver.com')
-                """
-            ).bindparams(
-                sa.bindparam("ad", ad, type_=sa.String),
-                sa.bindparam("tip", tip, type_=sa.String),
-                sa.bindparam("note", note, type_=sa.String),
-                sa.bindparam("geojson", geojson, type_=sa.String),
-            )
-        )
-
     # Reddedilmis talepler. Inceleyen personel calisan1; kayit dogrudan
     # 'reddedildi' durumunda yazilir (onay akisi bir varlik uretirdi, red
     # uretmez -- bu yuzden ek bir temizlik bagi olusmaz).
@@ -521,35 +479,37 @@ def ekle(db) -> None:
             )
         )
 
-    # Kaydedilmis bolgeler/guzergahlar. Alanlar MULTIPOLYGON'a cevrilir
-    # (sutun tek tipte iki geometri tutuyor, bkz. models/bolge.py); cizgiler
-    # oldugu gibi yazilir.
+    # Kaydedilmis bolgeler ve guzergahlar artik ayri tablolarda: tip hangi
+    # tabloya yazilacagini secer, sutunun icinde tasinmaz. Alanlar
+    # MULTIPOLYGON'a cevrilir (sutun tipi bunu bekler).
     for ad, aciklama, tip, renk, departman, geojson, ekip in BOLGELER:
+        alan = tip == "alan"
+        tablo = "bolgeler" if alan else "guzergahlar"
+        geom = (
+            "ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326))"
+            if alan
+            else "ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326)"
+        )
         db.execute(
             sa.text(
-                """
-                INSERT INTO gorev_bolgeleri
-                       (ad, aciklama, tip, renk, departman, geom,
+                f"""
+                INSERT INTO {tablo}
+                       (ad, aciklama, renk, departman, geom,
                         worker_id, assigned_at)
-                SELECT :ad, :aciklama, CAST(:tip AS bolge_tipi), :renk,
-                       :departman,
-                       CASE WHEN :tip = 'alan'
-                            THEN ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326))
-                            ELSE ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326)
-                       END,
+                SELECT :ad, :aciklama, :renk, :departman,
+                       {geom},
                        u.id,
                        CASE WHEN u.id IS NULL THEN NULL ELSE now() END
                   FROM (SELECT 1) AS d
-                  -- LEFT JOIN: atanmamis bolge (ekip = NULL) de yazilabilsin.
+                  -- LEFT JOIN: atanmamis kayit (ekip = NULL) de yazilabilsin.
                   LEFT JOIN users u ON u.email = :ekip
                  WHERE NOT EXISTS (
-                     SELECT 1 FROM gorev_bolgeleri WHERE ad = :ad
+                     SELECT 1 FROM {tablo} WHERE ad = :ad
                  )
                 """
             ).bindparams(
                 sa.bindparam("ad", ad, type_=sa.String),
                 sa.bindparam("aciklama", aciklama, type_=sa.String),
-                sa.bindparam("tip", tip, type_=sa.String),
                 sa.bindparam("renk", renk, type_=sa.String),
                 sa.bindparam("departman", departman, type_=sa.String),
                 sa.bindparam("geojson", geojson, type_=sa.String),
@@ -579,11 +539,12 @@ def ekle(db) -> None:
     iyi = say("SELECT count(*) FROM assets WHERE status = 'iyi'")
     talep = say("SELECT count(*) FROM reports")
     gorev = say("SELECT count(*) FROM assignments WHERE status = 'atandi'")
-    bolge = say("SELECT count(*) FROM gorev_bolgeleri")
+    bolge = say("SELECT count(*) FROM bolgeler")
+    guzergah = say("SELECT count(*) FROM guzergahlar")
     print(
         f"Demo veri hazır: {kullanici} kullanıcı, {varlik} varlık ({iyi} iyi / "
         f"{varlik - iyi} bakım bekliyor), {talep} talep, {gorev} aktif görev, "
-        f"{bolge} bölge/güzergâh."
+        f"{bolge} bölge, {guzergah} güzergâh."
     )
 
 

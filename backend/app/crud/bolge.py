@@ -1,30 +1,33 @@
-"""Kaydedilmis gorev bolgeleri / guzergahlar (bkz. models/bolge.py)."""
+"""Kaydedilmis gorev bolgeleri (bkz. models/bolge.py).
+
+Guzergahlarin (cizgi) karsiligi crud/guzergah.py'dedir: iki tablo ayrildigi
+icin buradaki her sorgu tek bir geometri tipiyle calisir, tipe gore dallanma
+yok.
+"""
 
 import json
 import uuid
 from datetime import datetime, timezone
 
 from geoalchemy2 import Geography
-from sqlalchemy import case, cast, func, or_, select
+from sqlalchemy import cast, func, or_, select
 from sqlalchemy.orm import Session
 
-from ..models.bolge import Bolge, BolgeTipi
+from ..models.bolge import Bolge
 from ..models.log import LogAction
 from ..models.user import User
 from ..schemas.bolge import BolgeCikti, BolgeGirdi, BolgeGuncelle
 from . import assignment as assignment_crud
 from . import yaka as yaka_crud
-from .geo import cizgi_geojson, halkalar_geojson
+from .geo import halkalar_geojson
 from .log import add_log
 
 
-def _geometri(tip: BolgeTipi, noktalar: list[list[tuple[float, float]]]):
-    """Nokta listesini tipine gore PostGIS geometrisine cevirir. Alanlar
-    MakeValid'den gecirilir: kullanicinin kendi kendini kesen bir poligon
-    cizmesi (ayni yerin uzerinden ikinci kez gecmesi) gecersiz geometri
-    uretir. Hem yeni kayitta hem sekil duzenlemede ayni yol kullanilir."""
-    if tip is BolgeTipi.cizgi:
-        return func.ST_SetSRID(func.ST_GeomFromGeoJSON(cizgi_geojson(noktalar[0])), 4326)
+def _geometri(noktalar: list[list[tuple[float, float]]]):
+    """Halka listesini PostGIS MULTIPOLYGON'una cevirir. MakeValid'den
+    gecirilir: kullanicinin kendi kendini kesen bir poligon cizmesi (ayni yerin
+    uzerinden ikinci kez gecmesi) gecersiz geometri uretir. Hem yeni kayitta
+    hem sekil duzenlemede ayni yol kullanilir."""
     return func.ST_Multi(
         func.ST_CollectionExtract(
             func.ST_MakeValid(
@@ -38,16 +41,10 @@ def _geometri(tip: BolgeTipi, noktalar: list[list[tuple[float, float]]]):
 
 
 def _temsil_noktasi():
-    """Kaydin tek temsil noktasi: alan -> icinde garanti bir nokta, cizgi ->
-    hattin ortasi. Mesafe/yaka hesabi (otomatik atama) ve arayuzdeki "bu is
-    hangi yakada" rozeti ayni noktayi okur."""
-    return case(
-        (
-            Bolge.tip == BolgeTipi.alan,
-            func.ST_PointOnSurface(Bolge.geom),
-        ),
-        else_=func.ST_LineInterpolatePoint(Bolge.geom, 0.5),
-    )
+    """Kaydin tek temsil noktasi: alanin icinde garanti bir nokta. Mesafe/yaka
+    hesabi (otomatik atama) ve arayuzdeki "bu is hangi yakada" rozeti ayni
+    noktayi okur."""
+    return func.ST_PointOnSurface(Bolge.geom)
 
 
 def _select_with_geo():
@@ -60,7 +57,6 @@ def _select_with_geo():
             Bolge,
             func.ST_AsGeoJSON(Bolge.geom).label("gj"),
             func.ST_Area(cast(Bolge.geom, Geography)).label("alan_m2"),
-            func.ST_Length(cast(Bolge.geom, Geography)).label("uzunluk_m"),
             func.coalesce(ekip.c.full_name, ekip.c.email).label("worker_ad"),
             yaka_crud.nokta_yakasi_ifadesi(_temsil_noktasi()).label("yaka"),
         )
@@ -69,35 +65,28 @@ def _select_with_geo():
     )
 
 
-def _noktalar(gj: str, tip: BolgeTipi) -> list[list[tuple[float, float]]]:
-    """GeoJSON metnini API'nin halka-listesi sekline cevirir. Alanlarda her
-    parcanin YALNIZCA dis halkasi dondurulur: kaydedilen bolgeler kullanicinin
-    cizdigi basit alanlardir, delikli poligon uretilmez."""
+def _noktalar(gj: str) -> list[list[tuple[float, float]]]:
+    """GeoJSON metnini API'nin halka-listesi sekline cevirir. Her parcanin
+    YALNIZCA dis halkasi dondurulur: kaydedilen bolgeler kullanicinin cizdigi
+    basit alanlardir, delikli poligon uretilmez."""
     geo = json.loads(gj)
-    if tip is BolgeTipi.cizgi:
-        return [[(float(x), float(y)) for x, y in geo["coordinates"]]]
     parcalar = (
-        geo["coordinates"]
-        if geo["type"] == "MultiPolygon"
-        else [geo["coordinates"]]
+        geo["coordinates"] if geo["type"] == "MultiPolygon" else [geo["coordinates"]]
     )
     return [[(float(x), float(y)) for x, y in parca[0]] for parca in parcalar]
 
 
 def _cikti(row) -> BolgeCikti:
-    bolge, gj, alan_m2, uzunluk_m, worker_ad, yaka = row
-    alan = bolge.tip is BolgeTipi.alan
+    bolge, gj, alan_m2, worker_ad, yaka = row
     return BolgeCikti(
         yaka=yaka,
         id=bolge.id,
         ad=bolge.ad,
         aciklama=bolge.aciklama,
-        tip=bolge.tip,
         renk=bolge.renk,
         departman=bolge.departman,
-        noktalar=_noktalar(gj, bolge.tip),
-        alan_m2=float(alan_m2) if alan and alan_m2 is not None else None,
-        uzunluk_m=float(uzunluk_m) if not alan and uzunluk_m is not None else None,
+        noktalar=_noktalar(gj),
+        alan_m2=float(alan_m2) if alan_m2 is not None else None,
         worker_id=bolge.worker_id,
         worker_ad=worker_ad,
         assigned_at=bolge.assigned_at,
@@ -117,7 +106,7 @@ def departman_kosulu(departman: str | None):
 def list_bolgeler(
     db: Session, departman: str | None = None, sinirli: bool = False
 ) -> list[BolgeCikti]:
-    """Kaydedilmis tum bolgeler/guzergahlar.
+    """Kaydedilmis tum gorev bolgeleri.
 
     `sinirli=True` (admin disi personel) ise yalnizca `departman`in ve genel
     kayitlar doner: bir mudurlugun cizdigi calisma alanini digeri gormemeli,
@@ -145,10 +134,9 @@ def create_bolge(db: Session, data: BolgeGirdi, actor: User | None) -> BolgeCikt
     bolge = Bolge(
         ad=data.ad,
         aciklama=data.aciklama,
-        tip=data.tip,
         renk=data.renk,
         departman=data.departman,
-        geom=_geometri(data.tip, data.noktalar),
+        geom=_geometri(data.noktalar),
         created_by=actor.id if actor else None,
     )
     db.add(bolge)
@@ -160,7 +148,7 @@ def create_bolge(db: Session, data: BolgeGirdi, actor: User | None) -> BolgeCikt
         entity_type="bolge",
         entity_id=bolge.id,
         entity_name=bolge.ad,
-        detail="Alan" if data.tip is BolgeTipi.alan else "Çizgi",
+        detail="Alan",
         departman=bolge.departman,
     )
     # Bir bolge de tekil bakim isi gibi bir gorevdir: kaydedilir kaydedilmez
@@ -178,13 +166,13 @@ def update_bolge(
     if bolge is None:
         return None
     payload = data.model_dump(exclude_unset=True)
-    # Sekil (geometri) ayri ele alinir: ham nokta listesi degil, tipe gore
-    # kurulmus bir PostGIS ifadesi yazilir. Kaydin tipi degismez.
+    # Sekil (geometri) ayri ele alinir: ham nokta listesi degil, kurulmus bir
+    # PostGIS ifadesi yazilir.
     noktalar = payload.pop("noktalar", None)
     for alan, deger in payload.items():
         setattr(bolge, alan, deger)
     if noktalar is not None:
-        bolge.geom = _geometri(bolge.tip, noktalar)
+        bolge.geom = _geometri(noktalar)
     if payload or noktalar is not None:
         add_log(
             db,
@@ -224,7 +212,7 @@ def ata(
     worker: User | None,
     actor: User | None,
 ) -> BolgeCikti | None:
-    """Bolgeyi/guzergahi bir ekibe atar; worker None ise atamayi kaldirir.
+    """Bolgeyi bir ekibe atar; worker None ise atamayi kaldirir.
 
     ELLE atama kapasiteyi de yaka/mudurluk kisitlarini da ASMAYA IZIN VERIR:
     yetki personeldedir, arayuz yalnizca uyarir (varlik atamasindaki desenle
@@ -266,8 +254,8 @@ def tamamla(
     tamamlandi: bool,
     actor: User | None,
 ) -> BolgeCikti | None:
-    """Bolgeyi/guzergahi tamamlandi (ya da tamamlandi=False ile yeniden acik)
-    isaretler. Kayit silinmez: ekip yanlislikla kapattigi isi geri alabilsin."""
+    """Bolgeyi tamamlandi (ya da tamamlandi=False ile yeniden acik) isaretler.
+    Kayit silinmez: ekip yanlislikla kapattigi isi geri alabilsin."""
     bolge = db.get(Bolge, bolge_id)
     if bolge is None:
         return None
@@ -283,8 +271,8 @@ def tamamla(
         detail="Tamamlandı" if tamamlandi else "Tamamlama geri alındı",
         departman=bolge.departman,
     )
-    # Tamamlanan is kapasite acar: bekleyen varlik/bolge kuyruklari yeniden
-    # dagitilir (tekil gorevlerin tamamlanmasindaki desenle ayni).
+    # Tamamlanan is kapasite acar: bekleyen varlik/bolge/guzergah kuyruklari
+    # yeniden dagitilir (tekil gorevlerin tamamlanmasindaki desenle ayni).
     if tamamlandi:
         assignment_crud.bekleyen_gorevleri_dagit(db)
     db.commit()

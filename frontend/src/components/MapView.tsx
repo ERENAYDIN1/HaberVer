@@ -11,9 +11,6 @@ import type { AssetFeatureCollection } from "../types/asset";
 import {
   HALKALI_GORUNUMLER,
   ROZETLI_GORUNUMLER,
-  TALEP_DURUM_RENGI,
-  TALEP_GIYSISI,
-  sekilliTalep,
   talepNoktasi,
 } from "../types/report";
 import type { ReportFeatureCollection } from "../types/report";
@@ -47,7 +44,6 @@ import {
   OLCUM_RENK,
   OLCUM_SOURCE_ID,
   REPORTS_SOURCE_ID,
-  TALEP_SEKIL_SOURCE_ID,
   ROZET_MINZOOM,
   SEKIL_SOURCE_ID,
   SOURCE_ID,
@@ -56,7 +52,6 @@ import {
   cizimKatmanlari,
   dinamikOnizlemeKatmanlari,
   talepKatmanlari,
-  talepSekilKatmanlari,
   olcumKatmanlari,
   sekilDuzenlemeKatmanlari,
   secilenAlanKatmanlari,
@@ -929,27 +924,17 @@ export default function MapView({
     );
   }
 
-  /** Talepler iki kaynaga birden yazilir: `reports` her kayit NOKTA
-   *  geometrisiyle (seklin temsil noktasi, pin/glif/halka/rozet zinciri
-   *  bunu okur), `talep-sekil` yalnizca cizgi/alan kayitlarinin HAM SEKLI. */
+  /** Talepler tek kaynaga yazilir: her kayit temsil noktasiyla (pin/glif/
+   *  halka/rozet zinciri bunu okur). Vatandas yalnizca nokta isaretledigi icin
+   *  ayrica cizilecek bir ham sekil yok. */
   function reportsUygula(map: maplibregl.Map) {
     const noktaSource = map.getSource(REPORTS_SOURCE_ID) as
       | maplibregl.GeoJSONSource
       | undefined;
-    const sekilSource = map.getSource(TALEP_SEKIL_SOURCE_ID) as
-      | maplibregl.GeoJSONSource
-      | undefined;
-
-    // Sekli duzenlenen talep kendi taslak kaynaginda cizilir, burada atlanir
-    // (bolgelerdeki `duzenlenenId` filtresiyle ayni kural).
-    const duzenlenenId = sekilDuzenlemeRef.current?.id;
-    const kayitlar = (reportsRef.current?.features ?? []).filter(
-      (f) => f.properties.id !== duzenlenenId
-    );
 
     noktaSource?.setData({
       type: "FeatureCollection",
-      features: kayitlar.flatMap((f) => {
+      features: (reportsRef.current?.features ?? []).flatMap((f) => {
         const nokta = talepNoktasi(f);
         if (!nokta) return [];
         return [
@@ -960,24 +945,6 @@ export default function MapView({
           },
         ];
       }),
-    });
-
-    sekilSource?.setData({
-      type: "FeatureCollection",
-      features: kayitlar
-        .filter(sekilliTalep)
-        .map((f) => {
-          const gorunum = f.properties.gorunum ?? f.properties.status;
-          return {
-            type: "Feature" as const,
-            geometry: f.geometry as unknown as GeoJSON.Geometry,
-            properties: {
-              id: f.properties.id,
-              renk: TALEP_DURUM_RENGI[gorunum],
-              opaklik: TALEP_GIYSISI[gorunum].opaklik,
-            },
-          };
-        }),
     });
   }
 
@@ -1231,7 +1198,6 @@ export default function MapView({
 
     // Talep sekilleri en altta: isin BUYUKLUGUNU anlatir, uzerindeki daireler/
     // pinler isin KENDISIDIR.
-    talepSekilKatmanlari(map);
     varlikKatmanlari(map);
     talepKatmanlari(map);
     secilenAlanKatmanlari(map);

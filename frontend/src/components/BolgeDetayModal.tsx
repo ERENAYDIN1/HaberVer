@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { bolgeAta, bolgeSil } from "../api/bolgeler";
+import { cizimAta, cizimSil } from "../api/cizimler";
 import { useDepartmanlar } from "../hooks/useDepartmanlar";
 import { departmanBul } from "../types/departman";
 import { BOLGE_TIP_ETIKETLERI, type Bolge } from "../types/bolge";
@@ -70,7 +70,7 @@ export default function BolgeDetayModal({
     setIslemde(true);
     setHata(null);
     try {
-      await bolgeAta(bolge.id, workerId);
+      await cizimAta(bolge.tip, bolge.id, workerId);
       await onDegisti?.();
     } catch (e) {
       setHata((e as Error).message);
@@ -84,7 +84,7 @@ export default function BolgeDetayModal({
     setIslemde(true);
     setHata(null);
     try {
-      await bolgeSil(bolge.id);
+      await cizimSil(bolge.tip, bolge.id);
       onSilindi?.();
     } catch (e) {
       setHata((e as Error).message);

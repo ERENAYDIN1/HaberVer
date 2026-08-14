@@ -7,7 +7,7 @@ import { gorevDurumu } from "../api/saha";
 import { useKonumCozumu } from "../hooks/useSinirlar";
 import { turAdi, turKodlari } from "../data/turSozlugu";
 import { durumEtiketi, type AssetType } from "../types/asset";
-import { sekilliTalep, talepNoktasi } from "../types/report";
+import { talepNoktasi } from "../types/report";
 import type { ReportFeature } from "../types/report";
 import { AksiyonButonu, AksiyonSeridi } from "./Aksiyonlar";
 import { IconCheck } from "./icons";
@@ -24,9 +24,6 @@ interface ReportDetayModalProps {
   /** Onaylanmis talepte "Varlığı Yönet": ondan olusan varligin detay/yonetim
    *  modalini acar (haritadaki popup ile ayni islem). */
   onVarligiYonet?: (raporId: string) => void;
-  /** Yalnizca cizgi/alan taleplerde: haritada koseleri surukleyerek duzeltme
-   *  modunu acar (kaydedilmis bolge/guzergah duzenlemesiyle ayni mekanizma). */
-  onSekilDuzenle?: (report: ReportFeature) => void;
 }
 
 export default function ReportDetayModal({
@@ -35,7 +32,6 @@ export default function ReportDetayModal({
   islemYetkisi = false,
   onIslemBitti,
   onVarligiYonet,
-  onSekilDuzenle,
 }: ReportDetayModalProps) {
   const koord = report ? talepNoktasi(report) : null;
   const { data: konum } = useKonumCozumu(koord ? koord[1] : null, koord ? koord[0] : null);
@@ -153,22 +149,6 @@ export default function ReportDetayModal({
           </div>
         )}
 
-        {/* Yalnizca beklemede + cizgi/alan taleplerde; onaylandi durumunda ayni
-            dugme asagida "Varligi Yonet" ile birlikte gosterilir. */}
-        {islemYetkisi &&
-          onSekilDuzenle &&
-          sekilliTalep(report) &&
-          p.status === "beklemede" && (
-            <AksiyonSeridi>
-              <AksiyonButonu tur="mor" onClick={() => onSekilDuzenle(report)}>
-                Şekli Düzenle
-              </AksiyonButonu>
-              <span className="text-[11px] text-slate-500">
-                Vatandaşın çizdiği şekil yanlışsa haritada düzeltin.
-              </span>
-            </AksiyonSeridi>
-          )}
-
         {/* Tur duzeltme burada: fotografin gorulup karar verildigi ekran.
             Paneldeki satir ici "Onayla" vatandasin turunu aynen kabul eder. */}
         {islemYetkisi && p.status === "beklemede" && (
@@ -247,18 +227,11 @@ export default function ReportDetayModal({
                 </span>
               )}
             </div>
-            {(onVarligiYonet || (onSekilDuzenle && sekilliTalep(report))) && (
+            {onVarligiYonet && (
               <AksiyonSeridi>
-                {onVarligiYonet && (
-                  <AksiyonButonu tur="birincil" onClick={() => onVarligiYonet(p.id)}>
-                    Varlığı Yönet
-                  </AksiyonButonu>
-                )}
-                {onSekilDuzenle && sekilliTalep(report) && (
-                  <AksiyonButonu tur="mor" onClick={() => onSekilDuzenle(report)}>
-                    Şekli Düzenle
-                  </AksiyonButonu>
-                )}
+                <AksiyonButonu tur="birincil" onClick={() => onVarligiYonet(p.id)}>
+                  Varlığı Yönet
+                </AksiyonButonu>
               </AksiyonSeridi>
             )}
           </div>

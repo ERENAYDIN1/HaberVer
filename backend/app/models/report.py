@@ -37,16 +37,17 @@ class Report(Base):
         String(32), ForeignKey("turler.kod", ondelete="RESTRICT"), nullable=False
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Vatandasin cizdigi HAM SEKIL: POINT, LINESTRING veya POLYGON. Bir yol
-    # catlagi nokta degildir; sahadaki isin buyuklugu bu kolonda korunur ve
-    # personel duzeltse bile ham kayit belge olarak oldugu gibi durur.
+    # Vatandasin isaretledigi nokta. Cizgi/alan destegi kaldirildi (bkz.
+    # migration 0016): isin buyuklugunu artik personelin actigi bolge/guzergah
+    # kaydi tasiyor.
     geometry: Mapped[object] = mapped_column(
-        Geometry(geometry_type="GEOMETRY", srid=4326, spatial_index=False),
+        Geometry(geometry_type="POINT", srid=4326, spatial_index=False),
         nullable=False,
     )
-    # Seklin temsil noktasi; her zaman doludur (bkz. migration 0008). Harita
-    # pini, otomatik atamanin mesafe hesabi ve yaka cozumlemesi BU kolonu okur -
-    # boylece cizgi/alan destegi atama ve yaka altyapisina hic dokunmadi.
+    # Seklin temsil noktasi (bkz. migration 0008); nokta-only'de her zaman
+    # `geometry`nin kendisidir. Harita pini, otomatik atamanin mesafe hesabi ve
+    # yaka cozumlemesi BU kolonu okur ve oyle kalir - kaldirilmasi kazanci
+    # olmayan genis bir degisiklik olurdu.
     # ORM adi sutun adindan (`nokta`) BILINCLI olarak farkli: sema tarafinda da
     # `nokta` adinda bir alan var ve pydantic'in `from_attributes` esleme si
     # ikisini birbirine karistirip ham WKB'yi koordinat cifti sanardi.

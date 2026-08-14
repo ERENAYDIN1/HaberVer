@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { createReport, fotoUrl, hideReport, myReports } from "../api/reports";
 import { useAuth } from "../auth/AuthContext";
 import TalepDurumRozeti from "../components/TalepDurumRozeti";
-import KonumSecMap, { type CizimAyari } from "../components/KonumSecMap";
+import KonumSecMap from "../components/KonumSecMap";
 import { inputClass, labelClass } from "../utils/formSiniflari";
 import {
   IconCamera,
@@ -22,36 +22,18 @@ import {
   useDepartmanlar,
   useTurDepartmanEslemesi,
 } from "../hooks/useDepartmanlar";
-import { turAdi, turGrubu, turKodlari } from "../data/turSozlugu";
-import { GRUP_RENGI, type AssetType } from "../types/asset";
+import { turAdi, turKodlari } from "../data/turSozlugu";
+import type { AssetType } from "../types/asset";
 import { departmanAdi } from "../types/departman";
 import {
-  MAKS_TALEP_NOKTASI,
-  TALEP_SEKILLERI,
-  TALEP_SEKIL_ACIKLAMASI,
-  TALEP_SEKIL_ETIKETLERI,
   talepGorunumu,
   type ReportFeature,
   type TalepGeometrisi,
-  type TalepSekilTipi,
 } from "../types/report";
-import {
-  alanEtiketi,
-  mesafeEtiketi,
-  poligonAlaniM2,
-  toplamMesafeMetre,
-} from "../utils/geo";
 
 /** Talep listesinin acik/kapali tercihi kalicidir: vatandas listeyi bir kez
  *  kapattiysa her girisinde tekrar kapatmak zorunda kalmamali. */
 const LISTE_ANAHTARI = "haberver.taleplerim.acik";
-
-/** Bir sekil tipinin gecerli olmasi icin gereken en az kose sayisi. */
-const EN_AZ_NOKTA: Record<TalepSekilTipi, number> = {
-  Point: 1,
-  LineString: 2,
-  Polygon: 3,
-};
 
 export default function VatandasEkran() {
   const { user, cikisYap } = useAuth();
@@ -65,15 +47,7 @@ export default function VatandasEkran() {
   const [tip, setTip] = useState<AssetType | "">("");
   const [not, setNot] = useState("");
 
-  // Sekil tipi degisince konum/noktalar sifirlanir - yarim kalmis bir cizginin
-  // alan olarak devam etmesi kullaniciyi yaniltirdi.
-  const [sekil, setSekil] = useState<TalepSekilTipi>("Point");
   const [konum, setKonum] = useState<[number, number] | null>(null);
-  const [noktalar, setNoktalar] = useState<[number, number][]>([]);
-  // "Tamamla"ya basilana kadar haritadaki her tiklama kose ekler; bayrak
-  // olmadan formu doldururken haritaya degmek seklini farkinda olmadan
-  // buyutuyordu.
-  const [cizimTamam, setCizimTamam] = useState(false);
 
   const [ucus, setUcus] = useState<{
     anahtar: string;
@@ -134,53 +108,7 @@ export default function VatandasEkran() {
     return () => URL.revokeObjectURL(url);
   }, [foto]);
 
-  // Cizim rengi turun grup rengidir (tur secilmemisken notr yesil).
-  const cizimRengi = tip ? GRUP_RENGI[turGrubu(tip)] : "#059669";
-
-  const cizim: CizimAyari | null = useMemo(() => {
-    if (sekil === "Point") return null;
-    return {
-      tip: sekil,
-      noktalar,
-      onDegis: (yeni) => {
-        // Sinir backend'de de uygulanir; sessizce yok sayilir.
-        if (yeni.length > MAKS_TALEP_NOKTASI) return;
-        setNoktalar(yeni);
-      },
-      renk: cizimRengi,
-      tamamlandi: cizimTamam,
-    };
-  }, [sekil, noktalar, cizimRengi, cizimTamam]);
-
-  /** Cizimin anlik olcusu: kullanici ne kadarlik bir yer isaretledigini
-   *  gondermeden once gormeli. */
-  const olcu = useMemo(() => {
-    if (sekil === "LineString" && noktalar.length >= 2) {
-      return mesafeEtiketi(toplamMesafeMetre(noktalar));
-    }
-    if (sekil === "Polygon" && noktalar.length >= 3) {
-      return alanEtiketi(poligonAlaniM2(noktalar));
-    }
-    return null;
-  }, [sekil, noktalar]);
-
   const hedefDepartman = tip ? esleme?.[tip] : undefined;
-
-  /** Cizim icin gereken en az kose sayisi saglandi mi. */
-  const cizimYeterli = sekil !== "Point" && noktalar.length >= EN_AZ_NOKTA[sekil];
-
-  const sekilDegistir = (yeni: TalepSekilTipi) => {
-    setSekil(yeni);
-    setKonum(null);
-    setNoktalar([]);
-    setCizimTamam(false);
-    setKonumHatasi(null);
-    // Sekil secmek zaten "haritada isaretleyecegim" demektir.
-    if (mobil) {
-      setFormAcik(false);
-      setKonumKipi(true);
-    }
-  };
 
   const konumKipiniKapat = () => {
     setKonumKipi(false);
@@ -200,8 +128,7 @@ export default function VatandasEkran() {
           Number(pos.coords.longitude.toFixed(6)),
           Number(pos.coords.latitude.toFixed(6)),
         ];
-        if (sekil === "Point") setKonum(nokta);
-        else setNoktalar((n) => [...n, nokta]);
+        setKonum(nokta);
         setUcus({ anahtar: crypto.randomUUID(), merkez: nokta, zoom: 16 });
         setKonumAraniyor(false);
       },
@@ -246,26 +173,14 @@ export default function VatandasEkran() {
     setAd("");
     setTip("");
     setNot("");
-    setSekil("Point");
     setKonum(null);
-    setNoktalar([]);
-    setCizimTamam(false);
     setFoto(null);
     if (fotoInputRef.current) fotoInputRef.current.value = "";
   };
 
-  /** Form durumundan gonderilecek GeoJSON; eksikse null. */
-  const geometri = (): TalepGeometrisi | null => {
-    if (sekil === "Point") {
-      return konum ? { type: "Point", coordinates: konum } : null;
-    }
-    if (noktalar.length < EN_AZ_NOKTA[sekil]) return null;
-    if (sekil === "LineString") {
-      return { type: "LineString", coordinates: noktalar };
-    }
-    // Halkayi backend kapatir.
-    return { type: "Polygon", coordinates: [noktalar] };
-  };
+  /** Form durumundan gonderilecek GeoJSON; konum secilmemisse null. */
+  const geometri = (): TalepGeometrisi | null =>
+    konum ? { type: "Point", coordinates: konum } : null;
 
   const gonder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -275,22 +190,7 @@ export default function VatandasEkran() {
     if (!tip) return setHata("Lütfen bir tür seçin");
     if (!not.trim()) return setHata("Lütfen bir açıklama girin");
     const geo = geometri();
-    if (!geo) {
-      return setHata(
-        sekil === "Point"
-          ? "Lütfen bir konum seçin"
-          : `Lütfen haritada en az ${EN_AZ_NOKTA[sekil]} nokta işaretleyin`
-      );
-    }
-    // Yarim birakilmis hat ile bitirilmis hat ayni veriyi uretir; "Tamamla"
-    // ile onay zorunlu tutulur.
-    if (sekil !== "Point" && !cizimTamam) {
-      return setHata(
-        `Lütfen haritanın altındaki “Tamamla” ile ${
-          sekil === "LineString" ? "hattı" : "alanı"
-        } bitirin`
-      );
-    }
+    if (!geo) return setHata("Lütfen bir konum seçin");
     if (!foto) return setHata("Lütfen bir fotoğraf ekleyin");
 
     setGonderiliyor(true);
@@ -437,37 +337,14 @@ export default function VatandasEkran() {
               )}
             </div>
 
-            {/* Konum: once NE BICIMDE isaretlenecegi secilir. */}
             <div>
               <label className={labelClass}>
                 Konum <span className="text-red-500">*</span>
               </label>
-              <div className="mb-2 grid grid-cols-3 gap-1">
-                {TALEP_SEKILLERI.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => sekilDegistir(s)}
-                    aria-pressed={sekil === s}
-                    className={`flex flex-col items-center gap-0.5 border px-1 py-1.5 text-center transition ${
-                      sekil === s
-                        ? "border-emerald-600 bg-emerald-50 text-emerald-700"
-                        : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    <SekilSimgesi tip={s} />
-                    <span className="text-xs font-medium">
-                      {TALEP_SEKIL_ETIKETLERI[s]}
-                    </span>
-                    <span className="text-[10px] leading-tight text-slate-400">
-                      {TALEP_SEKIL_ACIKLAMASI[s]}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              <p className="mb-2 text-xs text-slate-500">
+                Haritaya tıklayarak yeri işaretleyin.
+              </p>
 
-              {/* Sekil secimi haritayi kendisi acar, ayri bir "Haritadan
-                  Isaretle" dugmesi yok. */}
               <div className="my-2 flex items-center gap-2">
                 <span className="h-px flex-1 bg-slate-200" />
                 <span className="text-xs text-slate-400">ya da</span>
@@ -484,30 +361,10 @@ export default function VatandasEkran() {
                 {konumAraniyor ? "Konum alınıyor…" : "Konumumu Kullan"}
               </button>
 
-              {sekil === "Point" ? (
-                <>
-                  {konum && (
-                    <p className="mt-1 font-mono text-xs text-slate-600">
-                      Seçilen: {konum[1].toFixed(5)}, {konum[0].toFixed(5)}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="mt-1 text-xs text-slate-600">
-                    {noktalar.length} nokta
-                    {olcu && (
-                      <span className="ml-1.5 font-medium text-slate-800">
-                        · {olcu}
-                      </span>
-                    )}
-                    {cizimTamam && (
-                      <span className="ml-1.5 font-medium text-emerald-700">
-                        · tamamlandı
-                      </span>
-                    )}
-                  </p>
-                </>
+              {konum && (
+                <p className="mt-1 font-mono text-xs text-slate-600">
+                  Seçilen: {konum[1].toFixed(5)}, {konum[0].toFixed(5)}
+                </p>
               )}
               {konumHatasi && (
                 <p className="mt-1 text-xs text-red-600">{konumHatasi}</p>
@@ -557,97 +414,12 @@ export default function VatandasEkran() {
       </ul>
     );
 
-  /** Cizim araci: masaustunde alt-ortada serbest durur, mobilde konum
-   *  kipinin alt seridine gomulur. `gomulu` yalnizca kabugu degistirir. */
-  const cizimKontrolu = (gomulu: boolean) => {
-    const govde = (
-      <>
-        <div className="flex items-center gap-2">
-          <span
-            className="h-2.5 w-2.5 shrink-0 rounded-full"
-            style={{ background: cizimRengi }}
-          />
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-700">
-            {sekil === "LineString" ? "Hat Çizimi" : "Alan Çizimi"}
-          </span>
-          <span className="ml-auto text-xs text-slate-600">
-            {noktalar.length} nokta
-            {olcu && (
-              <span className="ml-1.5 font-medium text-slate-800">· {olcu}</span>
-            )}
-          </span>
-        </div>
-
-        <p className="mt-1.5 text-xs text-slate-500">
-          {cizimTamam
-            ? "Çizim tamamlandı. Değiştirmek isterseniz “Düzenle” ile köşe eklemeye devam edebilirsiniz."
-            : `Haritaya ${gomulu ? "dokunarak" : "tıklayarak"} köşe ekleyin (en az ${EN_AZ_NOKTA[sekil]}).`}
-        </p>
-
-        {/* Uc dugme personel konsolundaki `CizimPaneli` ile ayni yerlesim. */}
-        <div className="mt-2.5 flex gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setNoktalar([]);
-              setCizimTamam(false);
-            }}
-            disabled={!noktalar.length}
-            className={`flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${
-              gomulu ? "py-2.5" : "py-1.5"
-            }`}
-          >
-            İptal
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              // Tamamlanmis cizimde "Geri al" once cizimi yeniden acar.
-              setCizimTamam(false);
-              setNoktalar((n) => n.slice(0, -1));
-            }}
-            disabled={!noktalar.length}
-            className={`flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${
-              gomulu ? "py-2.5" : "py-1.5"
-            }`}
-          >
-            Geri al
-          </button>
-          <button
-            type="button"
-            onClick={() => setCizimTamam((v) => !v)}
-            disabled={!cizimYeterli}
-            className={`flex-1 rounded-lg px-3 text-xs font-medium transition disabled:cursor-not-allowed ${
-              gomulu ? "py-2.5" : "py-1.5"
-            } ${
-              cizimTamam
-                ? "border border-emerald-600 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-slate-300"
-            }`}
-          >
-            {cizimTamam ? "Düzenle" : "Tamamla"}
-          </button>
-        </div>
-      </>
-    );
-
-    if (gomulu) return govde;
-    return (
-      <div className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4">
-        <div className="pointer-events-auto w-full max-w-sm rounded-xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur-sm">
-          {govde}
-        </div>
-      </div>
-    );
-  };
-
   // Mobilde konum dugmesi arti'nin hemen ustunde; kontrol gizlenip
   // `konumTetikle` ile disaridan tetiklenir.
   const harita = (
     <KonumSecMap
       secili={konum}
       onSec={setKonum}
-      cizim={cizim}
       ucus={ucus}
       benimKonumum={benimKonumum}
       konumDugmesi={mobil ? "gizli" : "harita"}
@@ -695,31 +467,25 @@ export default function VatandasEkran() {
                 </button>
               </div>
               <div className="pointer-events-auto rounded-xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur-sm">
-                {sekil === "Point" ? (
-                  <>
-                    <p className="text-xs text-slate-600">
+                <p className="text-xs text-slate-600">
                       {konum ? (
                         <span className="font-mono">
                           Seçilen: {konum[1].toFixed(5)}, {konum[0].toFixed(5)}
                         </span>
                       ) : (
-                        "Haritaya dokunarak konumu işaretleyin."
-                      )}
-                    </p>
-                    {/* Isaretlenen yeri ONAYLAYAN dugme; isaret konmadan
-                        kilitlidir. */}
-                    <button
-                      type="button"
-                      onClick={konumKipiniKapat}
-                      disabled={!konum}
-                      className="mt-2.5 w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-medium text-white transition disabled:cursor-not-allowed disabled:bg-slate-300"
-                    >
-                      Bu Konumu Onayla
-                    </button>
-                  </>
-                ) : (
-                  cizimKontrolu(true)
-                )}
+                    "Haritaya dokunarak konumu işaretleyin."
+                  )}
+                </p>
+                {/* Isaretlenen yeri ONAYLAYAN dugme; isaret konmadan
+                    kilitlidir. */}
+                <button
+                  type="button"
+                  onClick={konumKipiniKapat}
+                  disabled={!konum}
+                  className="mt-2.5 w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-medium text-white transition disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  Bu Konumu Onayla
+                </button>
 
                 {/* "Forma Dön" HICBIR ZAMAN kilitli degildir, aksi halde
                     kullanici kipte sikisir. */}
@@ -916,47 +682,12 @@ export default function VatandasEkran() {
               {konumAraniyor ? "Alınıyor…" : "Neredeyim?"}
             </button>
           </div>
-
-          {/* Cizim araci: personel konsolundaki `CizimPaneli` ile ayni yerde. */}
-          {sekil !== "Point" && cizimKontrolu(false)}
         </div>
       </div>
     </div>
   );
 }
 
-/** Sekil secicideki kucuk gorsel: nokta / hat / alan siluetleri. Etiketten
- *  once bunlar okunur, bu yuzden birbirinden acikca farkli olmalari onemli. */
-function SekilSimgesi({ tip }: { tip: TalepSekilTipi }) {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden>
-      {tip === "Point" && <circle cx="12" cy="12" r="4.5" fill="currentColor" />}
-      {tip === "LineString" && (
-        <>
-          <path
-            d="M4 17 L10 9 L20 13"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <circle cx="4" cy="17" r="2" fill="currentColor" />
-          <circle cx="20" cy="13" r="2" fill="currentColor" />
-        </>
-      )}
-      {tip === "Polygon" && (
-        <path
-          d="M5 8 L14 4 L20 12 L12 20 L4 15 Z"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinejoin="round"
-          fill="currentColor"
-          fillOpacity="0.2"
-        />
-      )}
-    </svg>
-  );
-}
 
 interface TalepKartiProps {
   talep: ReportFeature;
@@ -998,12 +729,6 @@ function TalepKarti({ talep, kaldiriliyor, onKaldir }: TalepKartiProps) {
           <p className="truncate text-sm font-medium text-slate-800">{p.name}</p>
           <p className="text-xs text-slate-500">
             {turAdi(p.type)}
-            {talep.geometry.type !== "Point" && (
-              <span className="text-slate-400">
-                {" · "}
-                {TALEP_SEKIL_ETIKETLERI[talep.geometry.type]}
-              </span>
-            )}
           </p>
           <div className="mt-1">
             <TalepDurumRozeti durum={gorunum} />

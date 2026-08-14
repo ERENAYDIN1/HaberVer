@@ -25,7 +25,6 @@ from ..schemas.report import (
     ReportFeature,
     ReportFeatureCollection,
     ReportReview,
-    ReportSekilGuncelle,
     TalepGeometrisi,
 )
 from ..security import Kapsam, kapsam, personel, require_role
@@ -117,7 +116,7 @@ def _talep_getir(db: Session, report_id: uuid.UUID, alan: Kapsam):
 def create_report(
     name: str = Form(..., min_length=1, max_length=255),
     type: AssetType = Form(...),
-    geometry: str = Form(..., description="GeoJSON: Point, LineString veya Polygon"),
+    geometry: str = Form(..., description="GeoJSON Point"),
     note: str = Form(..., min_length=1),
     photo: UploadFile = File(...),
     user: User = Depends(require_role(UserRole.vatandas)),
@@ -125,9 +124,9 @@ def create_report(
 ):
     """Vatandas talebi olusturur (multipart). Aciklama ve fotograf zorunludur.
 
-    Konum artik tek nokta olmak zorunda degil: bir yol catlagi CIZGI, bir cukur
-    alani POLIGON olarak bildirilebilir. Sekil GeoJSON dizgisi olarak gelir;
-    temsil noktasi PostGIS tarafinda turetilir (bkz. crud.temsil_nokta)."""
+    Konum tek bir NOKTADIR; GeoJSON dizgisi olarak gelir (bkz. migration 0016).
+    Isin buyuklugunu personel onaydan sonra actigi bolge/guzergah kaydiyla
+    tanimlar."""
     if not note.strip():
         raise HTTPException(status_code=400, detail="Aciklama bos olamaz")
     # Tur bir enum degil `turler` tablosunun satiri: pydantic dogrulayamaz.
@@ -241,43 +240,6 @@ def reject(
         crud.reject_report(db, report, user, data.review_note)
     )
     _talep_degisti()
-    return sonuc
-
-
-@router.patch("/{report_id}/sekil", response_model=ReportFeature)
-def sekil_guncelle(
-    report_id: uuid.UUID,
-    data: ReportSekilGuncelle,
-    user: User = Depends(personel),
-    alan: Kapsam = Depends(kapsam),
-    db: Session = Depends(get_db),
-):
-    """Talebin ham seklini (cizgi/alan) haritada duzenler - vatandas yanlis
-    cizmis olabilir. Yalnizca BEKLEMEDE veya ONAYLANMIS taleplerde: reddedilmis
-    kapanmis bir istir, sekli duzeltmenin bir anlami yok.
-
-    Sekil TIPI degismez (bir cizgi cizgi, bir alan alan kalir) - kaydedilmis
-    bolge/guzergah seklinin duzenlenmesiyle ayni kural."""
-    row = _talep_getir(db, report_id, alan)
-    report = row[0]
-    if report.status == ReportStatus.reddedildi:
-        raise HTTPException(
-            status_code=409, detail="Reddedilmiş talebin şekli düzenlenemez"
-        )
-    if data.geometry.type == "Point":
-        raise HTTPException(
-            status_code=422, detail="Nokta talepler için şekil düzenleme yok"
-        )
-    mevcut = TalepGeometrisi.model_validate_json(row[1])
-    if data.geometry.type != mevcut.type:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Şekil tipi değiştirilemez: kayıt {mevcut.type} tipinde",
-        )
-    sonuc = ReportFeature.from_row(
-        crud.update_geometry(db, report, data.geometry.model_dump_json(), user)
-    )
-    _talep_degisti(varlik_da=report.created_asset_id is not None)
     return sonuc
 
 

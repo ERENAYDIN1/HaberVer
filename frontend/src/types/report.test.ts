@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   TALEP_GORUNUMLERI,
-  sekilliTalep,
   talepGorunumu,
   talepNoktasi,
   type ReportFeature,
@@ -58,11 +57,10 @@ describe("talepGorunumu", () => {
   });
 });
 
-/** Talep sekli: vatandas nokta / cizgi / alan bildirebilir, ama HARITA PINI
- *  ile MESAFE HESABI her zaman tek bir noktaya ihtiyac duyar. `talepNoktasi`
- *  o tek hesap noktasidir; bozulursa pin, popup, secim senkronu ve alan
- *  suzgeci birlikte kayar. */
-describe("talepNoktasi / sekilliTalep", () => {
+/** Talep sekli artik yalnizca NOKTA (bkz. migration 0016), ama pin/mesafe
+ *  hesabi hala TEK bir hesap noktasindan gecer: `talepNoktasi`. Bozulursa
+ *  pin, popup, secim senkronu ve alan suzgeci birlikte kayar. */
+describe("talepNoktasi", () => {
   const talep = (
     geometry: ReportFeature["geometry"],
     nokta: [number, number] | null
@@ -74,40 +72,15 @@ describe("talepNoktasi / sekilliTalep", () => {
     }) as ReportFeature;
 
   it("backend'in verdigi temsil noktasini kullanir", () => {
-    // Cizgi/alan taleplerde tek dogru kaynak budur: PostGIS hattin ortasini /
-    // seklin icine dusen bir noktayi hesaplar, frontend tahmin yurutmez.
-    const f = talep(
-      { type: "LineString", coordinates: [[29, 41], [29.01, 41.01]] },
-      [29.005, 41.005]
-    );
+    // Onaylanan talepte bu nokta VARLIGIN (personelin duzeltmis olabilecegi)
+    // konumudur; ham `geometry` vatandasin gonderdigi kayit olarak durur.
+    const f = talep({ type: "Point", coordinates: [29, 41] }, [29.005, 41.005]);
     expect(talepNoktasi(f)).toEqual([29.005, 41.005]);
   });
 
-  it("temsil noktasi yoksa NOKTA geometrisinden dusulur", () => {
-    // Eski bir onbellek yaniti `nokta` tasimiyor olabilir; nokta talepte
-    // geometrinin kendisi zaten dogru cevaptir.
+  it("temsil noktasi yoksa geometrinin kendisine duser", () => {
+    // Eski bir onbellek yaniti `nokta` tasimiyor olabilir.
     const f = talep({ type: "Point", coordinates: [28.98, 41.0] }, null);
     expect(talepNoktasi(f)).toEqual([28.98, 41.0]);
-  });
-
-  it("temsil noktasi olmayan CIZGI/ALAN icin null doner (tahmin etmez)", () => {
-    // Yanlis bir noktaya pin koymaktansa hic koymamak dogru: cagiran taraflar
-    // null'i "bu kaydi haritada atla" diye ele alir.
-    const f = talep(
-      { type: "Polygon", coordinates: [[[29, 41], [29.1, 41], [29.1, 41.1], [29, 41]]] },
-      null
-    );
-    expect(talepNoktasi(f)).toBeNull();
-  });
-
-  it("yalnizca cizgi/alan kayitlari 'sekilli' sayilir", () => {
-    expect(sekilliTalep(talep({ type: "Point", coordinates: [29, 41] }, [29, 41]))).toBe(
-      false
-    );
-    expect(
-      sekilliTalep(
-        talep({ type: "LineString", coordinates: [[29, 41], [29.1, 41]] }, [29.05, 41])
-      )
-    ).toBe(true);
   });
 });

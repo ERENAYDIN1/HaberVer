@@ -1,4 +1,3 @@
-import json
 import uuid
 from datetime import date, datetime
 from typing import Literal
@@ -7,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..models.asset import AssetSource, AssetStatus, AssetType
 from .asset import PointGeometry
-from .report import TalepGeometrisi
 
 
 class KonumGuncelle(BaseModel):
@@ -129,7 +127,10 @@ class BolgeGorevOzet(BaseModel):
     """Bir ekibin uzerindeki gorev bolgesi / guzergah. Tekil bakim gorevleriyle
     AYNI kotayi paylasir (bkz. MAKS_AKTIF_GOREV), bu yuzden panoda ve ekip
     popup'inda onlarla birlikte listelenir. Ayri bir sema olmasinin tek sebebi
-    tasidigi alanlarin farkli olmasi (varlik degil bolge kaydi)."""
+    tasidigi alanlarin farkli olmasi (varlik degil bolge/guzergah kaydi).
+
+    Iki tablodan gelen kayitlar TEK LISTEDE birlestigi icin `tip` alani durur:
+    arayuz alani guzergahtan ayirt edip dogru panele/rozete baglar."""
 
     bolge_id: uuid.UUID
     ad: str
@@ -144,14 +145,14 @@ class BolgeGorevOzet(BaseModel):
 
     @classmethod
     def from_row(cls, row) -> "BolgeGorevOzet":
-        bolge, longitude, latitude, yaka = row
+        kayit, longitude, latitude, yaka, tip = row
         return cls(
-            bolge_id=bolge.id,
-            ad=bolge.ad,
-            tip=bolge.tip.value,
-            renk=bolge.renk,
-            otomatik=bolge.assigned_by is None,
-            assigned_at=bolge.assigned_at,
+            bolge_id=kayit.id,
+            ad=kayit.ad,
+            tip=tip,
+            renk=kayit.renk,
+            otomatik=kayit.assigned_by is None,
+            assigned_at=kayit.assigned_at,
             longitude=longitude,
             latitude=latitude,
             yaka=yaka,
@@ -255,11 +256,6 @@ class GorevProperties(BaseModel):
     brand_model: str | None
     photo_url: str | None
     install_date: date | None
-    # Isin dogdugu talebin HAM sekli (nokta/cizgi/alan); kayitli varliklarda
-    # None. Feature'in `geometry`si her zaman NOKTA kalir - pin, mesafe
-    # siralamasi ve yol tarifi onu okur - sekil ikincil geometri olarak burada
-    # tasinir (talep semasindaki `nokta` alaninin simetrigi).
-    sekil: TalepGeometrisi | None = None
     # Vatandasin talep aciklamasi ve talebin acilis tarihi. `assets`te not
     # sutunu yok: sahaya giden ekip "hangi bank kirik"i ancak buradan okur.
     talep_notu: str | None = None
@@ -273,9 +269,9 @@ class GorevFeature(BaseModel):
 
     @classmethod
     def from_row(cls, row) -> "GorevFeature":
-        """(Assignment, Asset, longitude, latitude, sekil, talep_notu,
-        talep_tarihi) satirini Feature'a cevirir."""
-        gorev, asset, longitude, latitude, sekil, talep_notu, talep_tarihi = row
+        """(Assignment, Asset, longitude, latitude, talep_notu, talep_tarihi)
+        satirini Feature'a cevirir."""
+        gorev, asset, longitude, latitude, talep_notu, talep_tarihi = row
         return cls(
             geometry=PointGeometry(coordinates=(longitude, latitude)),
             properties=GorevProperties(
@@ -290,11 +286,6 @@ class GorevFeature(BaseModel):
                 brand_model=asset.brand_model,
                 photo_url=asset.photo_url,
                 install_date=asset.install_date,
-                sekil=(
-                    TalepGeometrisi.model_validate(json.loads(sekil))
-                    if sekil
-                    else None
-                ),
                 talep_notu=talep_notu,
                 talep_tarihi=talep_tarihi,
             ),

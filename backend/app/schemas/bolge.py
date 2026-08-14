@@ -3,7 +3,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, model_validator
 
-from ..models.bolge import BolgeTipi
 from .geo import MAKS_HALKA_NOKTASI
 
 # Renk her zaman #rrggbb (frontend'deki renk secici bunu uretir).
@@ -22,18 +21,14 @@ def _nokta_sayisi_sinirli(noktalar: list[list[tuple[float, float]]]) -> None:
 
 
 class BolgeGirdi(BaseModel):
-    """Yeni bir gorev bolgesi / guzergah kaydi.
+    """Yeni bir gorev bolgesi kaydi.
 
-    `noktalar` her iki tipte de bir LISTE LISTESIDIR (sinirlar API'siyle ayni
-    sekil, bkz. schemas'taki SinirGeometri kullanimi):
-      * tip='alan'  -> her eleman bir poligon halkasi ([lon,lat] cifti listesi).
-                       Halkalarin kapali olmasi gerekmez, backend kapatir.
-      * tip='cizgi' -> tam olarak tek eleman: cizginin nokta dizisi.
-    """
+    `noktalar` bir LISTE LISTESIDIR (sinirlar API'siyle ayni sekil): her eleman
+    bir poligon halkasi ([lon,lat] cifti listesi). Halkalarin kapali olmasi
+    gerekmez, backend kapatir."""
 
     ad: str = Field(min_length=1, max_length=120)
     aciklama: str | None = Field(default=None, max_length=1000)
-    tip: BolgeTipi
     renk: str = Field(default="#059669", pattern=RENK_DESENI)
     # Kaydi sahiplenecek mudurluk. YALNIZCA ADMIN icin anlamlidir: departmani
     # olan personelin kaydi her zaman kendi mudurlugune yazilir, gonderdigi
@@ -45,15 +40,9 @@ class BolgeGirdi(BaseModel):
     def noktalar_gecerli_olmali(self) -> "BolgeGirdi":
         if not self.noktalar:
             raise ValueError("en az bir nokta dizisi gonderilmelidir")
-        if self.tip is BolgeTipi.cizgi:
-            if len(self.noktalar) != 1:
-                raise ValueError("cizgi tam olarak tek bir nokta dizisi icermelidir")
-            if len(self.noktalar[0]) < 2:
-                raise ValueError("cizgi en az 2 nokta icermelidir")
-        else:
-            for halka in self.noktalar:
-                if len(halka) < 3:
-                    raise ValueError("her alan halkasi en az 3 nokta icermelidir")
+        for halka in self.noktalar:
+            if len(halka) < 3:
+                raise ValueError("her alan halkasi en az 3 nokta icermelidir")
         _nokta_sayisi_sinirli(self.noktalar)
         return self
 
@@ -64,9 +53,7 @@ class BolgeGuncelle(BaseModel):
     `noktalar` verilirse kaydin sekli degisir (haritada koseler surukleyerek /
     kenara nokta ekleyerek / alani genisletip daraltarak duzenlenir). Sekil
     yerinde guncellenir: kaydin kimligi, atamasi ve gecmisi korunur - bir
-    bolgenin sinirlarini duzeltmek yeni bir bolge acmayi gerektirmesin.
-    Sekil KENDI TIPINDE kalir (alan alan, cizgi cizgi); tipe gore nokta sayisi
-    dogrulamasi router'da yapilir (tip mevcut kayittan bilinir)."""
+    bolgenin sinirlarini duzeltmek yeni bir bolge acmayi gerektirmesin."""
 
     ad: str | None = Field(default=None, min_length=1, max_length=120)
     aciklama: str | None = Field(default=None, max_length=1000)
@@ -87,7 +74,7 @@ class BolgeGuncelle(BaseModel):
 
 
 class BolgeAtama(BaseModel):
-    """Bolgeyi/guzergahi bir saha ekibine atar; worker_id=None atamayi kaldirir."""
+    """Bolgeyi bir saha ekibine atar; worker_id=None atamayi kaldirir."""
 
     worker_id: uuid.UUID | None = None
 
@@ -96,23 +83,20 @@ class BolgeCikti(BaseModel):
     id: uuid.UUID
     ad: str
     aciklama: str | None
-    tip: BolgeTipi
     renk: str
     # Kaydi sahiplenen mudurluk; None = genel (tum personel gorur). Adi
     # frontend departman sozlugunden cozer - burada tekrarlanmaz.
     departman: str | None = None
     noktalar: list[list[tuple[float, float]]]
-    # PostGIS ile hesaplanan gercek (jeodezik) olculer: alan bolgelerde m2,
-    # cizgilerde metre. Frontend'deki duzlemsel yaklastirmadan bagimsiz,
-    # kaydedilen deger her zaman ayni cikar.
+    # PostGIS ile hesaplanan gercek (jeodezik) olcu. Frontend'deki duzlemsel
+    # yaklastirmadan bagimsiz, kaydedilen deger her zaman ayni cikar.
     alan_m2: float | None = None
-    uzunluk_m: float | None = None
     worker_id: uuid.UUID | None = None
     worker_ad: str | None = None
     assigned_at: datetime | None = None
-    # Isin dustugu yaka (kaydin temsil noktasindan cozulur: alan ->
-    # ST_PointOnSurface, cizgi -> hattin ortasi). Elle atamada "karsi yaka"
-    # uyarisi varliklardakiyle ayni bilgiye dayansin diye burada doner.
+    # Isin dustugu yaka (kaydin temsil noktasindan cozulur: ST_PointOnSurface).
+    # Elle atamada "karsi yaka" uyarisi varliklardakiyle ayni bilgiye dayansin
+    # diye burada doner.
     yaka: str | None = None
     # Saha ekibi isi bitirdiginde dolar; None ise is devam ediyor demektir.
     tamamlandi_at: datetime | None = None
@@ -121,7 +105,7 @@ class BolgeCikti(BaseModel):
 
 
 class BolgeTamamlama(BaseModel):
-    """Saha ekibinin bolgeyi/guzergahi tamamlandi isaretlemesi; tamamlandi=False
-    ile yanlislikla kapatilan is geri alinir."""
+    """Saha ekibinin bolgeyi tamamlandi isaretlemesi; tamamlandi=False ile
+    yanlislikla kapatilan is geri alinir."""
 
     tamamlandi: bool = True

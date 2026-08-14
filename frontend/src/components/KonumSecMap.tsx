@@ -4,15 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { ilSiniri } from "../api/sinirlar";
 import { HARITA_STILLERI, VARSAYILAN_STIL } from "../data/mapStyles";
-import {
-  alanEtiketi,
-  cizgiOrtaNoktasi,
-  enBuyukHalkaMerkezi,
-  mesafeEtiketi,
-  poligonAlaniM2,
-  poligonMerkezi,
-  toplamMesafeMetre,
-} from "../utils/geo";
+import { cizgiOrtaNoktasi, enBuyukHalkaMerkezi } from "../utils/geo";
 import { BOS_GEOJSON } from "../utils/geojson";
 import {
   ISTANBUL_IL_KODU,
@@ -48,7 +40,6 @@ export interface HaritaAlani {
 }
 
 const ALAN_SOURCE_ID = "salt-okunur-alanlar";
-const CIZIM_SOURCE_ID = "talep-cizimi";
 
 /** Alan/guzergah etiketleri bu zoom'un altinda hic cizilmez (personel
  *  konsolundaki `MapView::BOLGE_ETIKET_MINZOOM` ile ayni kural). Esik orada
@@ -56,25 +47,10 @@ const CIZIM_SOURCE_ID = "talep-cizimi";
  *  daha uzaktan gosteriyor, ekip kendi bolgesinin adini once gormeli. */
 const ALAN_ETIKET_MINZOOM = 12.5;
 
-/** Vatandasin elle cizdigi cizgi/alan. `CizimPaneli`'nin tam arac setinden
- *  bilincli olarak AYRI (renk paleti, cok alanli secim, olcum modu yok) -
- *  ortak olan yalnizca `utils/geo.ts`'teki hesaplardir. */
-export interface CizimAyari {
-  tip: "LineString" | "Polygon";
-  noktalar: [number, number][];
-  onDegis: (noktalar: [number, number][]) => void;
-  /** Cizim rengi (vatandas ekraninda tur grubunun rengi). */
-  renk: string;
-  /** Kullanici "Tamamla" dedi: sekil dondurulur, tiklama artik kose eklemez. */
-  tamamlandi?: boolean;
-}
-
 interface KonumSecMapProps {
   /** Secili konum ([lon, lat]) veya henuz secilmediyse null. */
   secili: [number, number] | null;
   onSec: (konum: [number, number]) => void;
-  /** Verilirse harita NOKTA SECME yerine cizim kipine gecer. */
-  cizim?: CizimAyari | null;
   /** Harita bu hedefe ucar; `anahtar` her degistiginde tetiklenir. */
   ucus?: { anahtar: string; merkez: [number, number]; zoom?: number } | null;
   isaretler?: HaritaIsaret[];
@@ -95,7 +71,6 @@ interface KonumSecMapProps {
 export default function KonumSecMap({
   secili,
   onSec,
-  cizim,
   ucus,
   isaretler,
   alanlar,
@@ -110,150 +85,15 @@ export default function KonumSecMap({
   const isaretMarkerRef = useRef<maplibregl.Marker[]>([]);
   const benimMarkerRef = useRef<maplibregl.Marker | null>(null);
   const alanEtiketleriRef = useRef<Map<string, maplibregl.Marker>>(new Map());
-  /** Cizim sirasinda son bilinen fare konumu: elastik cizgi ve anlik olcu
-   *  bundan hesaplanir. */
-  const sonFareRef = useRef<[number, number] | null>(null);
-  /** Cizimin anlik olcusunu (m / m²) haritada gosteren DOM marker. */
-  const olcuEtiketiRef = useRef<maplibregl.Marker | null>(null);
   const alanlarRef = useRef(alanlar);
   const onSecRef = useRef(onSec);
-  const cizimRef = useRef(cizim);
   const tiklanabilirRef = useRef(tiklanabilir);
   const konumDugmesiRef = useRef(konumDugmesi);
   useEffect(() => {
     onSecRef.current = onSec;
     tiklanabilirRef.current = tiklanabilir;
     alanlarRef.current = alanlar;
-    cizimRef.current = cizim;
   });
-
-  /** Cizim taslagini haritaya yazar: son koseden fareye uzanan elastik
-   *  cizgi, alanlarda imleci de iceren canli dolgu onizlemesi. Elastik parca
-   *  hicbir zaman gonderilecek veriye karismaz. */
-  function cizimiUygula(map: maplibregl.Map) {
-    const source = map.getSource(CIZIM_SOURCE_ID) as
-      | maplibregl.GeoJSONSource
-      | undefined;
-    if (!source) return;
-
-    const c = cizimRef.current;
-    const noktalar = c?.noktalar ?? [];
-    const renk = c?.renk ?? "#059669";
-    const tamam = !!c?.tamamlandi;
-    // Elastik uc yalnizca en az bir kose konduktan sonra ve tamamlanmamis
-    // sekilde cizilir.
-    const fare = c && !tamam && noktalar.length > 0 ? sonFareRef.current : null;
-    const ozellik = { renk };
-    const features: GeoJSON.Feature[] = [];
-
-    // Tamamlanan alanin kapanis kenari duz hatta doner.
-    const hat =
-      tamam && c?.tip === "Polygon" && noktalar.length >= 3
-        ? [...noktalar, noktalar[0]]
-        : noktalar;
-    if (hat.length >= 2) {
-      features.push({
-        type: "Feature",
-        geometry: { type: "LineString", coordinates: hat },
-        properties: ozellik,
-      });
-    }
-    if (fare) {
-      features.push({
-        type: "Feature",
-        geometry: {
-          type: "LineString",
-          coordinates: [noktalar[noktalar.length - 1], fare],
-        },
-        properties: { ...ozellik, elastik: true },
-      });
-    }
-
-    if (c?.tip === "Polygon") {
-      // Dolgu ve kapanis kenari fareyi de sayar.
-      const halka = fare ? [...noktalar, fare] : noktalar;
-      if (halka.length >= 3) {
-        features.push({
-          type: "Feature",
-          geometry: { type: "Polygon", coordinates: [[...halka, halka[0]]] },
-          properties: ozellik,
-        });
-      }
-      // Tamamlanan alanda kapanis kenari gercek hattin parcasi olarak
-      // yukarida zaten cizildi.
-      if (!tamam && halka.length >= 2) {
-        features.push({
-          type: "Feature",
-          geometry: {
-            type: "LineString",
-            coordinates: [halka[halka.length - 1], halka[0]],
-          },
-          properties: { ...ozellik, kapanis: true },
-        });
-      }
-    }
-
-    for (const [i, n] of noktalar.entries()) {
-      features.push({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: n },
-        properties: { ...ozellik, sira: i + 1 },
-      });
-    }
-    source.setData({ type: "FeatureCollection", features });
-    olcuEtiketiUygula(map);
-  }
-
-  /** Cizimin anlik olcusunu (cizgide uzunluk, alanda yuzolcum) haritanin
-   *  uzerinde gosterir; kullanicinin gozu cizerken haritada kalsin diye. */
-  function olcuEtiketiUygula(map: maplibregl.Map) {
-    const c = cizimRef.current;
-    const noktalar = c?.noktalar ?? [];
-    const fare =
-      c && !c.tamamlandi && noktalar.length > 0 ? sonFareRef.current : null;
-    const izlenen = fare ? [...noktalar, fare] : noktalar;
-
-    const cizgi = c?.tip === "LineString";
-    const yeter = cizgi ? izlenen.length >= 2 : izlenen.length >= 3;
-    if (!c || !yeter) {
-      olcuEtiketiRef.current?.remove();
-      olcuEtiketiRef.current = null;
-      return;
-    }
-
-    const metin = cizgi
-      ? mesafeEtiketi(toplamMesafeMetre(izlenen))
-      : alanEtiketi(poligonAlaniM2(izlenen));
-
-    // Cizerken etiket imleci izler (uzun hatta orta nokta cok geride
-    // kalirdi); cizim bitince sekle geri oturur.
-    const kip = fare ? "imlec" : cizgi ? "cizgi" : "alan";
-    const konum = fare
-      ? fare
-      : cizgi
-        ? cizgiOrtaNoktasi(izlenen)
-        : poligonMerkezi(izlenen);
-
-    // Anchor/offset marker'a kurulusta verilir; kip degisince yeniden kurulur.
-    if (olcuEtiketiRef.current?.getElement().dataset.kip !== kip) {
-      olcuEtiketiRef.current?.remove();
-      const el = document.createElement("div");
-      el.dataset.kip = kip;
-      // Ana haritadaki etiketlerle ayni sinif (bkz. index.css `.harita-etiket`).
-      el.className = "harita-etiket";
-      olcuEtiketiRef.current = new maplibregl.Marker({
-        element: el,
-        // Imleci izlerken sag-altta durur ki artının ucunu kapatmasin.
-        anchor: kip === "imlec" ? "top-left" : cizgi ? "bottom" : "center",
-        offset: kip === "imlec" ? [14, 12] : cizgi ? [0, -6] : [0, 0],
-      })
-        .setLngLat(konum)
-        .addTo(map);
-    } else {
-      olcuEtiketiRef.current.setLngLat(konum);
-    }
-    olcuEtiketiRef.current.getElement().textContent = metin;
-  }
 
   /** Salt-okunur alanlari/cizgileri haritaya uygular (kaynak hazirsa). */
   function alanlariUygula(map: maplibregl.Map) {
@@ -375,72 +215,7 @@ export default function KonumSecMap({
         });
       }
 
-      // Cizim katmani en ustte.
-      if (!map.getSource(CIZIM_SOURCE_ID)) {
-        map.addSource(CIZIM_SOURCE_ID, { type: "geojson", data: BOS_GEOJSON });
-        map.addLayer({
-          id: "cizim-fill",
-          type: "fill",
-          source: CIZIM_SOURCE_ID,
-          filter: ["==", ["geometry-type"], "Polygon"],
-          paint: { "fill-color": ["get", "renk"], "fill-opacity": 0.18 },
-        });
-        // Gercek hat: yalnizca tiklanmis koseler (elastik/kapanis onizlemesi
-        // disarida, kalinlik farkiyla ayrisir).
-        map.addLayer({
-          id: "cizim-yol",
-          type: "line",
-          source: CIZIM_SOURCE_ID,
-          filter: [
-            "all",
-            ["==", ["geometry-type"], "LineString"],
-            ["!", ["to-boolean", ["get", "kapanis"]]],
-            ["!", ["to-boolean", ["get", "elastik"]]],
-          ],
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": ["get", "renk"], "line-width": 3 },
-        });
-        map.addLayer({
-          id: "cizim-elastik",
-          type: "line",
-          source: CIZIM_SOURCE_ID,
-          filter: ["to-boolean", ["get", "elastik"]],
-          layout: { "line-cap": "round" },
-          paint: {
-            "line-color": ["get", "renk"],
-            "line-width": 2,
-            "line-opacity": 0.85,
-          },
-        });
-        map.addLayer({
-          id: "cizim-kapanis",
-          type: "line",
-          source: CIZIM_SOURCE_ID,
-          filter: ["to-boolean", ["get", "kapanis"]],
-          paint: {
-            "line-color": ["get", "renk"],
-            "line-width": 2,
-            "line-dasharray": [2, 2],
-            "line-opacity": 0.7,
-          },
-        });
-        map.addLayer({
-          id: "cizim-nokta",
-          type: "circle",
-          source: CIZIM_SOURCE_ID,
-          filter: ["==", ["geometry-type"], "Point"],
-          // Personel konsoluyla ayni tutamak dili (haritaKatmanlari.ts::cizimKatmanlari).
-          paint: {
-            "circle-radius": 5,
-            "circle-color": ["get", "renk"],
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 2,
-          },
-        });
-      }
-
       alanlariUygula(map);
-      cizimiUygula(map);
     });
     ilSiniri(ISTANBUL_IL_KODU)
       .then((sinir) => {
@@ -474,13 +249,6 @@ export default function KonumSecMap({
         Number(p.coords.longitude.toFixed(6)),
         Number(p.coords.latitude.toFixed(6)),
       ];
-      // Cizim kipinde "konumum" bir kose ekler.
-      const c = cizimRef.current;
-      if (c?.tamamlandi) return;
-      if (c) {
-        c.onDegis([...c.noktalar, nokta]);
-        return;
-      }
       // Salt-okunur haritada dugme yalnizca konuma ucar, isaretci koymaz.
       if (!tiklanabilirRef.current) return;
       onSecRef.current(nokta);
@@ -497,36 +265,12 @@ export default function KonumSecMap({
       );
     }
 
-    // React state'e dokunulmaz; her piksel hareketinde render tetiklenmesin.
-    map.on("mousemove", (e) => {
-      if (!cizimRef.current) return;
-      sonFareRef.current = [
-        Number(e.lngLat.lng.toFixed(6)),
-        Number(e.lngLat.lat.toFixed(6)),
-      ];
-      cizimiUygula(map);
-    });
-    map.on("mouseout", () => {
-      if (!sonFareRef.current) return;
-      sonFareRef.current = null;
-      cizimiUygula(map);
-    });
-
     map.on("click", (e) => {
       if (!tiklanabilirRef.current) return;
-      const nokta: [number, number] = [
+      onSecRef.current([
         Number(e.lngLat.lng.toFixed(6)),
         Number(e.lngLat.lat.toFixed(6)),
-      ];
-      // Cizim kipindeyken tiklama kose ekler; tamamlanmis sekilde hicbir
-      // sey yapmaz.
-      const c = cizimRef.current;
-      if (c?.tamamlandi) return;
-      if (c) {
-        c.onDegis([...c.noktalar, nokta]);
-        return;
-      }
-      onSecRef.current(nokta);
+      ]);
     });
 
     const alanEtiketleri = alanEtiketleriRef.current;
@@ -534,7 +278,6 @@ export default function KonumSecMap({
       markerRef.current?.remove();
       isaretMarkerRef.current.forEach((m) => m.remove());
       benimMarkerRef.current?.remove();
-      olcuEtiketiRef.current?.remove();
       for (const m of alanEtiketleri.values()) m.remove();
       alanEtiketleri.clear();
       map.remove();
@@ -547,17 +290,6 @@ export default function KonumSecMap({
     const map = mapRef.current;
     if (map) alanlariUygula(map);
   }, [alanlar]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (map) cizimiUygula(map);
-  }, [cizim]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    map.getCanvas().style.cursor = cizim && !cizim.tamamlandi ? "crosshair" : "";
-  }, [cizim]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -611,12 +343,10 @@ export default function KonumSecMap({
     }
   }, [benimKonumum]);
 
-  // Cizim kipinde tek nokta isaretcisi gizlenir: sekil zaten cizim
-  // katmaninda gorunuyor.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!secili || cizim) {
+    if (!secili) {
       markerRef.current?.remove();
       markerRef.current = null;
       return;
@@ -628,7 +358,7 @@ export default function KonumSecMap({
     } else {
       markerRef.current.setLngLat(secili);
     }
-  }, [secili, cizim]);
+  }, [secili]);
 
   useEffect(() => {
     const map = mapRef.current;

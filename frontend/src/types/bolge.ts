@@ -1,5 +1,12 @@
-/** Kaydedilmis cizimler: gorev bolgeleri (alan) ve guzergahlar (cizgi).
- *  Backend: models/bolge.py, routers/bolgeler.py */
+/** Kaydedilmis gorev bolgeleri (alan).
+ *  Backend: models/bolge.py, routers/bolgeler.py
+ *
+ *  Guzergahlar (cizgi) artik AYRI bir tablo ve ayri bir uctur (types/guzergah.ts).
+ *  Arayuzde ikisi ayni panellerde/haritada yan yana durdugu icin ortak bir
+ *  goruntuleme tipi tanimlanir (`KayitliCizim`): `tip` alani kaydin hangi
+ *  uctan geldigini soyler ve iki listenin birlestirildigi yerde (App.tsx'teki
+ *  useMemo) yazilir - ONBELLEGE HAM YANIT girer, etiketleme yalnizca tuketim
+ *  noktasinda yapilir. */
 
 export const BOLGE_TIPLERI = ["alan", "cizgi"] as const;
 export type BolgeTipi = (typeof BOLGE_TIPLERI)[number];
@@ -9,24 +16,20 @@ export const BOLGE_TIP_ETIKETLERI: Record<BolgeTipi, string> = {
   cizgi: "Güzergâh",
 };
 
-export interface Bolge {
+/** Iki kayit turunun paylastigi alanlar (geometri olcusu disinda hepsi). */
+interface KayitliCizimTaban {
   id: string;
   ad: string;
   aciklama: string | null;
-  tip: BolgeTipi;
   renk: string;
-  /** Halka listesi. tip='alan' -> poligon halkalari (kapali degil),
-   *  tip='cizgi' -> tek elemanli, cizginin nokta dizisi. */
+  /** Halka listesi: alanlarda poligon halkalari, guzergahlarda tek elemanli
+   *  nokta dizisi. Iki uc ayni sekli dondurur ki cizim/duzenleme mantigi
+   *  ayrismasin. */
   noktalar: [number, number][][];
-  /** PostGIS'in jeodezik olcusu - alan bolgelerde dolu, cizgilerde null. */
-  alan_m2: number | null;
-  /** Cizgilerde dolu, alan bolgelerde null. */
-  uzunluk_m: number | null;
   /** Kaydi sahiplenen mudurluk; null = genel (tum personel gorur). Bir
    *  mudurlugun cizdigi calisma alanini digeri gormemeli, yoksa kendi alakasiz
    *  ekibine atayabilir. Adi departman sozlugunden cozulur. */
   departman: string | null;
-  /** Atanan saha ekibi (alan -> gorev bolgesi, cizgi -> guzergah). */
   worker_id: string | null;
   worker_ad: string | null;
   assigned_at: string | null;
@@ -40,10 +43,25 @@ export interface Bolge {
   updated_at: string;
 }
 
+/** `GET /api/bolgeler` yanitinin HAM sekli - onbellege bu girer. */
+export interface BolgeYanit extends KayitliCizimTaban {
+  /** PostGIS'in jeodezik alan olcusu. */
+  alan_m2: number | null;
+}
+
+/** Panellerin/haritanin okudugu birlesik kayit: iki uctan gelen satirlar
+ *  `tip` ile etiketlenip tek listede toplanir. */
+export interface Bolge extends KayitliCizimTaban {
+  tip: BolgeTipi;
+  /** Alanlarda dolu, guzergahlarda null. */
+  alan_m2: number | null;
+  /** Guzergahlarda dolu, alanlarda null. */
+  uzunluk_m: number | null;
+}
+
 export interface BolgeGirdi {
   ad: string;
   aciklama?: string | null;
-  tip: BolgeTipi;
   renk: string;
   /** Yalnizca ADMIN icin anlamli: departmani olan personelin kaydi her zaman
    *  kendi mudurlugune yazilir, gonderilen deger yok sayilir. */
@@ -58,8 +76,7 @@ export interface BolgeGuncelle {
   /** Kaydi baska bir mudurluge devretmek (yalnizca admin); null = genel. */
   departman?: string | null;
   /** Sekil (geometri) guncellemesi - haritada koseler suruklenerek, kenara
-   *  nokta eklenerek ya da alan genisletilip daraltilarak degistirilir. Kaydin
-   *  tipi degismez: alan alan, guzergah cizgi kalir. */
+   *  nokta eklenerek ya da alan genisletilip daraltilarak degistirilir. */
   noktalar?: [number, number][][];
 }
 

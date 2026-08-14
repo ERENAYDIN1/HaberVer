@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { bolgeGuncelle } from "../api/bolgeler";
+import { CIZIM_ANAHTARLARI, cizimGuncelle } from "../api/cizimler";
 import { alanTamponu } from "../api/geo";
 import type { Bolge, BolgeTipi, SekilDuzenleme } from "../types/bolge";
 import { halkalariAc } from "../utils/geo";
@@ -148,8 +148,12 @@ export function useSekilDuzenleme({
     setKaydediliyor(true);
     setHata(null);
     try {
-      await bolgeGuncelle(duzenleme.id, { noktalar: duzenleme.noktalar });
-      queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
+      await cizimGuncelle(duzenleme.tip, duzenleme.id, {
+        noktalar: duzenleme.noktalar,
+      });
+      for (const anahtar of CIZIM_ANAHTARLARI) {
+        queryClient.invalidateQueries({ queryKey: anahtar });
+      }
       setDuzenleme(null);
     } catch (e) {
       setHata((e as Error).message);

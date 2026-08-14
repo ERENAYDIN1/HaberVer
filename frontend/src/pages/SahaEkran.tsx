@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { repairAsset } from "../api/assets";
-import { bolgelerim as bolgelerimGetir, bolgeTamamla } from "../api/bolgeler";
+import { cizimTamamla } from "../api/cizimler";
+import { useKendiCizimlerim } from "../hooks/useKayitliCizimler";
 import { fotoUrl } from "../api/reports";
 import {
   gorevlerim,
@@ -40,27 +41,15 @@ import {
 } from "../hooks/useYeniGorevler";
 import { turAdi } from "../data/turSozlugu";
 import type { Bolge } from "../types/bolge";
-import { TALEP_SEKIL_ETIKETLERI } from "../types/report";
-import { gorevSekli } from "../types/saha";
 import {
   alanEtiketi,
   enBuyukHalkaMerkezi,
   mesafeEtiketi,
   mesafeMetre,
-  poligonAlaniM2,
-  toplamMesafeMetre,
 } from "../utils/geo";
 import { kacis } from "../utils/html";
 
 const GOREV_RENGI = "#d97706"; // amber - "iş bekliyor"
-
-/** Isin buyuklugu: cizgide uzunluk, alanda yuzolcum; nokta islerde null. */
-function sekilOlcusu(sekil: ReturnType<typeof gorevSekli>): string | null {
-  if (!sekil) return null;
-  return sekil.tip === "LineString"
-    ? mesafeEtiketi(toplamMesafeMetre(sekil.halkalar[0]))
-    : alanEtiketi(poligonAlaniM2(sekil.halkalar[0]));
-}
 
 /** Duyuru seridinin basligi: iki yon (atanan/geri alinan) ayni seritte
  *  birikebilir, baslik hangisinden kac tane oldugunu soyler. */
@@ -185,9 +174,7 @@ export default function SahaEkran() {
 
   // Ekibe atanan gorev bolgeleri ve guzergahlar. Uc, tamamlananlari da
   // dondurur ki ekip geri alabilsin.
-  const bolgeSorgu = useQuery({
-    queryKey: ["saha", "bolgelerim"],
-    queryFn: bolgelerimGetir,
+  const bolgeSorgu = useKendiCizimlerim({
     // Bakim isiyle AYNI periyot: bolge/guzergah ayni kotayi paylasan bir
     // "gorev"dir, ayni hizda ogrenilmeli.
     refetchInterval: YEDEK_YOKLAMA_MS,
@@ -245,33 +232,7 @@ export default function SahaEkran() {
     [bolgeSorgu.data]
   );
 
-  /** Isin KENDI sekli: pin nokta olarak sabit kalir, sekil pinin altina isin
-   *  buyuklugunu gostermek icin cizilir. Kenarlik DUZ: kesikli olan gorev
-   *  bolgesidir. */
-  const gorevSekilleri = useMemo<HaritaAlani[]>(
-    () =>
-      (gorevSorgu.data?.features ?? []).flatMap((g) => {
-        const sekil = gorevSekli(g.properties);
-        if (!sekil) return [];
-        return [
-          {
-            id: `gorev-${g.properties.assignment_id}`,
-            noktalar: sekil.halkalar,
-            renk: GOREV_RENGI,
-            etiket: sekilOlcusu(sekil) ?? undefined,
-            cizgi: sekil.tip === "LineString",
-            kesikli: false,
-          },
-        ];
-      }),
-    [gorevSorgu.data]
-  );
-
-  // Sekiller bolgelerden SONRA: is, uzerinde calisilan bolgenin ustunde durmali.
-  const haritaAlanlari = useMemo(
-    () => [...bolgeAlanlari, ...gorevSekilleri],
-    [bolgeAlanlari, gorevSekilleri]
-  );
+  const haritaAlanlari = bolgeAlanlari;
 
   /** Konum biliniyorsa gorevler en yakindan uzaga siralanir; bilinmiyorsa
    *  backend'in verdigi sira (atama zamani) korunur. */
@@ -292,8 +253,6 @@ export default function SahaEkran() {
         const p = g.properties;
         const [lng, lat] = g.geometry.coordinates;
         const foto = fotoUrl(p.photo_url);
-        const sekil = gorevSekli(p);
-        const olcu = sekilOlcusu(sekil);
         const popupHtml =
           `<div style="font-family:system-ui,sans-serif;width:200px">` +
           (foto
@@ -303,11 +262,6 @@ export default function SahaEkran() {
           `<div style="font-size:11px;color:#64748b;margin:2px 0 6px">${kacis(
             turAdi(p.type)
           )}${p.brand_model ? " · " + kacis(p.brand_model) : ""}</div>` +
-          (sekil
-            ? `<div style="font-size:11px;color:#b45309;font-weight:600;margin-bottom:4px">` +
-              `${kacis(TALEP_SEKIL_ETIKETLERI[sekil.tip])}${olcu ? " · " + kacis(olcu) : ""}` +
-              `</div>`
-            : "") +
           (p.talep_notu
             ? `<div style="font-size:11px;color:#475569;line-height:1.4;margin-bottom:6px;` +
               `border-left:2px solid #fcd34d;padding-left:6px">${kacis(p.talep_notu)}</div>`
@@ -351,12 +305,16 @@ export default function SahaEkran() {
   };
 
   /** Bolge/guzergah kapatma ve geri alma; bakim gorevleriyle ayni desen. */
-  const bolgeDurumDegis = async (id: string, ad: string, tamamlandi: boolean) => {
+  const bolgeDurumDegis = async (
+    kayit: Bolge,
+    tamamlandi: boolean
+  ) => {
+    const { id, ad } = kayit;
     setBolgeIslemde(id);
     try {
       // Iki yon de ekibin KENDI islemi, dolayisiyla duyurudan muaf.
       yeniBolgeler.kendiIslemi(id);
-      await bolgeTamamla(id, tamamlandi);
+      await cizimTamamla(kayit.tip, id, tamamlandi);
       await queryClient.invalidateQueries({ queryKey: ["saha"] });
       setDurum({
         ok: true,
@@ -551,8 +509,6 @@ export default function SahaEkran() {
                   const p = g.properties;
                   const Ikon = tipIkonu(p.type);
                   const fotoSrc = fotoUrl(p.photo_url);
-                  const sekil = gorevSekli(p);
-                  const olcu = sekilOlcusu(sekil);
                   const detayAcik = acikDetay === p.assignment_id;
                   return (
                     <li
@@ -598,20 +554,6 @@ export default function SahaEkran() {
                               <IconWarning className="h-3 w-3" />
                               Bakım Lazım
                             </span>
-                            {sekil && (
-                              <span
-                                className="inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-700 ring-1 ring-slate-300"
-                                title="İşin kapsadığı alan/hat - haritada düz çizgiyle gösterilir"
-                              >
-                                {sekil.tip === "LineString" ? (
-                                  <IconRoute className="h-3 w-3" />
-                                ) : (
-                                  <IconLasso className="h-3 w-3" />
-                                )}
-                                {TALEP_SEKIL_ETIKETLERI[sekil.tip]}
-                                {olcu ? ` · ${olcu}` : ""}
-                              </span>
-                            )}
                             {mesafe != null && (
                               <span
                                 className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"
@@ -696,9 +638,6 @@ export default function SahaEkran() {
                                   etiket="Marka / model"
                                   deger={p.brand_model}
                                 />
-                              )}
-                              {olcu && (
-                                <DetaySatiri etiket="İşin büyüklüğü" deger={olcu} />
                               )}
                               {p.talep_tarihi && (
                                 <DetaySatiri
@@ -798,7 +737,7 @@ export default function SahaEkran() {
                       }
                       onOnayIste={() => setBolgeOnayBekleyen(b.id)}
                       onVazgec={() => setBolgeOnayBekleyen(null)}
-                      onTamamla={() => bolgeDurumDegis(b.id, b.ad, true)}
+                      onTamamla={() => bolgeDurumDegis(b, true)}
                     />
                   ))}
                 </Kategori>
@@ -831,7 +770,7 @@ export default function SahaEkran() {
                       }
                       onOnayIste={() => setBolgeOnayBekleyen(b.id)}
                       onVazgec={() => setBolgeOnayBekleyen(null)}
-                      onTamamla={() => bolgeDurumDegis(b.id, b.ad, true)}
+                      onTamamla={() => bolgeDurumDegis(b, true)}
                     />
                   ))}
                 </Kategori>
@@ -884,7 +823,7 @@ export default function SahaEkran() {
                         </p>
                       </div>
                       <button
-                        onClick={() => bolgeDurumDegis(b.id, b.ad, false)}
+                        onClick={() => bolgeDurumDegis(b, false)}
                         disabled={bolgeIslemde === b.id}
                         className="shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
                       >

@@ -50,6 +50,7 @@ function kapsamSonrasiTazele(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["assets"] });
   qc.invalidateQueries({ queryKey: ["reports"] });
   qc.invalidateQueries({ queryKey: ["bolgeler"] });
+  qc.invalidateQueries({ queryKey: ["guzergahlar"] });
 }
 
 export function useEslemeGuncelle() {

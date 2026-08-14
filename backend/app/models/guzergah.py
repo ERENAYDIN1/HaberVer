@@ -1,13 +1,13 @@
-"""Kaydedilmis gorev bolgeleri (alan).
+"""Kaydedilmis guzergahlar (cizgi).
 
-Haritada cizilen bir alan adlandirilip buraya kaydedilebilir ve bir saha
-ekibine atanabilir; ekip kaydi kendi ekraninda gorur ve bitirince tamamlandi
-isaretler. Cizgi (guzergah) kayitlari ayri bir tablodadir (models/guzergah.py):
-iki geometri tek sutunda tutuldugunda her sorgu tipe gore dallanmak zorunda
-kaliyordu ve sema "bu satirda gercekten poligon var" diyemiyordu.
+Bolgelerin (models/bolge.py) cizgi karsiligi: haritada olculen bir hat
+adlandirilip kaydedilir ve bir saha ekibine atanir - "bu guzergahi izle".
+Sutunlari bolgelerle aynidir, ayrilan tek sey geometri tipi (LINESTRING) ve
+dolayisiyla olcusu (uzunluk, alan degil).
 
-`yakalar` gibi migration verisi degil ayri bir tablodur: bolgeler kullanicinin
-calisma sirasinda olusturdugu, degistirdigi ve sildigi veridir.
+Iki tablonun ortak bir taban sinifi YOKTUR: alanlar birebir ayni oldugu icin
+soyutlamanin kazanci yok, ama her tablonun kendi sutunlarini kendi dosyasinda
+okuyabilmenin degeri var.
 """
 
 import uuid
@@ -21,8 +21,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from ..database import Base
 
 
-class Bolge(Base):
-    __tablename__ = "bolgeler"
+class Guzergah(Base):
+    __tablename__ = "guzergahlar"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -31,20 +31,15 @@ class Bolge(Base):
     )
     ad: Mapped[str] = mapped_column(String(120), nullable=False)
     aciklama: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Haritada cizim rengi (#rrggbb) - kullanici paletten secer.
     renk: Mapped[str] = mapped_column(String(9), nullable=False)
     geom: Mapped[object] = mapped_column(
-        Geometry(geometry_type="MULTIPOLYGON", srid=4326, spatial_index=False),
+        Geometry(geometry_type="LINESTRING", srid=4326, spatial_index=False),
         nullable=False,
     )
-    # Kaydi sahiplenen mudurluk. Talep/varlik kapsami TURDEN cozulur, ama bir
-    # bolgenin turu yoktur - bu yuzden mudurluk kaydin kendi sutununda durur.
-    # NULL = GENEL (tum personel gorur), "sahipsiz" degil: admin'in departmani
-    # olmadigindan onun cizdigi bolgeler dogal olarak NULL kalir.
+    # NULL = GENEL (tum personel gorur); bkz. models/bolge.py.
     departman: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("departmanlar.kod"), nullable=True
     )
-    # Bolgenin atandigi saha ekibi (saha_calisani). NULL ise atanmamis.
     worker_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -54,8 +49,6 @@ class Bolge(Base):
     assigned_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    # Ekip isi bitirdiginde dolar; kayit silinmez, "Tamamlanan İşler" altinda
-    # kalir ve geri alinabilir.
     tamamlandi_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

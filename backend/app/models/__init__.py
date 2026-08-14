@@ -1,7 +1,8 @@
 from .asset import Asset, AssetStatus, AssetType
 from .assignment import Assignment, AssignmentStatus
-from .bolge import Bolge, BolgeTipi
+from .bolge import Bolge
 from .departman import Departman, TurDepartman
+from .guzergah import Guzergah
 from .log import ActivityLog, LogAction
 from .report import Report, ReportStatus
 from .session import Session
@@ -17,8 +18,8 @@ __all__ = [
     "Assignment",
     "AssignmentStatus",
     "Bolge",
-    "BolgeTipi",
     "Departman",
+    "Guzergah",
     "LogAction",
     "Report",
     "ReportStatus",

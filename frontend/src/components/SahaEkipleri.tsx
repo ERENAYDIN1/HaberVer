@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { bolgeAta } from "../api/bolgeler";
+import { CIZIM_ANAHTARLARI, cizimAta } from "../api/cizimler";
 import {
   ekibeAta,
   ekipGorevleri,
@@ -33,6 +33,7 @@ import {
   type HavuzVarlik,
   type Yaka,
 } from "../types/saha";
+import type { BolgeTipi } from "../types/bolge";
 import {
   IconInbox,
   IconLasso,
@@ -47,7 +48,14 @@ import {
 type Islem =
   | { tip: "ata"; asset_id: string; worker_id: string }
   | { tip: "havuz"; asset_id: string }
-  | { tip: "bolge-ata"; bolge_id: string; worker_id: string | null };
+  // `kayitTipi` hangi uca gidilecegini secer: bolge ve guzergah ayri
+  // tablolar/uclar, ama panoda ayni listede dururlar.
+  | {
+      tip: "bolge-ata";
+      kayitTipi: BolgeTipi;
+      bolge_id: string;
+      worker_id: string | null;
+    };
 
 /** Havuz siralamasi: bekleme suresine gore (en eski/en yeni once). */
 type HavuzSira = "eski" | "yeni";
@@ -282,6 +290,7 @@ function BolgeGorevSatiri({
             setAcik(false);
             onIslem({
               tip: "bolge-ata",
+              kayitTipi: gorev.tip,
               bolge_id: gorev.bolge_id,
               worker_id: v === "__havuz__" ? null : v,
             });
@@ -750,7 +759,7 @@ export default function SahaEkipleri({
     mutationFn: (v: Islem): Promise<unknown> => {
       if (v.tip === "ata") return ekibeAta(v.asset_id, v.worker_id);
       if (v.tip === "havuz") return gorevGeriAl(v.asset_id);
-      return bolgeAta(v.bolge_id, v.worker_id);
+      return cizimAta(v.kayitTipi, v.bolge_id, v.worker_id);
     },
     onSuccess: (_d, v) => {
       const metin =
@@ -764,7 +773,9 @@ export default function SahaEkipleri({
       setDurum({ ok: true, metin });
       queryClient.invalidateQueries({ queryKey: ["saha"] });
       if (v.tip === "bolge-ata") {
-        queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
+        for (const anahtar of CIZIM_ANAHTARLARI) {
+          queryClient.invalidateQueries({ queryKey: anahtar });
+        }
       }
     },
     onError: (e) => setDurum({ ok: false, metin: (e as Error).message }),
@@ -779,7 +790,9 @@ export default function SahaEkipleri({
           : { ok: true, metin: "Havuzda uygun ekibi bulunan iş yok." }
       );
       queryClient.invalidateQueries({ queryKey: ["saha"] });
-      queryClient.invalidateQueries({ queryKey: ["bolgeler"] });
+      for (const anahtar of CIZIM_ANAHTARLARI) {
+        queryClient.invalidateQueries({ queryKey: anahtar });
+      }
     },
     onError: (e) => setDurum({ ok: false, metin: (e as Error).message }),
   });

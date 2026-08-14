@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { bolgeOlustur } from "../api/bolgeler";
+import { cizimOlustur } from "../api/cizimler";
 import { useAuth } from "../auth/AuthContext";
 import { useDepartmanlar } from "../hooks/useDepartmanlar";
 import { departmanBul } from "../types/departman";
@@ -68,10 +68,9 @@ export default function BolgeKaydetModal({ taslak, onKapat, onKaydedildi }: Prop
     setKaydediliyor(true);
     setHata(null);
     try {
-      const bolge = await bolgeOlustur({
+      const bolge = await cizimOlustur(taslak.tip, {
         ad: ad.trim(),
         aciklama: aciklama.trim() || null,
-        tip: taslak.tip,
         renk,
         departman: departman || null,
         noktalar: taslak.noktalar,

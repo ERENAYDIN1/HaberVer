@@ -99,9 +99,9 @@ describe("gorunumlereAyir", () => {
   it("onayli talebin PIN konumunu olusan varliktan alir, ham SEKLINE dokunmaz", () => {
     // Regresyon: personel varligin enlem/boylamini duzeltince haritadaki talep
     // isaretcisi eski (vatandasin isaretledigi) noktada kaliyordu.
-    // Regresyon 2: geometry'nin tamamini degistirmek cizgi/alan taleplerin
-    // ham seklini (talep-sekil katmani) bir noktaya cevirmisti - yalnizca
-    // properties.nokta (pinin oturdugu yer) degismeli.
+    // Regresyon 2: `geometry` vatandasin gonderdigi ham kayittir ve belge
+    // olarak durmali - yalnizca properties.nokta (pinin oturdugu yer)
+    // degismeli.
     const tasinmis = varlik({
       status: "bakim_lazim",
       source: "ihbar",

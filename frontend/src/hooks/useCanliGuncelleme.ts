@@ -5,7 +5,13 @@ import { useEffect, useRef, useState } from "react";
  *  kokudur (bkz. backend/app/olaylar.py::OlayAdi). Adlarin iki tarafta AYNI
  *  yazilmasi bilincli: "hangi olay hangi ekrani tazeler" sorusu tek kelimeyle
  *  cevaplanabilsin. */
-export type OlayAdi = "saha" | "bolgeler" | "assets" | "reports" | "logs";
+export type OlayAdi =
+  | "saha"
+  | "bolgeler"
+  | "guzergahlar"
+  | "assets"
+  | "reports"
+  | "logs";
 
 /** Yedek yoklama araligi (ms). SSE ana kanal, bu yalnizca AGDIR: baglanti
  *  sessizce olurse (proxy zaman asimi, uyuyan sekme) ekran en fazla bu kadar

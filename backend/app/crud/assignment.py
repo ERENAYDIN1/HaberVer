@@ -7,12 +7,13 @@ modulleri buradan cagirdigi icin aksi halde dongusel import olusur."""
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import String, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..models.asset import Asset, AssetStatus
 from ..models.assignment import Assignment, AssignmentStatus
 from ..models.bolge import Bolge
+from ..models.guzergah import Guzergah
 from ..models.log import LogAction
 from ..models.report import Report
 from ..models.user import User, UserRole
@@ -22,10 +23,11 @@ from .log import add_log
 
 # Bir ekibe ayni anda dusebilecek en fazla aktif gorev.
 #
-# "Gorev" TEK BIR KAVRAMDIR: tekil bakim isi (assignments), gorev bolgesi ve
-# guzergah (gorev_bolgeleri) ayni kotayi paylasir. Ekibin gunu tektir; bir alan
-# taramasi bir bank tamirinden daha az is degildir, ayri kovalarda sayilmasi
-# ekibin gercek yukunu gizliyordu.
+# "Gorev" TEK BIR KAVRAMDIR: tekil bakim isi (assignments), gorev bolgesi
+# (bolgeler) ve guzergah (guzergahlar) ayni kotayi paylasir. Ekibin gunu
+# tektir; bir alan taramasi bir bank tamirinden daha az is degildir, ayri
+# kovalarda sayilmasi ekibin gercek yukunu gizliyordu. Uc tablo ayri oldugu
+# icin toplam burada, uygulama katmaninda kurulur.
 MAKS_AKTIF_GOREV = 3
 
 # Otomatik atamada mesafe kademeleri (metre). Once 5 km icindeki uygun ekiplere
@@ -49,7 +51,7 @@ SON_TAMAMLANAN_SAYISI = 3
 
 def aktif_gorev_sayisi(db: Session, worker_id: uuid.UUID) -> int:
     """Ekibin uzerindeki toplam aktif is: tekil bakim gorevleri + kendisine
-    atanmis, henuz tamamlanmamis bolge/guzergahlar. Kota tek sayidir."""
+    atanmis, henuz tamamlanmamis bolgeler ve guzergahlar. Kota tek sayidir."""
     tekil = db.execute(
         select(func.count())
         .select_from(Assignment)
@@ -58,20 +60,26 @@ def aktif_gorev_sayisi(db: Session, worker_id: uuid.UUID) -> int:
             Assignment.status == AssignmentStatus.atandi,
         )
     ).scalar_one()
-    bolgeler = db.execute(
+    alanlar = db.execute(
         select(func.count())
         .select_from(Bolge)
         .where(Bolge.worker_id == worker_id, Bolge.tamamlandi_at.is_(None))
     ).scalar_one()
-    return tekil + bolgeler
+    cizgiler = db.execute(
+        select(func.count())
+        .select_from(Guzergah)
+        .where(Guzergah.worker_id == worker_id, Guzergah.tamamlandi_at.is_(None))
+    ).scalar_one()
+    return tekil + alanlar + cizgiler
 
 
-def _aktif_bolge_sayisi_subq():
-    """Her User icin aktif (tamamlanmamis) bolge/guzergah sayisi."""
+def _aktif_kayit_sayisi_subq(model):
+    """Her User icin aktif (tamamlanmamis) bolge ya da guzergah sayisi. Iki
+    tablonun sutunlari ayni oldugu icin tek ifade ikisine de uyar."""
     return (
         select(func.count())
-        .select_from(Bolge)
-        .where(Bolge.worker_id == User.id, Bolge.tamamlandi_at.is_(None))
+        .select_from(model)
+        .where(model.worker_id == User.id, model.tamamlandi_at.is_(None))
         .correlate(User)
         .scalar_subquery()
     )
@@ -79,7 +87,8 @@ def _aktif_bolge_sayisi_subq():
 
 def _aktif_sayi_subq():
     """Her User icin TOPLAM aktif gorev sayisini veren korelasyonlu alt sorgu:
-    tekil bakim gorevleri + atanmis bolge/guzergahlar (bkz. MAKS_AKTIF_GOREV)."""
+    tekil bakim gorevleri + atanmis bolgeler + atanmis guzergahlar (bkz.
+    MAKS_AKTIF_GOREV)."""
     tekil = (
         select(func.count())
         .select_from(Assignment)
@@ -90,16 +99,18 @@ def _aktif_sayi_subq():
         .correlate(User)
         .scalar_subquery()
     )
-    return tekil + _aktif_bolge_sayisi_subq()
+    return (
+        tekil
+        + _aktif_kayit_sayisi_subq(Bolge)
+        + _aktif_kayit_sayisi_subq(Guzergah)
+    )
 
 
 def _talep_alani_subq(ifade):
     """Varligin dogdugu TALEP kaydindan bir alan (kayitli varliklarda NULL).
 
-    Varliga tasinmayan iki sey burada: isin SEKLI ve vatandasin ACIKLAMASI.
-    Varlik her zaman POINT'tir (envanter, atama mesafesi ve isaretci tek nokta
-    uzerinden calisir) ve `assets`te not sutunu yoktur - ama sahaya giden ekip
-    isin bir hat mi bolge mi oldugunu ve "hangi bank kirik"i okuyabilmeli.
+    Varliga tasinmayan sey vatandasin ACIKLAMASIDIR: `assets`te not sutunu
+    yoktur, ama sahaya giden ekip "hangi bank kirik"i okuyabilmeli.
 
     JOIN degil korelasyonlu alt sorgu: satir sayisini degistiremez, dolayisiyla
     ayni varliga bagli birden fazla talep kaydi cikarsa gorev listesi
@@ -116,7 +127,6 @@ def _talep_alani_subq(ifade):
 def _talep_sutunlari():
     """Gorev satirlarina eklenen talep alanlari (sema ile ayni sirada)."""
     return (
-        _talep_alani_subq(func.ST_AsGeoJSON(Report.geometry)).label("sekil"),
         _talep_alani_subq(Report.note).label("talep_notu"),
         _talep_alani_subq(Report.created_at).label("talep_tarihi"),
     )
@@ -186,74 +196,97 @@ def en_yakin_uygun_ekip(
     return None
 
 
-def bolge_temsil_noktasi(tip_alan: bool):
-    """Bir bolge/guzergah kaydinin mesafe ve yaka hesabinda kullanilacak TEK
-    noktasi. Varliklarin `geometry`'si zaten POINT'tir; bolgeler icin ayni rolu
-    bu ifade ustlenir (talep kayitlarindaki `nokta` sutunuyla ayni fikir):
-    alan -> ST_PointOnSurface (agirlik merkezi disari dusebilir, bu her zaman
-    icerdedir), cizgi -> hattin ortasi."""
-    if tip_alan:
-        return func.ST_PointOnSurface(Bolge.geom)
-    return func.ST_LineInterpolatePoint(Bolge.geom, 0.5)
+def bolge_temsil_noktasi():
+    """Bir bolge kaydinin mesafe ve yaka hesabinda kullanilacak TEK noktasi.
+    Varliklarin `geometry`'si zaten POINT'tir; bolgeler icin ayni rolu bu ifade
+    ustlenir (talep kayitlarindaki `nokta` sutunuyla ayni fikir):
+    ST_PointOnSurface, cunku agirlik merkezi alanin disina dusebilir."""
+    return func.ST_PointOnSurface(Bolge.geom)
 
 
-def _bolge_noktasi(db: Session, bolge: Bolge):
+def guzergah_temsil_noktasi():
+    """Bir guzergahin temsil noktasi: hattin ortasi (bkz.
+    bolge_temsil_noktasi)."""
+    return func.ST_LineInterpolatePoint(Guzergah.geom, 0.5)
+
+
+def _kayit_noktasi(db: Session, model, ifade, kayit):
     """Kaydin temsil noktasini geometri degeri olarak cozer (mesafe/yaka
     sorgularina parametre olarak girecegi icin ifade degil deger gerekir)."""
-    from ..models.bolge import BolgeTipi
-
-    return db.execute(
-        select(bolge_temsil_noktasi(bolge.tip is BolgeTipi.alan)).where(
-            Bolge.id == bolge.id
-        )
-    ).scalar_one()
+    return db.execute(select(ifade).where(model.id == kayit.id)).scalar_one()
 
 
-def bolge_otomatik_ata(db: Session, bolge: Bolge) -> User | None:
-    """Bir bolgeyi/guzergahi en yakin uygun ekibe atar (varliklarla AYNI uc
-    kisit: mesafe kademesi + yaka + mudurluk, arti ortak kapasite). Uygun ekip
-    yoksa kayit atanmadan bekler. Atanan ekibi dondurur; commit cagirmaz."""
-    if bolge.worker_id is not None or bolge.tamamlandi_at is not None:
+def _otomatik_ata(db: Session, kayit, nokta, entity_type: str) -> User | None:
+    """Bir bolge/guzergah kaydini en yakin uygun ekibe atar (varliklarla AYNI
+    uc kisit: mesafe kademesi + yaka + mudurluk, arti ortak kapasite). Uygun
+    ekip yoksa kayit atanmadan bekler. Atanan ekibi dondurur; commit
+    cagirmaz."""
+    if kayit.worker_id is not None or kayit.tamamlandi_at is not None:
         return None
-    nokta = _bolge_noktasi(db, bolge)
     if nokta is None:
         return None
-    ekip = en_yakin_uygun_ekip(db, nokta, departman=bolge.departman)
+    ekip = en_yakin_uygun_ekip(db, nokta, departman=kayit.departman)
     if ekip is None:
         return None
-    bolge.worker_id = ekip.id
-    bolge.assigned_at = datetime.now(timezone.utc)
-    bolge.assigned_by = None  # otomatik
+    kayit.worker_id = ekip.id
+    kayit.assigned_at = datetime.now(timezone.utc)
+    kayit.assigned_by = None  # otomatik
     add_log(
         db,
         action=LogAction.bolge_assigned,
         actor=None,
-        entity_type="bolge",
-        entity_id=bolge.id,
-        entity_name=bolge.ad,
+        entity_type=entity_type,
+        entity_id=kayit.id,
+        entity_name=kayit.ad,
         detail=f"{ekip.full_name or ekip.email} ekibine atandı (otomatik)",
-        departman=bolge.departman,
+        departman=kayit.departman,
     )
     return ekip
 
 
-def bekleyen_bolgeleri_dagit(db: Session) -> int:
-    """Atanmamis, tamamlanmamis bolge/guzergahlari FIFO sirayla en yakin uygun
-    ekiplere dagitir. Varlik havuzuyla ayni tetikleyiciler: bir is bitip
-    kapasite acildiginda ve bir ekip konum bildirdiginde. Commit cagirmaz."""
-    bekleyenler = (
-        db.execute(
-            select(Bolge)
-            .where(Bolge.worker_id.is_(None), Bolge.tamamlandi_at.is_(None))
-            .order_by(Bolge.created_at.asc())
-        )
-        .scalars()
-        .all()
+def bolge_otomatik_ata(db: Session, bolge: Bolge) -> User | None:
+    return _otomatik_ata(
+        db,
+        bolge,
+        _kayit_noktasi(db, Bolge, bolge_temsil_noktasi(), bolge),
+        "bolge",
     )
+
+
+def guzergah_otomatik_ata(db: Session, guzergah: Guzergah) -> User | None:
+    return _otomatik_ata(
+        db,
+        guzergah,
+        _kayit_noktasi(db, Guzergah, guzergah_temsil_noktasi(), guzergah),
+        "guzergah",
+    )
+
+
+def bekleyen_bolgeleri_dagit(db: Session) -> int:
+    """Atanmamis, tamamlanmamis bolge ve guzergahlari FIFO sirayla en yakin
+    uygun ekiplere dagitir. Varlik havuzuyla ayni tetikleyiciler: bir is bitip
+    kapasite acildiginda ve bir ekip konum bildirdiginde. Commit cagirmaz.
+
+    Iki tablo ayri FIFO kuyruklaridir ve once bolgeler denenir; aralarinda
+    anlamli bir oncelik yok, ama sira sabit olmali ki ayni durumda ayni sonuc
+    ciksin."""
     dagitilan = 0
-    for bolge in bekleyenler:
-        if bolge_otomatik_ata(db, bolge) is not None:
-            dagitilan += 1
+    for model, otomatik_ata in (
+        (Bolge, bolge_otomatik_ata),
+        (Guzergah, guzergah_otomatik_ata),
+    ):
+        bekleyenler = (
+            db.execute(
+                select(model)
+                .where(model.worker_id.is_(None), model.tamamlandi_at.is_(None))
+                .order_by(model.created_at.asc())
+            )
+            .scalars()
+            .all()
+        )
+        for kayit in bekleyenler:
+            if otomatik_ata(db, kayit) is not None:
+                dagitilan += 1
     return dagitilan
 
 
@@ -263,9 +296,10 @@ def bekleyen_gorevleri_dagit(db: Session) -> int:
     ekip menzile girecek sekilde konum bildirince cagrilir. Atanan gorev
     sayisini dondurur; commit cagirmaz.
 
-    Bolgeler de ayni kotayi paylastigi icin varliklar dagitildiktan sonra
-    bekleyen bolge/guzergahlar da dagitilir - iki kuyruk tek kapasiteye
-    bakarken birinin digerini gormemesi ekibi kotanin uzerine cikarirdi."""
+    Bolgeler ve guzergahlar da ayni kotayi paylastigi icin varliklar
+    dagitildiktan sonra onlarin kuyruklari da dagitilir - kuyruklar tek
+    kapasiteye bakarken birinin digerini gormemesi ekibi kotanin uzerine
+    cikarirdi."""
     atanmis = select(Assignment.asset_id).where(
         Assignment.status == AssignmentStatus.atandi
     )
@@ -304,7 +338,7 @@ def bekleyen_gorevleri_dagit(db: Session) -> int:
         if ekip is not None:
             ata(db, asset, ekip, assigned_by=None)
             dagitilan += 1
-    # Varliklar yerlestikten sonra kalan kapasiteyle bolgeler dagitilir.
+    # Varliklar yerlestikten sonra kalan kapasiteyle bolge/guzergahlar dagitilir.
     return dagitilan + bekleyen_bolgeleri_dagit(db)
 
 
@@ -587,59 +621,67 @@ def aktif_atamalar(db: Session, kapsam_turleri=None):
     return db.execute(stmt).all()
 
 
-def aktif_bolge_gorevleri(db: Session, departman: str | None = None):
-    """Ekiplere atanmis, tamamlanmamis bolge/guzergahlar (pano ve ekip
-    popup'inda tekil gorevlerle birlikte listelenir). Kapsam kaydin KENDI
-    departman sutunundan gecer - bir bolgenin turu yoktur.
+def _kayit_gorev_satirlari(db: Session, model, nokta, tip: str, kosullar, sira):
+    """Bir bolge/guzergah kaydini pano satirina cevirir: kayit + temsil
+    noktasinin koordinatlari + yakasi + hangi tablodan geldigi.
 
-    `departman` verilirse yalnizca o mudurlugun ve genel kayitlar doner."""
-    from ..models.bolge import BolgeTipi
-
-    nokta = case(
-        (Bolge.tip == BolgeTipi.alan, func.ST_PointOnSurface(Bolge.geom)),
-        else_=func.ST_LineInterpolatePoint(Bolge.geom, 0.5),
-    )
+    `tip` satirin icinde tasinir cunku iki tablonun sonucu tek listede
+    birlesiyor ve arayuz alani guzergahtan ayirt edebilmeli (rozet, renk)."""
     stmt = (
         select(
-            Bolge,
+            model,
             func.ST_X(nokta).label("longitude"),
             func.ST_Y(nokta).label("latitude"),
             yaka_crud.nokta_yakasi_ifadesi(nokta).label("yaka"),
+            func.cast(tip, String).label("tip"),
         )
-        .where(Bolge.worker_id.isnot(None), Bolge.tamamlandi_at.is_(None))
-        .order_by(Bolge.assigned_at.asc())
+        .where(*kosullar)
+        .order_by(sira)
     )
-    if departman is not None:
-        stmt = stmt.where(
-            or_(Bolge.departman.is_(None), Bolge.departman == departman)
-        )
     return db.execute(stmt).all()
+
+
+def _kapsam_kosulu(model, departman: str | None):
+    """Kaydin kendi `departman` sutununa dayali kapsam: o mudurlugun kayitlari
+    + genel (NULL) kayitlar."""
+    return or_(model.departman.is_(None), model.departman == departman)
+
+
+def aktif_bolge_gorevleri(db: Session, departman: str | None = None):
+    """Ekiplere atanmis, tamamlanmamis bolgeler ve guzergahlar tek listede
+    (pano ve ekip popup'inda tekil gorevlerle birlikte listelenir). Kapsam
+    kaydin KENDI departman sutunundan gecer - bir bolgenin turu yoktur.
+
+    `departman` verilirse yalnizca o mudurlugun ve genel kayitlar doner."""
+    satirlar = []
+    for model, nokta, tip in (
+        (Bolge, bolge_temsil_noktasi(), "alan"),
+        (Guzergah, guzergah_temsil_noktasi(), "cizgi"),
+    ):
+        kosullar = [model.worker_id.isnot(None), model.tamamlandi_at.is_(None)]
+        if departman is not None:
+            kosullar.append(_kapsam_kosulu(model, departman))
+        satirlar += _kayit_gorev_satirlari(
+            db, model, nokta, tip, kosullar, model.assigned_at.asc()
+        )
+    return satirlar
 
 
 def bekleyen_bolge_havuzu(db: Session, departman: str | None = None):
-    """Atanmamis, tamamlanmamis bolge/guzergahlar - varlik havuzunun bolge
-    karsiligi. Personel panosunda "bekleyen isler" olarak gosterilir."""
-    from ..models.bolge import BolgeTipi
-
-    nokta = case(
-        (Bolge.tip == BolgeTipi.alan, func.ST_PointOnSurface(Bolge.geom)),
-        else_=func.ST_LineInterpolatePoint(Bolge.geom, 0.5),
-    )
-    stmt = (
-        select(
-            Bolge,
-            func.ST_X(nokta).label("longitude"),
-            func.ST_Y(nokta).label("latitude"),
-            yaka_crud.nokta_yakasi_ifadesi(nokta).label("yaka"),
+    """Atanmamis, tamamlanmamis bolgeler ve guzergahlar - varlik havuzunun
+    bolge karsiligi. Personel panosunda "bekleyen isler" olarak gosterilir."""
+    satirlar = []
+    for model, nokta, tip in (
+        (Bolge, bolge_temsil_noktasi(), "alan"),
+        (Guzergah, guzergah_temsil_noktasi(), "cizgi"),
+    ):
+        kosullar = [model.worker_id.is_(None), model.tamamlandi_at.is_(None)]
+        if departman is not None:
+            kosullar.append(_kapsam_kosulu(model, departman))
+        satirlar += _kayit_gorev_satirlari(
+            db, model, nokta, tip, kosullar, model.created_at.asc()
         )
-        .where(Bolge.worker_id.is_(None), Bolge.tamamlandi_at.is_(None))
-        .order_by(Bolge.created_at.asc())
-    )
-    if departman is not None:
-        stmt = stmt.where(
-            or_(Bolge.departman.is_(None), Bolge.departman == departman)
-        )
-    return db.execute(stmt).all()
+    return satirlar
 
 
 def havuz_varliklari(db: Session, kapsam_turleri=None):

@@ -3,7 +3,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..models.asset import AssetType
 
 # Kod dogal anahtardir: `users.departman`, `tur_departman.departman_kod`,
-# `activity_logs.departman` ve `gorev_bolgeleri.departman` ona baglanir.
+# `activity_logs.departman`, `bolgeler.departman` ve `guzergahlar.departman`
+# ona baglanir.
 # Sonradan degistirilemez.
 KOD_DESENI = r"^[a-z][a-z0-9_]{1,31}$"
 RENK_DESENI = r"^#[0-9a-fA-F]{6}$"

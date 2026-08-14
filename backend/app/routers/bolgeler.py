@@ -1,4 +1,4 @@
-"""Kaydedilmis gorev bolgeleri ve guzergahlar.
+"""Kaydedilmis gorev bolgeleri (alan). Guzergahlar routers/guzergahlar.py'de.
 
 Kapsam kurali burada TURDEN degil kaydin kendi `departman` sutunundan gelir:
 bir bolgenin turu yoktur (bkz. models/bolge.py). Kural yine de ayni yerde
@@ -16,7 +16,6 @@ from ..crud import bolge as crud
 from ..crud import departman as departman_crud
 from ..crud.session import OturumBaglami
 from ..database import get_db
-from ..models.bolge import BolgeTipi
 from ..models.user import User, UserRole
 from ..schemas.bolge import (
     BolgeAtama,
@@ -31,7 +30,7 @@ router = APIRouter(prefix="/api/bolgeler", tags=["bolgeler"])
 
 
 def _bolge_degisti() -> None:
-    """Bolge/guzergah degisti; `saha` da yayinlanir cunku kayit ayni kotayi
+    """Bolge degisti; `saha` da yayinlanir cunku kayit ayni kotayi
     paylasir - atanmasi ekibin yukunu ve panolardaki sayaci degistirir.
 
     Hedef daraltilmaz: kaydin mudurlugu degistirilmis (admin devri) ya da
@@ -67,8 +66,8 @@ def bolgelerim(
     user: User = Depends(require_role(UserRole.saha_calisani)),
     db: Session = Depends(get_db),
 ):
-    """Saha ekibine atanmis gorev bolgeleri ve guzergahlar (tamamlananlar
-    dahil - ekip kendi ekraninda ayirir ve geri alabilir).
+    """Saha ekibine atanmis gorev bolgeleri (tamamlananlar dahil - ekip kendi
+    ekraninda ayirir ve geri alabilir).
 
     Departman suzgeci GEREKMEZ: ekip zaten yalnizca kendisine ATANAN kaydi
     gorur ve atama kurali kaydin mudurluguyle uyumu garanti eder."""
@@ -77,8 +76,8 @@ def bolgelerim(
 
 @router.get("", response_model=list[BolgeCikti], dependencies=[Depends(personel)])
 def bolgeler(alan: Kapsam = Depends(kapsam), db: Session = Depends(get_db)):
-    """Personel: kaydedilmis gorev bolgeleri ve guzergahlar. Admin tumunu,
-    diger personel yalnizca KENDI MUDURLUGUNUN ve genel kayitlari gorur."""
+    """Personel: kaydedilmis gorev bolgeleri. Admin tumunu, diger personel
+    yalnizca KENDI MUDURLUGUNUN ve genel kayitlari gorur."""
     return crud.list_bolgeler(db, departman=alan.departman, sinirli=not alan.sinirsiz)
 
 
@@ -89,7 +88,7 @@ def bolge_olustur(
     alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
-    """Yeni bolge/guzergah.
+    """Yeni gorev bolgesi.
 
     Mudurluk istemciden gelen degere BIRAKILMAZ: departmani olan personelin
     kaydi her zaman kendi mudurlugune yazilir. Yalnizca admin (departmani
@@ -115,24 +114,16 @@ def bolge_guncelle(
     alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
-    """Ad/aciklama/renk ozellestirmesi, sekil (geometri) ve mudurluk devri.
+    """Ad/aciklama/renk ozellestirmesi, sekil (geometri) ve mudurluk devri."""
+    _getir(db, bolge_id, alan)
 
-    Sekil gonderildiyse kaydin KENDI tipine gore dogrulanir - bir alan alan,
-    bir guzergah cizgi olarak kalir (tip bu uctan degistirilemez)."""
-    mevcut = _getir(db, bolge_id, alan)
-
-    if data.noktalar is not None:
-        if mevcut.tip is BolgeTipi.cizgi:
-            if len(data.noktalar) != 1 or len(data.noktalar[0]) < 2:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Güzergâh tek bir dizide en az 2 nokta içermelidir",
-                )
-        elif any(len(halka) < 3 for halka in data.noktalar):
-            raise HTTPException(
-                status_code=422,
-                detail="Her alan halkası en az 3 nokta içermelidir",
-            )
+    if data.noktalar is not None and any(
+        len(halka) < 3 for halka in data.noktalar
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Her alan halkası en az 3 nokta içermelidir",
+        )
 
     # Mudurluk devri yalnizca admin'in isi: bir mudurluk kendi kaydini
     # digerine "atarak" ya da genele birakarak kapsamdan cikaramamali.
@@ -176,8 +167,8 @@ def bolge_ata(
 ):
     """Kaydi bir saha ekibine atar; worker_id=null atamayi kaldirir.
 
-    EKIP KAYDIN MUDURLUGUNDEN olmalidir: Fen Isleri'nin cizdigi bir asfalt
-    guzergahini Park ve Bahceler ekibine atamanin anlami yok. Kural admin icin
+    EKIP KAYDIN MUDURLUGUNDEN olmalidir: Fen Isleri'nin cizdigi bir calisma
+    alanini Park ve Bahceler ekibine atamanin anlami yok. Kural admin icin
     uygulanmaz - varlik atamasindaki yaka/departman muafiyetiyle ayni desen:
     yetki personeldedir, arayuz karsi mudurlugu isaretleyip uyarir."""
     mevcut = _getir(db, bolge_id, alan)
@@ -210,7 +201,7 @@ def bolge_tamamla(
     alan: Kapsam = Depends(kapsam),
     db: Session = Depends(get_db),
 ):
-    """Bolgeyi/guzergahi tamamlandi isaretler; tamamlandi=false geri alir.
+    """Bolgeyi tamamlandi isaretler; tamamlandi=false geri alir.
 
     Saha ekibi yalnizca KENDISINE atanan kaydi kapatabilir; personel (admin/
     calisan) kendi kapsamindaki her kaydi kapatip acabilir."""

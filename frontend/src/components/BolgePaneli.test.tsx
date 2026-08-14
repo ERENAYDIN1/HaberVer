@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Bolge } from "../types/bolge";
+import type { BolgeYanit } from "../types/bolge";
 import type { EkipOzet } from "../types/saha";
 import { sarmala } from "../test/yardimcilar";
 
@@ -10,11 +10,10 @@ import { sarmala } from "../test/yardimcilar";
  *  Bildirilen hata bu zincirdeydi - atama sunucuda oluyor ama panel eski
  *  durumu gosterip "havuza geri al"i hic cikarmiyordu. */
 
-const BOLGE: Bolge = {
+const BOLGE: BolgeYanit = {
   id: "b1",
   ad: "Test Alanı",
   aciklama: null,
-  tip: "alan",
   renk: "#7c3aed",
   departman: "fen_isleri",
   noktalar: [
@@ -26,7 +25,6 @@ const BOLGE: Bolge = {
     ],
   ],
   alan_m2: 1000,
-  uzunluk_m: null,
   worker_id: null,
   worker_ad: null,
   assigned_at: null,
@@ -50,7 +48,7 @@ const EKIP: EkipOzet = {
 
 /** Sunucu durumu testin icinde yasar: `bolgeAta` onu degistirir, `bolgeler`
  *  her cagrildiginda guncel hali doner - gercek tazeleme dongusu gibi. */
-let sunucudakiBolge: Bolge;
+let sunucudakiBolge: BolgeYanit;
 
 vi.mock("../api/bolgeler", () => ({
   bolgeler: () => Promise.resolve([sunucudakiBolge]),
@@ -64,6 +62,15 @@ vi.mock("../api/bolgeler", () => ({
   },
   bolgeGuncelle: vi.fn(),
   bolgeSil: vi.fn(),
+}));
+
+// Panel iki ucu birden ceker; bu test yalnizca alan tarafini olcuyor ama
+// guzergah sorgusu cozulmeden birlesik liste undefined kalirdi.
+vi.mock("../api/guzergahlar", () => ({
+  guzergahlar: () => Promise.resolve([]),
+  guzergahAta: vi.fn(),
+  guzergahGuncelle: vi.fn(),
+  guzergahSil: vi.fn(),
 }));
 
 vi.mock("../hooks/useDepartmanlar", () => ({

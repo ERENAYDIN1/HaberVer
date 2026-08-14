@@ -100,7 +100,6 @@ const BOLGE_KAYDI = {
   id: "bolge-1",
   ad: "Kadikoy Parki",
   aciklama: null,
-  tip: "alan" as const,
   renk: "#7c3aed",
   departman: null,
   noktalar: [
@@ -112,7 +111,6 @@ const BOLGE_KAYDI = {
     ] as [number, number][],
   ],
   alan_m2: 1000,
-  uzunluk_m: null,
   worker_id: null,
   worker_ad: null,
   assigned_at: null,
@@ -122,12 +120,12 @@ const BOLGE_KAYDI = {
   updated_at: "2026-01-01T00:00:00Z",
 };
 
+// Ayri bir ucun ham yaniti: alan olcusu yok, uzunlugu var.
+const { alan_m2: _alan, ...GUZERGAH_TABANI } = BOLGE_KAYDI;
 const GUZERGAH_KAYDI = {
-  ...BOLGE_KAYDI,
+  ...GUZERGAH_TABANI,
   id: "guzergah-1",
   ad: "Sahil Yolu Hatti",
-  tip: "cizgi" as const,
-  alan_m2: null,
   uzunluk_m: 500,
   noktalar: [
     [
@@ -138,11 +136,24 @@ const GUZERGAH_KAYDI = {
 };
 
 vi.mock("./api/bolgeler", () => ({
-  bolgeler: vi.fn(async () => [BOLGE_KAYDI, GUZERGAH_KAYDI]),
+  bolgeler: vi.fn(async () => [BOLGE_KAYDI]),
+  bolgelerim: vi.fn(async () => []),
   bolgeGuncelle: vi.fn(),
   bolgeOlustur: vi.fn(),
   bolgeSil: vi.fn(),
   bolgeAta: vi.fn(),
+  bolgeTamamla: vi.fn(),
+}));
+
+// Guzergahlar ayri bir uc: iki sorgu birlestikten sonra panel ikisini de gorur.
+vi.mock("./api/guzergahlar", () => ({
+  guzergahlar: vi.fn(async () => [GUZERGAH_KAYDI]),
+  guzergahlarim: vi.fn(async () => []),
+  guzergahGuncelle: vi.fn(),
+  guzergahOlustur: vi.fn(),
+  guzergahSil: vi.fn(),
+  guzergahAta: vi.fn(),
+  guzergahTamamla: vi.fn(),
 }));
 
 vi.mock("./api/geo", () => ({

@@ -17,6 +17,7 @@ from .routers import (
     bolgeler,
     departmanlar,
     geo,
+    guzergahlar,
     logs,
     media,
     olaylar,
@@ -120,6 +121,7 @@ app.include_router(assets.router)
 app.include_router(reports.router)
 app.include_router(saha.router)
 app.include_router(bolgeler.router)
+app.include_router(guzergahlar.router)
 app.include_router(sinirlar.router)
 app.include_router(geo.router)
 app.include_router(logs.router)

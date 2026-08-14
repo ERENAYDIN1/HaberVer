@@ -47,7 +47,7 @@ NABIZ_SANIYE = 25
 #: Istemcideki react-query anahtarlarinin koku. Olay adi bilincli olarak
 #: frontend'in sorgu anahtariyla AYNI yazilir: "hangi olay hangi ekrani
 #: tazeler" sorusu iki tarafta da tek kelimeyle cevaplanabilsin.
-OlayAdi = Literal["saha", "bolgeler", "assets", "reports", "logs"]
+OlayAdi = Literal["saha", "bolgeler", "guzergahlar", "assets", "reports", "logs"]
 
 
 @dataclass(frozen=True)

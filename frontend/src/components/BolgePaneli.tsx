@@ -1,7 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 
-import { bolgeAta, bolgeGuncelle, bolgeSil, bolgeler as bolgeleriGetir } from "../api/bolgeler";
+import {
+  CIZIM_ANAHTARLARI,
+  cizimAta,
+  cizimGuncelle,
+  cizimSil,
+} from "../api/cizimler";
+import { useKayitliCizimler } from "../hooks/useKayitliCizimler";
 import { useDepartmanlar } from "../hooks/useDepartmanlar";
 import { departmanBul } from "../types/departman";
 import type { Bolge } from "../types/bolge";
@@ -140,7 +146,7 @@ export default function BolgePaneli({
   mobil,
 }: BolgePaneliProps) {
   const queryClient = useQueryClient();
-  const sorgu = useQuery({ queryKey: ["bolgeler"], queryFn: bolgeleriGetir });
+  const sorgu = useKayitliCizimler();
   // Yarim kalmis islemler hangi sekmede acildiklariyla birlikte tutulur ve
   // yalnizca o sekmede okunur - sekme gecisinde bir sekmede acik kalan silme
   // onayi digerinde gorunmesin diye.
@@ -183,13 +189,15 @@ export default function BolgePaneli({
    *  gorur. */
   const tazele = () =>
     Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["bolgeler"] }),
+      ...CIZIM_ANAHTARLARI.map((anahtar) =>
+        queryClient.invalidateQueries({ queryKey: anahtar })
+      ),
       queryClient.invalidateQueries({ queryKey: ["saha"] }),
     ]);
 
   const atamaMutasyonu = useMutation({
     mutationFn: ({ id, workerId }: { id: string; workerId: string | null }) =>
-      bolgeAta(id, workerId),
+      cizimAta(tip, id, workerId),
     onSuccess: () => {
       setHata(null);
       return tazele();
@@ -198,7 +206,7 @@ export default function BolgePaneli({
   });
 
   const silMutasyonu = useMutation({
-    mutationFn: (id: string) => bolgeSil(id),
+    mutationFn: (id: string) => cizimSil(tip, id),
     onSuccess: () => {
       setSilinecek(null);
       setHata(null);
@@ -670,7 +678,7 @@ function DuzenleFormu({ bolge, onBitti }: { bolge: Bolge; onBitti: () => void })
 
   const mutasyon = useMutation({
     mutationFn: () =>
-      bolgeGuncelle(bolge.id, {
+      cizimGuncelle(bolge.tip, bolge.id, {
         ad: ad.trim(),
         aciklama: aciklama.trim() || null,
         renk,
