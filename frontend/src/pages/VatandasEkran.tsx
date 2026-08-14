@@ -342,8 +342,24 @@ export default function VatandasEkran() {
                 Konum <span className="text-red-500">*</span>
               </label>
               <p className="mb-2 text-xs text-slate-500">
-                Haritaya tıklayarak yeri işaretleyin.
+                {mobil
+                  ? "Haritada işaretleyin ya da konumunuzu kullanın."
+                  : "Haritaya tıklayarak yeri işaretleyin."}
               </p>
+
+              {mobil && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormAcik(false);
+                    setKonumKipi(true);
+                  }}
+                  className="mb-2 flex w-full items-center justify-center gap-2 border border-slate-300 bg-white py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  <IconKonum className="h-4 w-4" />
+                  Haritada İşaretle
+                </button>
+              )}
 
               <div className="my-2 flex items-center gap-2">
                 <span className="h-px flex-1 bg-slate-200" />
